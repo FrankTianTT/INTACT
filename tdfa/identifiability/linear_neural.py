@@ -30,7 +30,7 @@ def identify_theta(x, y, theta_size):
         x_theta = torch.cat([x, theta_hat.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1)
         y_hat = model(x_theta)
 
-        reg = mutual_info_estimation(theta_hat) * 8
+        reg = mutual_info_estimation(theta_hat) * 0.05
         mse = F.mse_loss(y_hat, y)
         loss = mse + reg
 

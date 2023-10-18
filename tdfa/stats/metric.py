@@ -15,7 +15,7 @@ def mutual_info_estimation(values, kernel_type="gaussian"):
         log_pdf = kernel(values[:, i:i + 1], values[:, i:i + 1])
         sum_margin_log_pdf += log_pdf
 
-    mi = torch.sum((joint_log_pdf - sum_margin_log_pdf) * torch.exp(joint_log_pdf))
+    mi = torch.sum(joint_log_pdf - sum_margin_log_pdf)
     return mi
 
 
