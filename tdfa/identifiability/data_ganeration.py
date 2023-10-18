@@ -28,7 +28,7 @@ def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta
 def gen_causal_graph(x_size, y_size, theta_size, sparse_p=0.5):
     graph = np.random.choice([0, 1], size=(y_size, x_size + theta_size), p=[sparse_p, 1 - sparse_p])
 
-    while not is_sparse(graph[:, x_size:]):
+    while not is_sparse(graph):
         graph = np.random.choice([0, 1], size=(y_size, x_size + theta_size), p=[sparse_p, 1 - sparse_p])
 
     return graph
@@ -47,7 +47,11 @@ def is_sparse(graph):
 
 
 def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):
-    model = build_parallel_layers(x_size + theta_size, 1, [32, 32], extra_dims=[y_size])
+    model = build_parallel_layers(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name='Tanh')
+
+    for name, p in model.named_parameters():
+        if 'weight' in name:
+            p.data = torch.randn_like(p.data)
 
     x = torch.randn(task_num, sample_per_task, x_size)
     theta = torch.randn(task_num, theta_size)
@@ -59,8 +63,11 @@ def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, th
     masked_x_theta = torch.einsum("oi,obi->obi", mask, repeated_x_theta)
 
     y = model(masked_x_theta).permute(2, 1, 0)[0].reshape(task_num, sample_per_task, y_size)
-    return x, y, theta, graph
+    return x.detach().numpy(), y.detach().numpy(), theta.detach().numpy(), graph
 
 
 if __name__ == '__main__':
+    np.random.seed(0)
+    torch.random.manual_seed(0)
+
     gen_nonlinear_data(100, 10, 4, 5, 3)
