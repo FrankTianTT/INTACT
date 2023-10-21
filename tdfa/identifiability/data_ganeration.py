@@ -54,7 +54,7 @@ def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, th
             p.data = torch.randn_like(p.data)
 
     x = torch.randn(task_num, sample_per_task, x_size)
-    theta = torch.randn(task_num, theta_size)
+    theta = torch.distributions.Laplace(0, 1).sample((task_num, theta_size))
     x_theta = torch.cat([x, theta.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1)
 
     graph = gen_causal_graph(x_size, y_size, theta_size)  # out-size * in-size

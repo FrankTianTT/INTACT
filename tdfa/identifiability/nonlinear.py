@@ -38,7 +38,7 @@ class MyDataset(Dataset):
 def get_model_loss(model, x, y, logits):
     batch_size, x_size = x.shape
     *_, y_size = y.shape
-    mask = Bernoulli(logits=logits.clamp(-3, 3)).sample(torch.Size([batch_size]))
+    mask = Bernoulli(logits=logits).sample(torch.Size([batch_size]))
 
     repeated_x = x.unsqueeze(0).expand(y_size, -1, -1)
     masked_x = torch.einsum("boi,obi->obi", mask, repeated_x)
@@ -47,14 +47,14 @@ def get_model_loss(model, x, y, logits):
     return F.mse_loss(y, y_hat, reduction='none'), mask
 
 
-def get_mask_grad(mask, logits, sampling_loss, x_size, sparse_weight=0.01, theta_weight=0.5):
+def get_mask_grad(mask, logits, sampling_loss, x_size, sparse_weight=0.05, theta_weight=0.1):
     num_pos = mask.sum(dim=0)
     num_neg = mask.shape[0] - num_pos
     is_valid = ((num_pos > 0) * (num_neg > 0)).float()
     pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, mask).sum(dim=0) / (num_pos + 1e-6)
     neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - mask).sum(dim=0) / (num_neg + 1e-6)
 
-    clip_logits = logits.clamp(-3, 3)
+    clip_logits = logits
     g = clip_logits.sigmoid() * (1 - clip_logits.sigmoid())
     reg = torch.ones(pos_grads.shape[1:]) * sparse_weight
     reg[:, x_size:] += theta_weight
@@ -63,8 +63,9 @@ def get_mask_grad(mask, logits, sampling_loss, x_size, sparse_weight=0.01, theta
 
 
 def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimizer, mask_optimizer, steps,
-          train_mask_iters=10, train_predictor_iters=50, sampling_times=10):
+          train_mask_iters=10, train_predictor_iters=50, sampling_times=50):
     predictor_losses = []
+    mi_losses = []
     reinforce_losses = []
     for x, y, idx in loader:
         batch_size, x_size = x.shape
@@ -72,18 +73,21 @@ def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimize
         _, theta_size = theta_hat.shape
         x_theta = torch.cat([x, theta_hat[idx]], dim=1)
         if steps % (train_mask_iters + train_predictor_iters) < train_predictor_iters:
-            loss, mask = get_model_loss(model, x_theta, y, mask_logits)
-            mi_loss = mutual_info_estimation(theta_hat[idx])
-            predict_loss = loss.mean() + mi_loss * 1
-            # mcc: 0.6234189053823959
-            predictor_losses.append(predict_loss.item())
-
             model_optimizer.zero_grad()
             theta_optimizer.zero_grad()
+
+            loss, mask = get_model_loss(model, x_theta, y, mask_logits)
+            mi_loss = mutual_info_estimation(theta_hat[idx])
+            mi_losses.append(mi_loss.item())
+            predict_loss = loss.mean() + mi_loss * 5
+            predictor_losses.append(predict_loss.item())
+
             predict_loss.backward()
             model_optimizer.step()
             theta_optimizer.step()
         else:  # reinforce
+            mask_optimizer.zero_grad()
+
             new_batch_size = batch_size * sampling_times
             repeated_x_theta = x_theta.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
             repeated_y = y.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
@@ -95,12 +99,11 @@ def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimize
 
             grad = get_mask_grad(sampling_mask, mask_logits, sampling_loss, x_size)
 
-            mask_optimizer.zero_grad()
             mask_logits.backward(grad)
             mask_optimizer.step()
 
         steps += 1
-    return steps, predictor_losses, reinforce_losses
+    return steps, predictor_losses, reinforce_losses, mi_losses
 
 
 def identify_theta(x, y, theta_size):
@@ -119,41 +122,35 @@ def identify_theta(x, y, theta_size):
 
     model_optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     theta_optimizer = torch.optim.Adam([theta_hat], lr=0.1)
-    mask_optimizer = torch.optim.Adam([mask_logits], lr=0.01)
+    mask_optimizer = torch.optim.Adam([mask_logits], lr=0.05)
 
     steps = 0
     for epoch in range(1000):
-        steps, predictor_losses, reinforce_losses = train(model, mask_logits, theta_hat, loader, model_optimizer,
-                                                          theta_optimizer, mask_optimizer, steps)
+        steps, predictor_losses, reinforce_losses, mi_losses = train(model, mask_logits, theta_hat, loader,
+                                                                     model_optimizer,
+                                                                     theta_optimizer, mask_optimizer, steps)
 
-        print(np.mean(predictor_losses), np.mean(reinforce_losses))
-        equal = (mask_logits > 0) == torch.from_numpy(graph)
-        print(equal[:, :x_size].float().mean(), equal[:, x_size:].float().mean())
+        print(np.mean(predictor_losses), np.mean(mi_losses))
 
-        print((mask_logits > 0).int(), (mask_logits > 0)[:, x_size:].sum())
-
-        print("mcc:", mean_corr_coef(theta_hat.detach().numpy(), theta))
-
-
-        # print(mask_logits[:, x_size:])
-
-        # if epoch % 20 == 0:
-        #     sns.displot(theta_hat.detach().numpy()[:, 0], kde=True, bins=20)
-        #     plt.show()
+        if (mask_logits > 0)[:, x_size:].any(dim=0).sum() == real_theta_size:
+            real_theta_hat = theta_hat[:, (mask_logits > 0)[:, x_size:].any(dim=0)]
+            print("mcc:", mean_corr_coef(real_theta_hat.detach().numpy(), theta))
 
 
 if __name__ == '__main__':
-    task_num = 1000
-    sample_per_task = 100
+    task_num = 300
+    sample_per_task = 30
     x_size = 5
     y_size = 8
-    theta_size = 0
-    seed = 0
+    theta_size = 4
+    real_theta_size = 2
+    seed = 1
+    print(seed)
 
     np.random.seed(seed)
     torch.random.manual_seed(seed)
 
-    x, y, theta, graph = gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size)
+    x, y, theta, graph = gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, real_theta_size)
 
     print(graph)
     # [[1 0 0 1 1 1 0]
@@ -167,3 +164,12 @@ if __name__ == '__main__':
 
     theta_hat = identify_theta(x, y, theta_size)
     # print(mean_corr_coef(theta_hat, theta))
+
+# [[1 1 1 1 0 0 1]
+#  [1 0 0 0 0 0 1]
+#  [0 1 1 0 0 0 0]
+#  [0 1 1 1 0 1 0]
+#  [0 1 0 1 0 0 0]
+#  [1 0 0 0 1 1 0]
+#  [1 0 1 0 1 0 0]
+#  [0 0 1 1 1 0 1]]
