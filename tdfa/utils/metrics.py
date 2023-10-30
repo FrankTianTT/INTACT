@@ -4,7 +4,7 @@ from scipy.optimize import linear_sum_assignment
 from scipy.stats import spearmanr
 
 
-def mean_corr_coef(x, y, method='pearson'):
+def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     """
     A numpy implementation of the mean correlation coefficient metric.
 
@@ -17,8 +17,10 @@ def mean_corr_coef(x, y, method='pearson'):
                     use Pearson's correlation coefficient
                 'spearman':
                     use Spearman's nonparametric rank correlation coefficient
+    :param return_permutation: bool, optional
     :return: float
     """
+    
     d = x.shape[1]
     if method == 'pearson':
         cc = np.corrcoef(x, y, rowvar=False)[:d, d:]
@@ -27,5 +29,9 @@ def mean_corr_coef(x, y, method='pearson'):
     else:
         raise ValueError('not a valid method: {}'.format(method))
     cc = np.abs(cc)
-    score = cc[linear_sum_assignment(-1 * cc)].mean()
-    return score
+    permutation = linear_sum_assignment(-1 * cc)
+    score = cc[permutation].mean()
+    if return_permutation:
+        return score, permutation
+    else:
+        return score
