@@ -61,7 +61,7 @@ class CausalWorldModel(TensorDictModuleBase):
     def output_dim(self):
         return self.obs_dim + 2
 
-    def module_forward(self, observation, action, idx):
+    def module_forward(self, observation, action, idx, deterministic=False):
         batch_size, _ = observation.shape
         if self.is_meta:
             inputs = torch.cat([observation, action, self.theta_hat[idx]], dim=-1)
@@ -69,7 +69,10 @@ class CausalWorldModel(TensorDictModuleBase):
             inputs = torch.cat([observation, action], dim=-1)
         repeated_inputs = inputs.unsqueeze(0).expand(self.output_dim, -1, -1)  # o, b, i
 
-        mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))  # b, o, i
+        if deterministic:
+            mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
+        else:
+            mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))  # b, o, i
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
 
         outputs = self.module(masked_inputs).permute(2, 1, 0)[0]
@@ -83,7 +86,7 @@ class CausalWorldModel(TensorDictModuleBase):
         observation = tensordict.get("observation")
         action = tensordict.get("action")
         idx = tensordict.get("idx") if self.is_meta else None
-        next_observation, reward, terminated, mask = self.module_forward(observation, action, idx)
+        next_observation, reward, terminated, mask = self.module_forward(observation, action, idx, deterministic=True)
         tensordict.set("observation", next_observation)
         tensordict.set("reward", reward)
         tensordict.set("terminated", terminated)

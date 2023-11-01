@@ -59,7 +59,7 @@ def get_dim_map(obs_dim, action_dim, theta_dim):
 
 
 if __name__ == '__main__':
-    env_name = "InvertedPendulum-v4"
+    env_name = "Pendulum-v1"
     exp_name = "default"
     total_frames = 100000
     init_frames = 1000
@@ -78,7 +78,9 @@ if __name__ == '__main__':
     )
 
     proof_env = make_env(env_name)
-    world_model = CausalWorldModel(4, 1)
+    obs_dim = proof_env.observation_spec["observation"].shape[0]
+    action_dim = proof_env.action_spec.shape[0]
+    world_model = CausalWorldModel(obs_dim, action_dim)
     world_model_loss = CausalWorldModelLoss(world_model)
 
     fake_env = MyMBEnv(world_model)
@@ -87,7 +89,7 @@ if __name__ == '__main__':
     planner = CEMPlanner(
         fake_env,
         planning_horizon=30,
-        optim_steps=20,
+        optim_steps=30,
         num_candidates=11,
         top_k=7
     )
@@ -109,7 +111,7 @@ if __name__ == '__main__':
     theta_opt = torch.optim.Adam(world_model.get_parameter("theta_hat"), lr=0.1)
     mask_opt = torch.optim.Adam(world_model.get_parameter("mask_logits"), lr=0.05)
 
-    input_dim_map, output_dim_map = get_dim_map(4, 1, 0)
+    input_dim_map, output_dim_map = get_dim_map(obs_dim, action_dim, 0)
 
     pbar = tqdm.tqdm(total=100000)
     collected_frames = 0
