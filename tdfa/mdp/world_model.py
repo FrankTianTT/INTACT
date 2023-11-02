@@ -97,7 +97,7 @@ class CausalWorldModelLoss(LossModule):
     def __init__(
             self,
             world_model: CausalWorldModel,
-            lambda_transition: float = 5.0,
+            lambda_transition: float = 1.0,
             lambda_reward: float = 1.0,
             lambda_terminated: float = 1.0,
             sparse_weight: float = 0.01,

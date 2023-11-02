@@ -59,7 +59,7 @@ def get_dim_map(obs_dim, action_dim, theta_dim):
 
 
 if __name__ == '__main__':
-    env_name = "Pendulum-v1"
+    env_name = "CartPoleContinuous-v0"
     exp_name = "default"
     total_frames = 100000
     init_frames = 1000
@@ -88,10 +88,10 @@ if __name__ == '__main__':
 
     planner = CEMPlanner(
         fake_env,
-        planning_horizon=30,
-        optim_steps=30,
-        num_candidates=11,
-        top_k=7
+        planning_horizon=15,
+        optim_steps=5,
+        num_candidates=350,
+        top_k=35
     )
 
     collector = SyncDataCollector(
