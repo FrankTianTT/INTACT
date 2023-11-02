@@ -10,48 +10,72 @@ from tdfa.models.util import build_parallel_layers
 
 
 class CausalWorldModel(TensorDictModuleBase):
-    def __init__(self, obs_dim, action_dim, theta_dim=0, task_num=0, residual=True):
+    def __init__(
+            self,
+            obs_dim,
+            action_dim,
+            max_context_dim=0,
+            task_num=0,
+            residual=True,
+            logits_clip=4.0,
+            stochastic=True,
+            logvar_bounds=(-10.0, 0.5)
+    ):
+        """World-model class for environment learning with causal discovery.
+
+        :param obs_dim: number of observation dimensions
+        :param action_dim: number of action dimensions
+        :param max_context_dim: number of context dimensions, used for meta-RL, set to 0 if normal RL
+        :param task_num: number of tasks, used for meta-RL, set to 0 if normal RL
+        :param residual: whether to use residual connection for transition model
+        :param logits_clip: clip value for mask logits
+        :param stochastic: whether to use stochastic transition model (using gaussian nll loss rather than mse loss)
+        :param logvar_bounds: bounds for logvar of gaussian nll loss
+        """
         super().__init__()
         self.obs_dim = obs_dim
         self.action_dim = action_dim
-        self.theta_dim = theta_dim
+        self.context_dim = max_context_dim
         self.task_num = task_num
         self.residual = residual
+        self.logits_clip = logits_clip
+        self.stochastic = stochastic
+        self.logvar_bounds = logvar_bounds
 
         self.in_keys = ["observation", "action", "idx"]
         self.out_keys = ["observation", "reward", "terminated"]
 
         self.module = build_parallel_layers(
             self.all_input_dim,
-            1,
+            2 if self.stochastic else 1,
             [64, 64],
             extra_dims=[self.output_dim],
             activate_name="ReLu",
         )
         self._mask_logits = nn.Parameter(torch.randn(self.output_dim, self.all_input_dim))
-        self.theta_hat = torch.nn.Parameter(torch.randn(task_num, theta_dim))
+        self.context_hat = torch.nn.Parameter(torch.randn(task_num, max_context_dim))
 
     @property
     def is_meta(self):
-        return self.theta_dim > 0 and self.task_num > 0
+        return self.context_dim > 0 and self.task_num > 0
 
     @property
     def mask_logits(self):
-        return torch.clamp(self._mask_logits, -2, 2)
+        return torch.clamp(self._mask_logits, -self.logits_clip, self.logits_clip)
 
     def get_parameter(self, target: str):
         if target == "module":
             return self.module.parameters()
         elif target == "mask_logits":
             return [self._mask_logits]
-        elif target == "theta_hat":
-            return [self.theta_hat]
+        elif target == "context_hat":
+            return [self.context_hat]
         else:
             raise NotImplementedError
 
     @property
     def all_input_dim(self):
-        return self.obs_dim + self.action_dim + self.theta_dim
+        return self.obs_dim + self.action_dim + self.context_dim
 
     @property
     def valid_input_dim(self):
@@ -61,33 +85,55 @@ class CausalWorldModel(TensorDictModuleBase):
     def output_dim(self):
         return self.obs_dim + 2
 
-    def module_forward(self, observation, action, idx, deterministic=False):
+    def module_forward(self, observation, action, idx, deterministic_mask=False):
         batch_size, _ = observation.shape
         if self.is_meta:
-            inputs = torch.cat([observation, action, self.theta_hat[idx]], dim=-1)
+            inputs = torch.cat([observation, action, self.context_hat[idx]], dim=-1)
         else:
             inputs = torch.cat([observation, action], dim=-1)
         repeated_inputs = inputs.unsqueeze(0).expand(self.output_dim, -1, -1)  # o, b, i
 
-        if deterministic:
+        if deterministic_mask:
             mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
         else:
             mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))  # b, o, i
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
 
-        outputs = self.module(masked_inputs).permute(2, 1, 0)[0]
+        outputs = self.module(masked_inputs).permute(2, 1, 0)
 
-        next_observation, reward, terminated = outputs[..., :-2], outputs[..., -2:-1], outputs[..., -1:]
+        do = outputs[0]  # deterministic outputs
+        next_observation, reward, terminated = do[:, :-2], do[:, -2:-1], do[:, -1:]
+
         if self.residual:
             next_observation = observation + next_observation
+
+        if self.stochastic:
+            logvar = outputs[1, :, :-2]
+            min_logvar, max_logvar = self.logvar_bounds
+            logvar = max_logvar - F.softplus(max_logvar - logvar)
+            logvar = min_logvar + F.softplus(logvar - min_logvar)
+            next_observation = (next_observation, logvar)
+
         return next_observation, reward, terminated, mask
 
     def forward(self, tensordict: TensorDict) -> TensorDict:
+        """Using for rollout, rather than training.
+
+        :param tensordict: data with "observation", "action" and "idx" (optional).
+        :return:
+            tensordict: added ("next", "observation"), ("next", "reward") and ("next", "terminated").
+        """
         observation = tensordict.get("observation")
         action = tensordict.get("action")
         idx = tensordict.get("idx") if self.is_meta else None
-        next_observation, reward, terminated, mask = self.module_forward(observation, action, idx, deterministic=True)
-        tensordict.set("observation", next_observation)
+        next_observation, reward, terminated, mask = self.module_forward(observation, action, idx,
+                                                                         deterministic_mask=True)
+        if self.stochastic:  # sample
+            mean, logvar = next_observation
+            std = torch.exp(0.5 * logvar)
+            tensordict.set("observation", mean + std * torch.randn_like(std))
+        else:
+            tensordict.set("observation", next_observation)
         tensordict.set("reward", reward)
         tensordict.set("terminated", terminated)
         return tensordict
@@ -100,8 +146,8 @@ class CausalWorldModelLoss(LossModule):
             lambda_transition: float = 1.0,
             lambda_reward: float = 1.0,
             lambda_terminated: float = 1.0,
-            sparse_weight: float = 0.01,
-            theta_weight: float = 0.1,
+            sparse_weight: float = 0.05,
+            context_weight: float = 0.1,
             sampling_times: int = 50,
     ):
         super().__init__()
@@ -114,7 +160,7 @@ class CausalWorldModelLoss(LossModule):
         self.lambda_reward = lambda_reward
         self.lambda_terminated = lambda_terminated
         self.sparse_weight = sparse_weight
-        self.theta_weight = theta_weight
+        self.context_weight = context_weight
         self.sampling_times = sampling_times
 
     def forward(self, tensordict: TensorDict, intermediate=False):
@@ -123,11 +169,20 @@ class CausalWorldModelLoss(LossModule):
         idx = tensordict.get("idx") if self.world_model.is_meta else None
 
         pred_observation, pred_reward, pred_terminated, mask = self.world_model.module_forward(observation, action, idx)
-        transition_loss = F.mse_loss(
-            pred_observation,
-            tensordict.get(("next", "observation")),
-            reduction="none"
-        ) * self.lambda_transition
+        if self.world_model.stochastic:
+            mean, logvar = pred_observation
+            transition_loss = F.gaussian_nll_loss(
+                mean,
+                tensordict.get(("next", "observation")),
+                torch.exp(logvar),
+                reduction="none"
+            ) * self.lambda_transition
+        else:
+            transition_loss = F.mse_loss(
+                pred_observation,
+                tensordict.get(("next", "observation")),
+                reduction="none"
+            ) * self.lambda_transition
         reward_loss = F.mse_loss(
             pred_reward,
             tensordict.get(("next", "reward")),
@@ -145,17 +200,17 @@ class CausalWorldModelLoss(LossModule):
         else:
             return all_loss
 
-    def get_mask_grad(self, sampling_loss, sampling_lmask, eps=1e-6):
-        num_pos = sampling_lmask.sum(dim=0)
-        num_neg = sampling_lmask.shape[0] - num_pos
+    def get_mask_grad(self, sampling_loss, sampling_mask, eps=1e-6):
+        num_pos = sampling_mask.sum(dim=0)
+        num_neg = sampling_mask.shape[0] - num_pos
         is_valid = ((num_pos > 0) * (num_neg > 0)).float()
-        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_lmask).sum(dim=0) / (num_pos + eps)
-        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_lmask).sum(dim=0) / (num_neg + eps)
+        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (num_pos + eps)
+        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (num_neg + eps)
 
         logits = self.world_model.mask_logits
         g = logits.sigmoid() * (1 - logits.sigmoid())
         reg = torch.ones(pos_grads.shape[1:]) * self.sparse_weight
-        reg[:, self.valid_input_dim:] += self.theta_weight
+        reg[:, self.valid_input_dim:] += self.context_weight
         grad = is_valid * (pos_grads - neg_grads + reg) * g
         return grad.mean(0)
 
@@ -171,7 +226,7 @@ class CausalWorldModelLoss(LossModule):
 
 
 if __name__ == '__main__':
-    causal_world_model = CausalWorldModel(4, 1, 2, 3)
+    causal_world_model = CausalWorldModel(4, 1, 0, 3)
 
     obs = torch.randn(5, 4)
     action = torch.randn(5, 1)
