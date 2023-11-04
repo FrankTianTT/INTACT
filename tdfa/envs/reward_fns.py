@@ -8,6 +8,4 @@ from tdfa.envs import termination_fns
 
 
 def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
-    assert len(next_obs.shape) == len(act.shape) == 2
-
-    return torch.ones(len(next_obs), 1).to(next_obs.device)
+    return torch.ones(*next_obs.shape[:-1], 1).to(next_obs.device)

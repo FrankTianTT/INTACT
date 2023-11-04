@@ -20,8 +20,8 @@ termination_fns_dict = {
     "cartpole": termination_fns.cartpole,
     "inverted_pendulum": termination_fns.inverted_pendulum,
     "no_termination": termination_fns.no_termination,
-    "walker2d": termination_fns.walker2d,
-    "ant": termination_fns.ant,
+    # "walker2d": termination_fns.walker2d,
+    # "ant": termination_fns.ant,
 }
 reward_fns_dict = {
     "ones": reward_fns.ones,

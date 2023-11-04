@@ -5,8 +5,9 @@ import hydra
 import gym
 from gym.envs.mujoco.mujoco_env import BaseMujocoEnv
 import torch
-from torchrl.envs import TransformedEnv
-from torchrl.envs.transforms import DoubleToFloat
+from tensordict import TensorDict
+from torchrl.envs import TransformedEnv, SerialEnv
+from torchrl.envs.transforms import DoubleToFloat, Compose
 from torchrl.envs.libs import GymWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.modules import CEMPlanner, MPPIPlanner
@@ -15,6 +16,7 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 
 from tdfa.mdp.world_model import CausalWorldModel, CausalWorldModelLoss
 from tdfa.mdp.model_based_env import MyMBEnv
+from tdfa.envs.meta_transform import MetaIdxTransform
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):
@@ -45,8 +47,8 @@ def env_constructor(cfg):
             env = env.env
         return env
 
-    def make_env():
-        gym_env = gym.make(cfg.env_name)
+    def make_env(gym_kwargs, idx):
+        gym_env = gym.make(cfg.env_name, **gym_kwargs)
         # get BaseMujocoEnv
         sub_env = get_sub_env(gym_env)
         if isinstance(sub_env, BaseMujocoEnv) and sub_env.frame_skip > 1 and cfg.cancel_mujoco_frame_skip:
@@ -55,16 +57,31 @@ def env_constructor(cfg):
             sub_env.model.opt.timestep *= original_frame_skip
 
         env = GymWrapper(gym_env)
-        return TransformedEnv(env, transform=DoubleToFloat())
+        return TransformedEnv(env, transform=Compose(DoubleToFloat(), MetaIdxTransform(idx, cfg.task_num)))
 
-    return make_env
+    context_dict = {}
+    for key, (low, high) in cfg.oracle_context.items():
+        context_dict[key] = torch.rand(cfg.task_num) * (high - low) + low
+    context_td = TensorDict(context_dict, batch_size=cfg.task_num)
+
+    make_env_list = []
+    for idx in range(cfg.task_num):
+        gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
+        make_env_list.append(lambda: make_env(gym_kwargs, idx))
+
+    return make_env_list, context_td
 
 
 def build_world_model(cfg, proof_env):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    world_model = CausalWorldModel(obs_dim, action_dim, max_context_dim=cfg.max_context_dim)
+    world_model = CausalWorldModel(
+        obs_dim,
+        action_dim,
+        task_num=cfg.task_num,
+        max_context_dim=cfg.max_context_dim
+    )
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
@@ -97,7 +114,7 @@ def main(cfg):
     exp_name = generate_exp_name("MPC", cfg.exp_name)
     logger = get_logger(
         logger_type=cfg.logger,
-        logger_name="dreamer",
+        logger_name="mpc",
         experiment_name=exp_name,
         wandb_kwargs={
             "project": "torchrl",
@@ -106,8 +123,9 @@ def main(cfg):
         },
     )
 
-    make_env = env_constructor(cfg)
-    world_model, world_model_loss, model_env = build_world_model(cfg, make_env())
+    make_env_list, context_td = env_constructor(cfg)
+    assert len(make_env_list) == cfg.task_num > 0
+    world_model, world_model_loss, model_env = build_world_model(cfg, make_env_list[0]())
 
     planner = CEMPlanner(
         model_env,
@@ -118,7 +136,7 @@ def main(cfg):
     )
 
     collector = SyncDataCollector(
-        create_env_fn=make_env,
+        create_env_fn=SerialEnv(cfg.task_num, make_env_list),
         policy=planner,
         total_frames=cfg.total_frames,
         frames_per_batch=cfg.frames_per_batch,
@@ -154,12 +172,12 @@ def main(cfg):
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        replay_buffer.extend(tensordict)
-        logger.log_scalar(
-            "rollout/step_mean_reward",
-            tensordict["next", "reward"].mean().detach().item(),
-            step=collected_frames,
-        )
+        replay_buffer.extend(tensordict.reshape(-1))
+        # logger.log_scalar(
+        #     "rollout/step_mean_reward",
+        #     tensordict["next", "reward"].mean().detach().item(),
+        #     step=collected_frames,
+        # )
 
         if collected_frames < cfg.init_random_frames:
             continue
@@ -212,6 +230,16 @@ def main(cfg):
                 torch.stack(rewards).mean().detach().item(),
                 step=collected_frames,
             )
+
+
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
+def ttt(cfg):
+    print(cfg.oracle_context)
+    context_dict = {}
+    for key, (low, high) in cfg.oracle_context.items():
+        context_dict[key] = torch.rand(cfg.task_num) * (high - low) + low
+    td = TensorDict(context_dict, batch_size=cfg.task_num)
+    print(td)
 
 
 if __name__ == '__main__':

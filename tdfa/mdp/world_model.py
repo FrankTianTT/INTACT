@@ -1,3 +1,5 @@
+from functools import reduce
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -35,7 +37,7 @@ class CausalWorldModel(TensorDictModuleBase):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_dim = action_dim
-        self.context_dim = max_context_dim
+        self.max_context_dim = max_context_dim
         self.task_num = task_num
         self.residual = residual
         self.logits_clip = logits_clip
@@ -57,7 +59,7 @@ class CausalWorldModel(TensorDictModuleBase):
 
     @property
     def is_meta(self):
-        return self.context_dim > 0 and self.task_num > 0
+        return self.max_context_dim > 0 and self.task_num > 0
 
     @property
     def mask_logits(self):
@@ -75,7 +77,7 @@ class CausalWorldModel(TensorDictModuleBase):
 
     @property
     def all_input_dim(self):
-        return self.obs_dim + self.action_dim + self.context_dim
+        return self.obs_dim + self.action_dim + self.max_context_dim
 
     @property
     def valid_input_dim(self):
@@ -88,7 +90,7 @@ class CausalWorldModel(TensorDictModuleBase):
     def module_forward(self, observation, action, idx, deterministic_mask=False):
         batch_size, _ = observation.shape
         if self.is_meta:
-            inputs = torch.cat([observation, action, self.context_hat[idx]], dim=-1)
+            inputs = torch.cat([observation, action, self.context_hat[idx.squeeze()]], dim=-1)
         else:
             inputs = torch.cat([observation, action], dim=-1)
         repeated_inputs = inputs.unsqueeze(0).expand(self.output_dim, -1, -1)  # o, b, i
@@ -126,17 +128,31 @@ class CausalWorldModel(TensorDictModuleBase):
         observation = tensordict.get("observation")
         action = tensordict.get("action")
         idx = tensordict.get("idx") if self.is_meta else None
+        if len(tensordict.batch_size) > 1:
+            new_batch_size = reduce(lambda x, y: x * y, tensordict.batch_size)
+            observation = observation.reshape(new_batch_size, -1)
+            action = action.reshape(new_batch_size, -1)
+            idx = idx.reshape(new_batch_size, -1) if self.is_meta else None
         next_observation, reward, terminated, mask = self.module_forward(observation, action, idx,
                                                                          deterministic_mask=True)
+
         if self.stochastic:  # sample
             mean, logvar = next_observation
             std = torch.exp(0.5 * logvar)
-            tensordict.set("observation", mean + std * torch.randn_like(std))
-        else:
-            tensordict.set("observation", next_observation)
-        tensordict.set("reward", reward)
-        tensordict.set("terminated", terminated)
-        return tensordict
+            next_observation = mean + std * torch.randn_like(std)
+
+        if len(tensordict.batch_size) > 1:
+            next_observation = next_observation.reshape(*tensordict.batch_size, -1)
+            reward = reward.reshape(*tensordict.batch_size, -1)
+            terminated = terminated.reshape(*tensordict.batch_size, -1)
+
+        out_tensordict = TensorDict({
+            "observation": next_observation,
+            "reward": reward,
+            "terminated": terminated,
+            "truncated": torch.zeros_like(terminated).bool(),
+        }, batch_size=tensordict.batch_size)
+        return out_tensordict
 
 
 class CausalWorldModelLoss(LossModule):
