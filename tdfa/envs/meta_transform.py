@@ -18,11 +18,10 @@ class MetaIdxTransform(Transform):
         self.task_num = task_num
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self(tensordict)
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict.set("idx", self.idx.expand(*tensordict.batch_size, 1))
         return tensordict
+
+    forward = _call
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         assert isinstance(observation_spec, CompositeSpec)

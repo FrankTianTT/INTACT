@@ -3,7 +3,7 @@ import torch
 from tdfa.stats.kernel import kernel_classes
 
 
-def mutual_info_estimation(values, kernel_type="gaussian"):
+def mutual_info_estimation(values, kernel_type="gaussian", reduction="mean"):
     # values: batch * dim
     kernel_class = kernel_classes[kernel_type]
 
@@ -15,8 +15,12 @@ def mutual_info_estimation(values, kernel_type="gaussian"):
         log_pdf = kernel(values[:, i:i + 1], values[:, i:i + 1])
         sum_margin_log_pdf += log_pdf
 
-    mi = torch.mean(joint_log_pdf - sum_margin_log_pdf)
-    return mi
+    if reduction == "mean":
+        return torch.mean(joint_log_pdf - sum_margin_log_pdf)
+    elif reduction == "none":
+        return joint_log_pdf - sum_margin_log_pdf
+    else:
+        raise NotImplementedError
 
 
 def kurtoses_estimation(values):

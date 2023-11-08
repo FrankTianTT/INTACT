@@ -5,8 +5,7 @@ import hydra
 import gym
 from gym.envs.mujoco.mujoco_env import BaseMujocoEnv
 import torch
-from torchrl.envs import TransformedEnv
-from torchrl.envs.transforms import DoubleToFloat
+from torchrl.envs import TransformedEnv, RewardSum, DoubleToFloat, Compose
 from torchrl.envs.libs import GymWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.modules import CEMPlanner, MPPIPlanner
@@ -25,7 +24,7 @@ def get_dim_map(obs_dim, action_dim, context_dim):
         elif dim < obs_dim + action_dim:
             return "action_{}".format(dim - obs_dim)
         else:
-            return "thata_{}".format(dim - obs_dim - action_dim)
+            return "context_{}".format(dim - obs_dim - action_dim)
 
     def output_dim_map(dim):
         assert dim < obs_dim + 2
@@ -55,7 +54,7 @@ def env_constructor(cfg):
             sub_env.model.opt.timestep *= original_frame_skip
 
         env = GymWrapper(gym_env)
-        return TransformedEnv(env, transform=DoubleToFloat())
+        return TransformedEnv(env, transform=Compose(DoubleToFloat(), RewardSum()))
 
     return make_env
 
@@ -64,7 +63,7 @@ def build_world_model(cfg, proof_env):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    world_model = CausalWorldModel(obs_dim, action_dim, max_context_dim=cfg.max_context_dim)
+    world_model = CausalWorldModel(obs_dim, action_dim, max_context_dim=0)
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
@@ -131,25 +130,21 @@ def main(cfg):
     context_opt = torch.optim.Adam(world_model.get_parameter("context_hat"), lr=0.1)
     mask_opt = torch.optim.Adam(world_model.get_parameter("mask_logits"), lr=cfg.mask_logits_lr)
 
-    input_dim_map, output_dim_map = get_dim_map(4, 1, cfg.max_context_dim)
+    input_dim_map, output_dim_map = get_dim_map(4, 1, 0)
 
     pbar = tqdm.tqdm(total=cfg.total_frames)
     collected_frames = 0
-    sum_rollout_rewards = 0
     model_learning_steps = 0
     for i, tensordict in enumerate(collector):
         pbar.update(tensordict.numel())
 
-        if tensordict["next", "reward"].shape[1] == 1:
-            for j in range(tensordict["next", "reward"].shape[0]):
-                sum_rollout_rewards += tensordict["next", "reward"][j].item()
-                if tensordict["next", "done"][j].item():
-                    logger.log_scalar(
-                        "rollout/episode_reward",
-                        sum_rollout_rewards,
-                        step=collected_frames + j,
-                    )
-                    sum_rollout_rewards = 0
+        if tensordict["next", "done"].any():
+            episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
+            logger.log_scalar(
+                "rollout/episode_reward",
+                episode_reward.mean(),
+                step=collected_frames,
+            )
 
         current_frames = tensordict.numel()
         collected_frames += current_frames
@@ -212,6 +207,8 @@ def main(cfg):
                 torch.stack(rewards).mean().detach().item(),
                 step=collected_frames,
             )
+
+    collector.shutdown()
 
 
 if __name__ == '__main__':

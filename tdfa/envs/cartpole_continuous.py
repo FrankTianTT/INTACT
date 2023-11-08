@@ -94,8 +94,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             length: float = 0.5,
             force_mag: float = 10.0,
             tau: float = 0.02,
-            x_dot_bias: float = 0.05,
-            theta_dot_bias: float = 0.05,
+            x_bias: float = 0.05,
+            theta_bias: float = 0.05,
             render_mode: Optional[str] = None
     ):
         self.gravity = gravity
@@ -108,8 +108,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.tau = tau  # seconds between state updates
         self.kinematics_integrator = "euler"
 
-        self.x_dot_bias = x_dot_bias
-        self.theta_dot_bias = theta_dot_bias
+        self.x_bias = x_bias
+        self.theta_bias = theta_bias
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
@@ -171,6 +171,9 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
+        x += self.x_bias
+        theta += self.theta_bias
+
         self.state = (x, x_dot, theta, theta_dot)
 
         terminated = bool(
@@ -200,7 +203,7 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         if self.render_mode == "human":
             self.render()
 
-        obs = np.array([(x, x_dot + self.x_dot_bias, theta, theta_dot + self.theta_dot_bias)], dtype=np.float32)
+        obs = np.array(self.state, dtype=np.float32)
         return obs, reward, terminated, False, {}
 
     def reset(
@@ -326,3 +329,10 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.display.quit()
             pygame.quit()
             self.isopen = False
+
+
+if __name__ == '__main__':
+    env = CartPoleContinuousEnv()
+    print(np.array([-0.02717833, -0.07598566, -0.04646705, 0.23267715]) in env.observation_space)
+    print(env.observation_space)
+    print(env.observation_space.sample() in env.observation_space)

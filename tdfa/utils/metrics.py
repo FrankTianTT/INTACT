@@ -20,7 +20,7 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     :param return_permutation: bool, optional
     :return: float
     """
-    
+
     d = x.shape[1]
     if method == 'pearson':
         cc = np.corrcoef(x, y, rowvar=False)[:d, d:]
@@ -30,8 +30,20 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
         raise ValueError('not a valid method: {}'.format(method))
     cc = np.abs(cc)
     permutation = linear_sum_assignment(-1 * cc)
+
     score = cc[permutation].mean()
     if return_permutation:
         return score, permutation
     else:
         return score
+
+
+if __name__ == '__main__':
+    np.random.seed(0)
+
+    sample_num = 100
+    real_source_dim = 5
+    estimated_source_dim = 6
+
+    real_source = np.random.rand(sample_num, real_source_dim)
+    estimated_source = np.random.rand(sample_num, estimated_source_dim)
