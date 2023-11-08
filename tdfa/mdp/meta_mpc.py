@@ -1,4 +1,5 @@
 from itertools import product
+from functools import partial
 
 from tqdm import tqdm
 import hydra
@@ -72,8 +73,9 @@ def env_constructor(cfg):
 
     make_env_list = []
     for idx in range(cfg.task_num):
+        print(idx)
         gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
-        make_env_list.append(lambda: make_env(gym_kwargs, idx))
+        make_env_list.append(partial(make_env, gym_kwargs=gym_kwargs, idx=idx))
 
     return make_env_list, context_td
 
