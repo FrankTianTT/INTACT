@@ -31,7 +31,7 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     cc = np.abs(cc)
     permutation = linear_sum_assignment(-1 * cc)
 
-    score = cc[permutation].mean()
+    score = cc[permutation].sum() / max(x.shape[1], y.shape[1])
     if return_permutation:
         return score, permutation
     else:

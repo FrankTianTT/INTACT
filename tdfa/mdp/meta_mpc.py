@@ -10,7 +10,6 @@ from tensordict import TensorDict
 from torchrl.envs import TransformedEnv, SerialEnv, DoubleToFloat, Compose, RewardSum
 from torchrl.envs.libs import GymWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.modules import CEMPlanner, MPPIPlanner
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 
@@ -19,6 +18,7 @@ from tdfa.mdp.model_based_env import MyMBEnv
 from tdfa.envs.meta_transform import MetaIdxTransform
 from tdfa.envs.reward_truncated_transform import RewardTruncatedTransform
 from tdfa.utils.metrics import mean_corr_coef
+from tdfa.mdp.cem import MyCEMPlanner as CEMPlanner
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):
@@ -73,7 +73,6 @@ def env_constructor(cfg):
 
     make_env_list = []
     for idx in range(cfg.task_num):
-        print(idx)
         gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
         make_env_list.append(partial(make_env, gym_kwargs=gym_kwargs, idx=idx))
 
@@ -171,7 +170,7 @@ def main(cfg):
 
         def log_scalar(name, value):
             if isinstance(value, torch.Tensor):
-                value = value.detach().item()
+                value = value.detach().cpu().item()
             logger.log_scalar(name, value, step=collected_frames)
 
         if tensordict["next", "done"].any():
@@ -219,11 +218,13 @@ def main(cfg):
                     log_scalar(name, logits[out_dim, in_dim])
 
                 mask = (logits > 0).int()
-                valid_context_hat = world_model.context_hat[:, mask.any(dim=0)[-cfg.max_context_dim:]]
-                mcc = mean_corr_coef(valid_context_hat.detach().numpy(), gt_context.numpy())
+                valid_context_idx = mask[:, -cfg.max_context_dim:].any(dim=0)
+                log_scalar("context/valid_num", valid_context_idx.sum())
+                valid_context_hat = world_model.context_hat[:, valid_context_idx]
+                mcc = mean_corr_coef(valid_context_hat.cpu().detach().numpy(), gt_context.numpy())
                 log_scalar("context/mcc", mcc)
 
-                print("mask_logits:")
+                print("mcc:", mcc, "mask_logits:")
 
                 for out_dim in range(logits.shape[0]):
                     for in_dim in range(logits.shape[1]):

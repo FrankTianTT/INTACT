@@ -8,12 +8,12 @@ import torch
 from torchrl.envs import TransformedEnv, RewardSum, DoubleToFloat, Compose
 from torchrl.envs.libs import GymWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.modules import CEMPlanner, MPPIPlanner
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 
 from tdfa.mdp.world_model import CausalWorldModel, CausalWorldModelLoss
 from tdfa.mdp.model_based_env import MyMBEnv
+from tdfa.mdp.cem import MyCEMPlanner as CEMPlanner
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):

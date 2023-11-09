@@ -25,10 +25,10 @@ lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
 lambda_mutual_info: 0
-sparse_weight: 0.01
-context_sparse_weight: 0.001
-context_max_weight: 0.001
-sampling_times: 100
+sparse_weight: 0.02
+context_sparse_weight: 0.02
+context_max_weight: 0.2
+sampling_times: 30
 
 # log
 exp_name: default
@@ -50,4 +50,4 @@ oracle_context:
 
 
 # other
-device: cpu
+device: "cuda:1"
