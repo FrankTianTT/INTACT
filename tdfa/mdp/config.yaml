@@ -24,9 +24,9 @@ mask_logits_lr: 0.001
 lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
-lambda_mutual_info: 0
+lambda_mutual_info: 1
 sparse_weight: 0.02
-context_sparse_weight: 0.02
+context_sparse_weight: 0.01
 context_max_weight: 0.2
 sampling_times: 30
 
@@ -50,4 +50,4 @@ oracle_context:
 
 
 # other
-device: "cuda:1"
+device: "cuda:0"

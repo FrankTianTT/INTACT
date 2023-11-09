@@ -217,18 +217,22 @@ def main(cfg):
                     name = "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim))
                     log_scalar(name, logits[out_dim, in_dim])
 
-                mask = (logits > 0).int()
-                valid_context_idx = mask[:, -cfg.max_context_dim:].any(dim=0)
-                log_scalar("context/valid_num", valid_context_idx.sum())
+                valid_context_idx = world_model.valid_context_idx
+                log_scalar("context/valid_num", len(valid_context_idx))
                 valid_context_hat = world_model.context_hat[:, valid_context_idx]
-                mcc = mean_corr_coef(valid_context_hat.cpu().detach().numpy(), gt_context.numpy())
+                mcc, (_, permutation) = mean_corr_coef(
+                    x=gt_context.numpy(),
+                    y=valid_context_hat.cpu().detach().numpy(),
+                    return_permutation=True
+                )
                 log_scalar("context/mcc", mcc)
 
+                print("permutation:", valid_context_idx[permutation])
                 print("mcc:", mcc, "mask_logits:")
 
                 for out_dim in range(logits.shape[0]):
                     for in_dim in range(logits.shape[1]):
-                        print(mask[out_dim, in_dim].item(), end=" ")
+                        print(world_model.mask[out_dim, in_dim].item(), end=" ")
                     print()
 
         # if cfg.test_interval < cfg.task_num or i % (cfg.test_interval / cfg.task_num) == 0:

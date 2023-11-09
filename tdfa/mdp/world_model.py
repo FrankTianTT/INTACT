@@ -63,6 +63,15 @@ class CausalWorldModel(TensorDictModuleBase):
         return self.max_context_dim > 0 and self.task_num > 0
 
     @property
+    def mask(self):
+        return torch.gt(self.mask_logits, 0).int()
+
+    @property
+    def valid_context_idx(self):
+        non_zero = self.mask[:, -self.max_context_dim:].any(dim=0)
+        return torch.where(non_zero)[0]
+
+    @property
     def mask_logits(self):
         return torch.clamp(self._mask_logits, -self.logits_clip, self.logits_clip)
 
@@ -217,7 +226,7 @@ class CausalWorldModelLoss(LossModule):
         ) * self.lambda_terminated
 
         if self.world_model.is_meta and self.lambda_mutual_info > 0 and not intermediate:
-            sampled_context = self.world_model.context_hat[idx.squeeze()]
+            sampled_context = self.world_model.context_hat[idx.squeeze()][:, self.world_model.valid_context_idx]
             mutual_info = mutual_info_estimation(sampled_context, reduction="none")
             mutual_info_loss = mutual_info.reshape(-1, 1) * self.lambda_mutual_info
             all_loss = torch.cat([transition_loss, reward_loss, terminated_loss, mutual_info_loss], dim=-1)
