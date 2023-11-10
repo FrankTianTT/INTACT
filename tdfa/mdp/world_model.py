@@ -10,6 +10,7 @@ from tensordict.nn import TensorDictModuleBase
 
 from tdfa.models.util import build_parallel_layers
 from tdfa.stats.metric import mutual_info_estimation
+from tdfa.utils.functional import total_mask_grad
 
 
 class CausalWorldModel(TensorDictModuleBase):
@@ -51,7 +52,7 @@ class CausalWorldModel(TensorDictModuleBase):
         self.module = build_parallel_layers(
             self.all_input_dim,
             2 if self.stochastic else 1,
-            [64, 64],
+            [256, 256],
             extra_dims=[self.output_dim],
             activate_name="ReLu",
         )
@@ -90,7 +91,7 @@ class CausalWorldModel(TensorDictModuleBase):
         return self.obs_dim + self.action_dim + self.max_context_dim
 
     @property
-    def valid_input_dim(self):
+    def observed_input_dim(self):
         return self.obs_dim + self.action_dim
 
     @property
@@ -180,7 +181,7 @@ class CausalWorldModelLoss(LossModule):
     ):
         super().__init__()
         self.world_model = world_model
-        self.valid_input_dim = world_model.valid_input_dim
+        self.observed_input_dim = world_model.observed_input_dim
         self.all_input_dim = world_model.all_input_dim
         self.output_dim = world_model.output_dim
 
@@ -238,26 +239,6 @@ class CausalWorldModelLoss(LossModule):
         else:
             return all_loss
 
-    def get_mask_grad(self, sampling_loss, sampling_mask, eps=1e-6):
-        num_pos = sampling_mask.sum(dim=0)
-        num_neg = sampling_mask.shape[0] - num_pos
-        is_valid = ((num_pos > 0) * (num_neg > 0)).float()
-        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (num_pos + eps)
-        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (num_neg + eps)
-
-        logits = self.world_model.mask_logits
-        g = logits.sigmoid() * (1 - logits.sigmoid())
-
-        sampling_grad = (pos_grads - neg_grads) * g
-        reg_grad = torch.ones_like(logits)
-        reg_grad[:, :self.valid_input_dim] *= self.sparse_weight
-        reg_grad[:, self.valid_input_dim:] *= self.context_sparse_weight
-        reg_grad[:, self.valid_input_dim:] += (self.context_max_weight *
-                                               max_sigmoid_grad(logits[:, self.valid_input_dim:]))
-
-        grad = is_valid * (sampling_grad + reg_grad)
-        return grad.mean(dim=0)
-
     def reinforce(self, tensordict: TensorDict):
         tensordict = tensordict.clone(recurse=False)
         repeated_tensordict = tensordict.expand(self.sampling_times, *tensordict.batch_size).reshape(-1)
@@ -265,26 +246,17 @@ class CausalWorldModelLoss(LossModule):
 
         sampling_loss = loss.reshape(self.sampling_times, -1, self.output_dim)
         sampling_mask = mask.reshape(self.sampling_times, -1, self.output_dim, self.all_input_dim)
-        mask_grad = self.get_mask_grad(sampling_loss, sampling_mask)
+        mask_grad = total_mask_grad(
+            logits=self.world_model.mask_logits,
+            sampling_mask=sampling_mask,
+            sampling_loss=sampling_loss,
+            observed_input_dim=self.observed_input_dim,
+            sparse_weight=self.sparse_weight,
+            context_sparse_weight=self.context_sparse_weight,
+            context_max_weight=self.context_max_weight
+        )
+
         return mask_grad
-
-
-def max_sigmoid_grad(logits):
-    """calculate the gradient of max_sigmoid_grad function.
-
-    :param logits: a 2d tensor of logits
-    :return:
-        grad: gradient of the max_sigmoid_grad function
-    """
-    assert len(logits.shape) == 2
-
-    max_val, _ = torch.max(logits, dim=0, keepdim=True)
-
-    equal_max = torch.eq(logits, max_val)
-    max_val_grad = torch.sigmoid(max_val) * (1 - torch.sigmoid(max_val))
-
-    grad = torch.where(equal_max, max_val_grad, torch.zeros_like(logits))
-    return grad
 
 
 if __name__ == '__main__':

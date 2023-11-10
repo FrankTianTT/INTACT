@@ -14,6 +14,7 @@ from tdfa.models.util import build_parallel_layers
 from tdfa.utils.metrics import mean_corr_coef
 from tdfa.identifiability.data_ganeration import gen_nonlinear_data
 from tdfa.stats.metric import mutual_info_estimation
+from tdfa.utils.functional import total_mask_grad
 
 
 class MyDataset(Dataset):
@@ -47,23 +48,9 @@ def get_model_loss(model, x, y, logits):
     return F.mse_loss(y, y_hat, reduction='none'), mask
 
 
-def get_mask_grad(mask, logits, sampling_loss, x_size, sparse_weight=0.05, theta_weight=0.1):
-    num_pos = mask.sum(dim=0)
-    num_neg = mask.shape[0] - num_pos
-    is_valid = ((num_pos > 0) * (num_neg > 0)).float()
-    pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, mask).sum(dim=0) / (num_pos + 1e-6)
-    neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - mask).sum(dim=0) / (num_neg + 1e-6)
-
-    clip_logits = logits
-    g = clip_logits.sigmoid() * (1 - clip_logits.sigmoid())
-    reg = torch.ones(pos_grads.shape[1:]) * sparse_weight
-    reg[:, x_size:] += theta_weight
-    grad = is_valid * (pos_grads - neg_grads + reg) * g
-    return grad.mean(0)
-
-
 def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimizer, mask_optimizer, steps,
-          train_mask_iters=10, train_predictor_iters=50, sampling_times=50):
+          train_mask_iters=10, train_predictor_iters=50, sampling_times=50,
+          lambda_mutual_info=0):
     predictor_losses = []
     mi_losses = []
     reinforce_losses = []
@@ -77,9 +64,12 @@ def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimize
             theta_optimizer.zero_grad()
 
             loss, mask = get_model_loss(model, x_theta, y, mask_logits)
-            mi_loss = mutual_info_estimation(theta_hat[idx])
+            if lambda_mutual_info > 0:
+                mi_loss = mutual_info_estimation(theta_hat[idx][:, (mask_logits > 0)[:, x_size:].any(dim=0)])
+            else:
+                mi_loss = 0
             mi_losses.append(mi_loss.item())
-            predict_loss = loss.mean() + mi_loss * 5
+            predict_loss = loss.mean() + mi_loss * lambda_mutual_info
             predictor_losses.append(predict_loss.item())
 
             predict_loss.backward()
@@ -97,7 +87,15 @@ def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimize
             sampling_loss = loss.reshape(sampling_times, batch_size, y_size)
             sampling_mask = mask.reshape(sampling_times, batch_size, y_size, x_size + theta_size)
 
-            grad = get_mask_grad(sampling_mask, mask_logits, sampling_loss, x_size)
+            grad = total_mask_grad(
+                logits=mask_logits,
+                sampling_mask=sampling_mask,
+                sampling_loss=sampling_loss,
+                observed_input_dim=x_size,
+                sparse_weight=0.05,
+                context_sparse_weight=0.05,
+                context_max_weight=1
+            )
 
             mask_logits.backward(grad)
             mask_optimizer.step()
@@ -116,7 +114,7 @@ def identify_theta(x, y, theta_size):
     task_num, sample_per_task, x_size = x.shape
     *_, y_size = y.shape
 
-    model = build_parallel_layers(x_size + theta_size, 1, [256, 256, 256], extra_dims=[y_size])
+    model = build_parallel_layers(x_size + theta_size, 1, [256, 256], extra_dims=[y_size])
     mask_logits = nn.Parameter(torch.randn(y_size, x_size + theta_size))
     theta_hat = torch.nn.Parameter(torch.randn(task_num, theta_size))
 
@@ -130,11 +128,16 @@ def identify_theta(x, y, theta_size):
                                                                      model_optimizer,
                                                                      theta_optimizer, mask_optimizer, steps)
 
+        print((mask_logits > 0).int())
+
         print(np.mean(predictor_losses), np.mean(mi_losses))
 
-        if (mask_logits > 0)[:, x_size:].any(dim=0).sum() == real_theta_size:
-            real_theta_hat = theta_hat[:, (mask_logits > 0)[:, x_size:].any(dim=0)]
-            print("mcc:", mean_corr_coef(real_theta_hat.detach().numpy(), theta))
+        valid_context_idx = torch.where((mask_logits > 0)[:, x_size:].any(dim=0))[0]
+        valid_theta_hat = theta_hat[:, valid_context_idx].detach().numpy()
+        mcc, (_, permutation) = mean_corr_coef(valid_theta_hat, theta, return_permutation=True)
+
+        print("valid context num:", len(valid_context_idx), "mcc:", mcc)
+        print("permutation:", valid_context_idx[permutation])
 
 
 if __name__ == '__main__':
@@ -142,7 +145,7 @@ if __name__ == '__main__':
     sample_per_task = 30
     x_size = 5
     y_size = 8
-    theta_size = 4
+    theta_size = 10
     real_theta_size = 2
     seed = 1
     print(seed)
