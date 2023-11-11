@@ -45,21 +45,7 @@ from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArg
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-        DreamerConfig,
-        TrainerConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
+from tdfa.dreamer.helper import make_causal_dreamer
 
 
 def retrieve_stats_from_state_dict(obs_norm_state_dict):
@@ -74,16 +60,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
 
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = 1.0
-
-    if torch.cuda.is_available() and not cfg.model_device != "":
-        device = torch.device("cuda:0")
-    elif cfg.model_device:
-        device = torch.device(cfg.model_device)
-    else:
-        device = torch.device("cpu")
-    print(f"Using device {device}")
+    if not torch.cuda.is_available():
+        cfg.model_device = "cpu"
+        cfg.collector_device = "cpu"
+    print("Using device {}".format(cfg.model_device))
 
     exp_name = generate_exp_name("Dreamer", cfg.exp_name)
     logger = get_logger(
@@ -91,42 +71,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_name="dreamer",
         experiment_name=exp_name,
         wandb_kwargs={
-            "project": "torchrl",
+            "project": "causal-dreamer",
             "group": f"Dreamer_{cfg.env_name}",
             "offline": cfg.offline_logging,
         },
     )
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
-    )
+    make_env = transformed_env_constructor(cfg)
+    proof_env = make_env()
+
+    initialize_observation_norm_transforms(proof_env, num_iter=cfg.init_env_steps, key=("next", "pixels"))
     _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
     proof_env.close()
 
     # Create the different components of dreamer
-    world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        obs_norm_state_dict=obs_norm_state_dict,
+    world_model, model_based_env, actor_model, value_model, policy = make_causal_dreamer(
         cfg=cfg,
-        device=device,
+        device=cfg.model_device,
         use_decoder_in_env=True,
         action_key="action",
         value_key="state_value",
-        proof_environment=transformed_env_constructor(
-            cfg, stats={"loc": 0.0, "scale": 1.0}
-        )(),
+        proof_environment=make_env(),
     )
 
     # reward normalization
@@ -156,14 +122,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
             policy,
             sigma_init=0.3,
             sigma_end=0.3,
-        ).to(device)
+        ).to(cfg.model_device)
     elif cfg.exploration == "ou_exploration":
         exploration_policy = OrnsteinUhlenbeckProcessWrapper(
             policy,
             annealing_num_steps=cfg.total_frames,
-        ).to(device)
+        ).to(cfg.model_device)
     elif cfg.exploration == "":
-        exploration_policy = policy.to(device)
+        exploration_policy = policy.to(cfg.model_device)
 
     action_dim_gsde, state_dim_gsde = None, None
     create_env_fn = parallel_env_constructor(
@@ -186,7 +152,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     print("collector:", collector)
 
-    replay_buffer = make_replay_buffer(device, cfg)
+    replay_buffer = make_replay_buffer(cfg.model_device, cfg)
 
     record = Recorder(
         record_frames=cfg.record_frames,
@@ -253,7 +219,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 cmpt += 1
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
-                    device, non_blocking=True
+                    cfg.model_device, non_blocking=True
                 )
                 if reward_normalizer is not None:
                     sampled_tensordict = reward_normalizer.normalize_reward(

@@ -11,4 +11,6 @@ conda install pytorch::pytorch -c pytorch
 pip instiall -r requirements.txt
 ```
 
-`xvfb-run -s "-screen 0 1400x900x24" `
+```shell
+xvfb-run -s "-screen 0 1400x900x24" python tdfa/dreamer/dreamer.py 
+```
