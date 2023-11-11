@@ -26,8 +26,8 @@ lambda_reward: 1.0
 lambda_terminated: 1.0
 lambda_mutual_info: 0
 sparse_weight: 0.02
-context_sparse_weight: 0.05
-context_max_weight: 1
+context_sparse_weight: 0.01
+context_max_weight: 0.2
 sampling_times: 30
 
 # log

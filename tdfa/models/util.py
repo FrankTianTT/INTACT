@@ -7,9 +7,11 @@ from torch.nn import functional as F
 from tdfa.models.layers import ParallelLinear
 
 
-def get_activate(name: str = "relu"):
-    if name == "ReLu":
+def get_activate(name: str = "ReLU"):
+    if name == "ReLU":
         return nn.ReLU()
+    elif name == "ELU":
+        return nn.ELU()
     elif name == "Sigmoid":
         return nn.Sigmoid()
     elif name == "Tanh":

@@ -54,10 +54,20 @@ class CausalWorldModel(TensorDictModuleBase):
             2 if self.stochastic else 1,
             [256, 256],
             extra_dims=[self.output_dim],
-            activate_name="ReLu",
+            activate_name="ReLU",
         )
         self._mask_logits = nn.Parameter(torch.randn(self.output_dim, self.all_input_dim))
         self.context_hat = torch.nn.Parameter(torch.randn(task_num, max_context_dim))
+
+    def get_parameter(self, target: str):
+        if target == "module":
+            return self.module.parameters()
+        elif target == "mask_logits":
+            return [self._mask_logits]
+        elif target == "context_hat":
+            return [self.context_hat]
+        else:
+            raise NotImplementedError
 
     @property
     def is_meta(self):
@@ -75,16 +85,6 @@ class CausalWorldModel(TensorDictModuleBase):
     @property
     def mask_logits(self):
         return torch.clamp(self._mask_logits, -self.logits_clip, self.logits_clip)
-
-    def get_parameter(self, target: str):
-        if target == "module":
-            return self.module.parameters()
-        elif target == "mask_logits":
-            return [self._mask_logits]
-        elif target == "context_hat":
-            return [self.context_hat]
-        else:
-            raise NotImplementedError
 
     @property
     def all_input_dim(self):
