@@ -104,11 +104,17 @@ class CausalRSSMPrior(nn.Module):
         return self.hidden_dim_per_variable * self.variable_num
 
     def forward(self, state, belief, action, idx=None, deterministic_mask=False):
+        """get prior distribution and next state from current state, belief and action, input data should be 1-d or 2-d,
+            because time dimension is dealt in ``RSSMRollout`` class
+        """
+
         assert len(state.shape) == len(belief.shape) == len(action.shape) < 3, "state should be 1-d or 2-d"
         one_dim = len(state.shape) == 1  # single state, used by policy
 
         if one_dim:
             state, belief, action = state.unsqueeze(0), belief.unsqueeze(0), action.unsqueeze(0)
+            if idx is not None:
+                idx = idx.unsqueeze(0)
 
         batch_size, state_dim = state.shape
 
@@ -127,6 +133,9 @@ class CausalRSSMPrior(nn.Module):
         next_belief = self.rnn(masked_action_state, reshaped_belief)
 
         prior_mean, prior_std = self.rnn_to_prior_projector(next_belief)
+        if self.residual:
+            reshaped_state = state.reshape(-1, self.variable_num, self.state_dim_per_variable).permute(1, 0, 2)
+            prior_mean = prior_mean + reshaped_state
         prior_mean = prior_mean.permute(1, 0, 2).reshape(batch_size, -1)
         prior_std = prior_std.permute(1, 0, 2).reshape(batch_size, -1)
 
@@ -135,7 +144,7 @@ class CausalRSSMPrior(nn.Module):
 
         if one_dim:
             prior_mean, prior_std, next_state, next_belief = prior_mean.squeeze(0), prior_std.squeeze(0), \
-                                                             next_state.squeeze(0), next_belief.squeeze(0)
+                next_state.squeeze(0), next_belief.squeeze(0)
 
         return prior_mean, prior_std, next_state, next_belief
 
