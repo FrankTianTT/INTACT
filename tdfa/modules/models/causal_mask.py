@@ -43,12 +43,14 @@ class CausalMask(nn.Module):
         repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
 
         if deterministic:
-            mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
+            original_mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
         else:
-            mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
+            original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
 
         if dim_map is not None:
-            mask = mask[:, :, dim_map]
+            mask = original_mask[:, :, dim_map]
+        else:
+            mask = original_mask
 
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
 
