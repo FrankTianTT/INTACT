@@ -271,7 +271,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     sampled_tensordict_save = None
 
                 loss_world_model.backward()
-                clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
+                clip_grad_norm_(world_model.get_parameter("module"), cfg.grad_clip)
                 world_model_opt.step()
 
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
@@ -283,31 +283,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     log_scalar("world_model/continue_loss", model_loss_td["loss_model_continue"])
                 world_model_opt.zero_grad()
 
-                # update actor network
-                actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                actor_loss_td["loss_actor"].backward()
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                actor_opt.step()
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    log_scalar("actor/loss", actor_loss_td["loss_actor"])
-                    log_scalar("actor/grad", grad_norm(actor_opt))
-                    log_scalar("actor/action_mean", sampled_tensordict["action"].mean())
-                    log_scalar("actor/action_std", sampled_tensordict["action"].std())
-                actor_opt.zero_grad()
+                if collected_frames >= cfg.train_agent_frames:
+                    # update actor network
+                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                    actor_loss_td["loss_actor"].backward()
+                    clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+                    actor_opt.step()
+                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                        log_scalar("actor/loss", actor_loss_td["loss_actor"])
+                        log_scalar("actor/grad", grad_norm(actor_opt))
+                        log_scalar("actor/action_mean", sampled_tensordict["action"].mean())
+                        log_scalar("actor/action_std", sampled_tensordict["action"].std())
+                    actor_opt.zero_grad()
 
-                # update value network
-                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                value_loss_td["loss_value"].backward()
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                value_opt.step()
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    log_scalar("value/loss", value_loss_td["loss_value"])
-                    log_scalar("value/grad", grad_norm(value_opt))
-                    log_scalar("value/target_mean", sampled_tensordict["lambda_target"].mean())
-                    log_scalar("value/target_std", sampled_tensordict["lambda_target"].std())
-                value_opt.zero_grad()
-                if j == cfg.optim_steps_per_batch - 1:
-                    do_log = False
+                    # update value network
+                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                    value_loss_td["loss_value"].backward()
+                    clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+                    value_opt.step()
+                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                        log_scalar("value/loss", value_loss_td["loss_value"])
+                        log_scalar("value/grad", grad_norm(value_opt))
+                        log_scalar("value/target_mean", sampled_tensordict["lambda_target"].mean())
+                        log_scalar("value/target_std", sampled_tensordict["lambda_target"].std())
+                    value_opt.zero_grad()
+                    if j == cfg.optim_steps_per_batch - 1:
+                        do_log = False
 
             stats = retrieve_stats_from_state_dict(obs_norm_state_dict)
             call_record(

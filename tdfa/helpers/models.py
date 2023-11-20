@@ -137,19 +137,18 @@ def _dreamer_make_world_model(
         ),
     )
 
-    transition_model = SafeSequential(
-        SafeModule(
-            obs_encoder,
-            in_keys=[("next", "pixels")],
-            out_keys=[("next", "encoded_latents")],
-        ),
-        rssm_rollout,
-        SafeModule(
-            obs_decoder,
-            in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=[("next", "reco_pixels")],
-        ),
+    obs_encoder = SafeModule(
+        obs_encoder,
+        in_keys=[("next", "pixels")],
+        out_keys=[("next", "encoded_latents")],
     )
+
+    obs_decoder = SafeModule(
+        obs_decoder,
+        in_keys=[("next", "state"), ("next", "belief")],
+        out_keys=[("next", "reco_pixels")],
+    )
+
     reward_model = SafeModule(
         reward_module,
         in_keys=[("next", "state"), ("next", "belief")],
@@ -165,9 +164,11 @@ def _dreamer_make_world_model(
         continue_model = None
 
     world_model = CausalDreamerWrapper(
-        transition_model,
-        reward_model,
-        continue_model
+        obs_encoder=obs_encoder,
+        rssm_rollout=rssm_rollout,
+        obs_decoder=obs_decoder,
+        reward_model=reward_model,
+        continue_model=continue_model,
     )
     return world_model
 
@@ -182,7 +183,7 @@ class DreamerConfig:
     state_dim_per_variable: int = 3
     hidden_dim_per_variable: int = 20
     rnn_input_dim_per_variable: int = 20
-    residual: bool = True
+    residual: bool = False
     logits_clip: float = 3.0
     max_context_dim: int = 0
     task_num: int = 0
@@ -206,6 +207,7 @@ class DreamerConfig:
     # Whether to use the discount loss
     pred_continue: bool = True
     # Whether to predict the continue signal
+    train_agent_frames: int = 100000
 
 
 def test_make_causal_dreamer():

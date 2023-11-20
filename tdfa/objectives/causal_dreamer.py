@@ -32,7 +32,6 @@ class CausalDreamerModelLoss(DreamerModelLoss):
     ):
         super().__init__(world_model, **kwargs)
 
-
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
         mask = tensordict.get(self.tensor_keys.collector_mask).clone()
