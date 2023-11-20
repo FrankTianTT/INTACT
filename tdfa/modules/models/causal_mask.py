@@ -54,7 +54,7 @@ class CausalMask(nn.Module):
 
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
 
-        return masked_inputs, mask
+        return masked_inputs, original_mask
 
 
 if __name__ == '__main__':
