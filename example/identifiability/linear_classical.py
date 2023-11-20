@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from tdfa.utils.metrics import mean_corr_coef
-from tdfa.identifiability.data_ganeration import gen_linear_data
+from example.identifiability.data_ganeration import gen_linear_data
 
 
 def identify_theta(x, y, theta_size):

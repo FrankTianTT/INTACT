@@ -1,10 +1,8 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-import torch
 from torch import nn
-from torch.nn import functional as F
 
-from tdfa.models.layers import ParallelLinear
+from tdfa.modules.models.layers import ParallelLinear
 
 
 def get_activate(name: str = "ReLU"):

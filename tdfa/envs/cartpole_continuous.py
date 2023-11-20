@@ -171,8 +171,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
-        x += self.x_bias
-        theta += self.theta_bias
+        # x += self.x_bias
+        # theta += self.theta_bias
 
         self.state = (x, x_dot, theta, theta_dot)
 

@@ -1,18 +1,13 @@
-from typing import List
-
-from torch.func import jacrev, vmap
 import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torch.distributions import Bernoulli
-from matplotlib import pyplot as plt
-import seaborn as sns
 from torch.utils.data import DataLoader, Dataset
 
-from tdfa.models.util import build_parallel_layers
+from tdfa.modules.utils import build_parallel_layers
 from tdfa.utils.metrics import mean_corr_coef
-from tdfa.identifiability.data_ganeration import gen_nonlinear_data
+from example.identifiability.data_ganeration import gen_nonlinear_data
 from tdfa.stats.metric import mutual_info_estimation
 from tdfa.utils.functional import total_mask_grad
 

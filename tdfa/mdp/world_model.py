@@ -5,10 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli
 from torchrl.objectives.common import LossModule
-from tensordict import TensorDict, TensorDictBase
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 
-from tdfa.models.util import build_parallel_layers
+from tdfa.modules.utils import build_parallel_layers
 from tdfa.stats.metric import mutual_info_estimation
 from tdfa.utils.functional import total_mask_grad
 

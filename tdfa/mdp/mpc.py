@@ -70,7 +70,6 @@ def build_world_model(cfg, proof_env):
         lambda_reward=cfg.lambda_reward,
         lambda_terminated=cfg.lambda_terminated,
         sparse_weight=cfg.sparse_weight,
-        context_weight=cfg.context_weight,
         sampling_times=cfg.sampling_times,
     )
     model_env = MyMBEnv(
@@ -85,10 +84,10 @@ def build_world_model(cfg, proof_env):
 
 @hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg):
-    if torch.cuda.is_available() and not cfg.model_device != "":
+    if torch.cuda.is_available() and not cfg.device != "":
         device = torch.device("cuda:0")
-    elif cfg.model_device:
-        device = torch.device(cfg.model_device)
+    elif cfg.device:
+        device = torch.device(cfg.device)
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
@@ -96,7 +95,7 @@ def main(cfg):
     exp_name = generate_exp_name("MPC", cfg.exp_name)
     logger = get_logger(
         logger_type=cfg.logger,
-        logger_name="dreamer",
+        logger_name="dreamers",
         experiment_name=exp_name,
         wandb_kwargs={
             "project": "torchrl",

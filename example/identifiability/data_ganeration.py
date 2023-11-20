@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from tdfa.models.util import build_parallel_layers
+from tdfa.modules.utils import build_parallel_layers
 
 
 def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):

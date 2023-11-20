@@ -18,7 +18,7 @@ class CausalMask(nn.Module):
         self.mask_output_dim = mask_output_dim
         self.logits_clip = logits_clip
 
-        self._mask_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.mask_input_dim))
+        self._mask_logits = nn.Parameter(torch.ones(self.mask_output_dim, self.mask_input_dim) * 10)
 
     @property
     def mask_input_dim(self):

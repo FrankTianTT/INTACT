@@ -1,17 +1,13 @@
-import copy
 from itertools import chain
-from typing import Optional, Set
 
 import torch
 from torch import nn
-from torch import vmap
-from torch.func import stack_module_state, functional_call
 from torchrl.modules.distributions import NormalParamWrapper
 
-from tdfa.models.util import build_parallel_layers
-from tdfa.models.layers import ParallelGRUCell
-from tdfa.models.context_model import ContextModel
-from tdfa.models.causal_mask import CausalMask
+from tdfa.modules.utils import build_parallel_layers
+from tdfa.modules.models.layers import ParallelGRUCell
+from tdfa.modules.models.context_model import ContextModel
+from tdfa.modules.models.causal_mask import CausalMask
 
 
 class CausalRSSMPrior(nn.Module):
@@ -108,7 +104,12 @@ class CausalRSSMPrior(nn.Module):
         return self.hidden_dim_per_variable * self.variable_num
 
     def forward(self, state, belief, action, idx=None, deterministic_mask=False):
-        assert len(state.shape) == 2, "state should be 2D tensor: batch_size x state_dim"
+        assert len(state.shape) == len(belief.shape) == len(action.shape) < 3, "state should be 1-d or 2-d"
+        one_dim = len(state.shape) == 1  # single state, used by policy
+
+        if one_dim:
+            state, belief, action = state.unsqueeze(0), belief.unsqueeze(0), action.unsqueeze(0)
+
         batch_size, state_dim = state.shape
 
         if idx is None:
@@ -131,6 +132,10 @@ class CausalRSSMPrior(nn.Module):
 
         next_state = prior_mean + torch.randn_like(prior_std) * prior_std
         next_belief = next_belief.permute(1, 0, 2).reshape(batch_size, -1)
+
+        if one_dim:
+            prior_mean, prior_std, next_state, next_belief = prior_mean.squeeze(0), prior_std.squeeze(0), \
+                                                             next_state.squeeze(0), next_belief.squeeze(0)
 
         return prior_mean, prior_std, next_state, next_belief
 

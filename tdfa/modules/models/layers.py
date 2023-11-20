@@ -78,7 +78,7 @@ class ParallelLinear(nn.Module):
 
     def extra_repr(self):
         return 'input_dims={}, output_dims={}, extra_dims={}, bias={}, init_type="{}"'.format(
-            self.in_features, self.out_features, str(self.extra_dims), self.use_bias, self.init_type
+            self.in_features, self.out_features, str(self.extra_dims), self.bias is not None, self.init_type
         )
 
 

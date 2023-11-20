@@ -1,10 +1,7 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Callable, Optional, Sequence, Union
 
+import torch
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.envs import ParallelEnv
 from torchrl.envs.common import EnvBase
@@ -22,22 +19,16 @@ from torchrl.envs.transforms import (
     RewardScaling,
     ToTensorImage,
     TransformedEnv,
+    RewardSum
 )
 from torchrl.envs.transforms.transforms import FlattenObservation, TensorDictPrimer
 from torchrl.record.loggers import Logger
 from torchrl.record.recorder import VideoRecorder
 
-__all__ = [
-    "transformed_env_constructor",
-    "parallel_env_constructor",
-]
-
 LIBS = {
     "gym": GymEnv,
     "dm_control": DMControlEnv,
 }
-import torch
-from torch.cuda.amp import autocast
 
 
 def make_env_transforms(
@@ -122,18 +113,22 @@ def make_env_transforms(
     env.append_transform(DoubleToFloat())
 
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
+        "state": UnboundedContinuousTensorSpec(
+            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.state_dim_per_variable))
+        ),
         "belief": UnboundedContinuousTensorSpec(
-            shape=(*env.batch_size, cfg.rssm_hidden_dim)
+            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.hidden_dim_per_variable))
         ),
     }
     env.append_transform(
         TensorDictPrimer(random=False, default_value=0, **default_dict)
     )
+
+    env.append_transform(RewardSum())
     return env
 
 
-def transformed_env_constructor(
+def dreamer_env_constructor(
         cfg: "DictConfig",  # noqa: F821
         video_tag: str = "",
         logger: Optional[Logger] = None,
@@ -242,7 +237,7 @@ def transformed_env_constructor(
     return make_transformed_env
 
 
-def parallel_env_constructor(
+def parallel_dreamer_env_constructor(
         cfg: "DictConfig", **kwargs  # noqa: F821
 ) -> Union[ParallelEnv, EnvCreator]:
     """Returns a parallel environment from an argparse.Namespace built with the appropriate parser constructor.
@@ -254,10 +249,10 @@ def parallel_env_constructor(
     batch_transform = cfg.batch_transform
     if cfg.env_per_collector == 1:
         kwargs.update({"cfg": cfg, "use_env_creator": True})
-        make_transformed_env = transformed_env_constructor(**kwargs)
+        make_transformed_env = dreamer_env_constructor(**kwargs)
         return make_transformed_env
     kwargs.update({"cfg": cfg, "use_env_creator": True})
-    make_transformed_env = transformed_env_constructor(
+    make_transformed_env = dreamer_env_constructor(
         return_transformed_envs=not batch_transform, **kwargs
     )
     parallel_env = ParallelEnv(
@@ -275,77 +270,13 @@ def parallel_env_constructor(
                 "batch_dims": 1,
             }
         )
-        env = transformed_env_constructor(**kwargs)()
+        env = dreamer_env_constructor(**kwargs)()
         return env
     return parallel_env
 
 
-def recover_pixels(pixels, stats):
-    return (
-        (255 * (pixels * stats["scale"] + stats["loc"]))
-        .clamp(min=0, max=255)
-        .to(torch.uint8)
-    )
-
-
-@torch.inference_mode()
-def call_record(
-        logger,
-        record,
-        collected_frames,
-        sampled_tensordict,
-        stats,
-        model_based_env,
-        actor_model,
-        cfg,
-):
-    td_record = record(None)
-    if td_record is not None and logger is not None:
-        for key, value in td_record.items():
-            if key in ["r_evaluation", "total_r_evaluation"]:
-                logger.log_scalar(
-                    key,
-                    value.detach().item(),
-                    step=collected_frames,
-                )
-    # Compute observation reco
-    if cfg.record_video and record._count % cfg.record_interval == 0:
-        world_model_td = sampled_tensordict
-
-        true_pixels = recover_pixels(world_model_td[("next", "pixels")], stats)
-
-        reco_pixels = recover_pixels(world_model_td["next", "reco_pixels"], stats)
-        with autocast(dtype=torch.float16):
-            world_model_td = world_model_td.select("state", "belief", "reward")
-            world_model_td = model_based_env.rollout(
-                max_steps=true_pixels.shape[1],
-                policy=actor_model,
-                auto_reset=False,
-                tensordict=world_model_td[:, 0],
-            )
-        imagine_pxls = recover_pixels(
-            model_based_env.decode_obs(world_model_td)["next", "reco_pixels"],
-            stats,
-        )
-
-        stacked_pixels = torch.cat([true_pixels, reco_pixels, imagine_pxls], dim=-1)
-        if logger is not None:
-            logger.log_video(
-                "pixels_rec_and_imag",
-                stacked_pixels.detach().cpu(),
-            )
-
-
-def grad_norm(optimizer: torch.optim.Optimizer):
-    sum_of_sq = 0.0
-    for pg in optimizer.param_groups:
-        for p in pg["params"]:
-            sum_of_sq += p.grad.pow(2).sum()
-    return sum_of_sq.sqrt().detach().item()
-
-
 def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn):
-    recorder = transformed_env_constructor(
+    recorder = dreamer_env_constructor(
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
@@ -392,11 +323,11 @@ def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn
 class EnvConfig:
     env_library: str = "gym"
     # env_library used for the simulated environment. Default=gym
-    env_name: str = "Humanoid-v2"
+    env_name: str = "CartPoleContinuous-v0"
     # name of the environment to be created. Default=Humanoid-v2
     env_task: str = ""
     # task (if any) for the environment. Default=run
-    from_pixels: bool = False
+    from_pixels: bool = True
     # whether the environment output should be state vector(s) (default) or the pixels.
     frame_skip: int = 1
     # frame_skip for the environment. Note that this value does NOT impact the buffer size,
@@ -417,14 +348,44 @@ class EnvConfig:
     # Deactivates the normalization based on random collection of data.
     noops: int = 0
     # number of random steps to do after reset. Default is 0
-    catframes: int = 0
+    catframes: int = 1
     # Number of frames to concatenate through time. Default is 0 (do not use CatFrames).
     center_crop: Any = dataclass_field(default_factory=lambda: [])
     # center crop size.
-    grayscale: bool = True
+    grayscale: bool = False
     # Disables grayscale transform.
     max_frames_per_traj: int = 1000
     # Number of steps before a reset of the environment is called (if it has not been flagged as done before).
     batch_transform: bool = True
     # if True, the transforms will be applied to the parallel env, and not to each individual env.\
-    image_size: int = 84
+    image_size: int = 64
+    categorical_action_encoding: bool = False
+
+
+def test_dreamer_env_constructor():
+    import tdfa.envs
+    from PIL import Image
+
+    cfg = EnvConfig()
+    cfg.collector_device = "cpu"
+    cfg.variable_num = 10
+    cfg.state_dim_per_variable = 3
+    cfg.hidden_dim_per_variable = 20
+
+    obs_norm_state_dict = {"loc": 0.5, "scale": 0.5}
+
+    make_env = dreamer_env_constructor(cfg, obs_norm_state_dict=obs_norm_state_dict)
+    env = make_env()
+
+    td = env.rollout(100)
+
+    print(td[("next", "done")])
+
+    # img = td["pixels"].mean(dim=0).detach().numpy()
+    # img = (img * 255).astype("uint8").transpose(1, 2, 0)
+    # img = Image.fromarray(img)
+    # img.show()
+
+
+if __name__ == '__main__':
+    test_dreamer_env_constructor()

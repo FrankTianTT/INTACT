@@ -1,0 +1,35 @@
+env_name: CartPoleContinuous-v0
+env_task: run
+env_library: gym
+
+async_collection: True
+env_per_collector: 8
+num_workers: 8
+collector_device: cpu
+model_device: cuda:1
+
+
+batch_size: 50
+batch_length: 25
+init_random_frames: 5000
+total_frames: 500000
+frames_per_batch: 800
+optim_steps_per_batch: 80
+buffer_size: 20000
+
+
+world_model_lr: 6e-4
+actor_value_lr: 8e-5
+
+record_video: 0
+record_interval: 1
+record_frames: 1000
+logger: wandb
+offline_logging: False
+
+variable_num: 10
+state_dim_per_variable: 3
+hidden_dim_per_variable: 20
+rnn_input_dim_per_variable: 20
+
+lambda_continue: 1.0
