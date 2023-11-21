@@ -37,7 +37,6 @@ class ParallelLinear(nn.Module):
             out_features: int,
             extra_dims: Optional[List[int]] = None,
             bias: bool = True,
-            init_type: str = "truncated_normal",
             device=None,
             dtype=None
     ):
@@ -46,7 +45,6 @@ class ParallelLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.extra_dims = [] if extra_dims is None else extra_dims
-        self.init_type = init_type
 
         self.weight = nn.Parameter(torch.empty((*extra_dims, out_features, in_features), **factory_kwargs))
         if bias:
@@ -57,17 +55,12 @@ class ParallelLinear(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        """Initialize weights and biases. Currently, only `kaiming_uniform` and `truncated_normal` are supported.
-
-        Returns: None
-
-        """
-        if self.init_type == "kaiming_uniform":
-            nn.init.kaiming_uniform_(self.weight, nonlinearity="relu")
-        elif self.init_type == "truncated_normal":
-            stddev = 1 / (2 * np.sqrt(self.in_features))
-            for dims in product(*map(range, self.extra_dims)):
-                truncated_normal_(self.weight.data[dims], std=stddev)
+        for dims in product(*map(range, self.extra_dims)):
+            nn.init.kaiming_uniform_(self.weight[dims], a=math.sqrt(5))
+            if self.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[dims])
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(self.bias[dims], -bound, bound)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         ret = x.matmul(self.weight.transpose(-1, -2))
@@ -117,9 +110,10 @@ class ParallelGRUCell(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        stdv = 1.0 / math.sqrt(self.hidden_size) if self.hidden_size > 0 else 0
+        stddev = 1.0 / math.sqrt(self.hidden_size) if self.hidden_size > 0 else 0
         for weight in self.parameters():
-            nn.init.uniform_(weight, -stdv, stdv)
+            for dims in product(*map(range, self.extra_dims)):
+                nn.init.uniform_(weight[dims], -stddev, stddev)
 
     def forward(self, input: torch.Tensor, hx: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -225,4 +219,4 @@ def test_parallel_gru_cell():
 
 
 if __name__ == '__main__':
-    test_parallel_gru_cell()
+    test_parallel_linear()

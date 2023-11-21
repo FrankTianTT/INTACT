@@ -1,5 +1,6 @@
 import dataclasses
 from pathlib import Path
+from collections import defaultdict
 
 import hydra
 import torch
@@ -114,6 +115,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         lambda_reco=cfg.lambda_reco,
         lambda_reward=cfg.lambda_reward,
         lambda_continue=cfg.lambda_continue,
+        sparse_weight=cfg.sparse_weight,
+        context_sparse_weight=cfg.context_sparse_weight,
+        context_max_weight=cfg.context_max_weight,
+        sampling_times=cfg.sampling_times,
     )
     actor_loss = DreamerActorLoss(
         actor_model,
@@ -206,10 +211,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(current_frames)
         collected_frames += current_frames
 
+        logging_scalar = defaultdict(list)
+
         def log_scalar(key, value):
             if isinstance(value, torch.Tensor):
                 value = value.detach().item()
-            logger.log_scalar(key, value, step=collected_frames)
+            logging_scalar[key].append(value)
 
         tensordict = match_length(tensordict, cfg.batch_length)
         tensordict = tensordict.reshape(-1, cfg.batch_length)
@@ -224,7 +231,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         log_scalar("rollout/episode_reward_mean", mean_episode_reward)
         log_scalar("rollout/action_mean", tensordict["action"][mask].mean())
         log_scalar("rollout/action_std", tensordict["action"][mask].std())
-
 
         if (i % cfg.record_interval) == 0:
             do_log = True
@@ -245,43 +251,65 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         sampled_tensordict
                     )
                 # update world model
-                model_loss_td, sampled_tensordict = world_model_loss(
-                    sampled_tensordict
-                )
-                loss_world_model = (
-                        model_loss_td["loss_model_kl"]
-                        + model_loss_td["loss_model_reco"]
-                        + model_loss_td["loss_model_reward"]
-                        + model_loss_td["loss_model_continue"]
-                )
-                # If we are logging videos, we keep some frames.
-                if (
-                        cfg.record_video
-                        and (record._count + 1) % cfg.record_interval == 0
-                ):
-                    sampled_tensordict_save = (
-                        sampled_tensordict.select(
-                            "next" "state",
-                            "belief",
-                        )[:4]
-                        .detach()
-                        .to_tensordict()
+                if cmpt % (cfg.train_causal_iters + cfg.train_model_iters) < cfg.train_model_iters:
+                    model_loss_td, sampled_tensordict = world_model_loss(
+                        sampled_tensordict
                     )
+                    loss_world_model = (
+                            model_loss_td["loss_model_kl"]
+                            + model_loss_td["loss_model_reco"]
+                            + model_loss_td["loss_model_reward"]
+                            + model_loss_td["loss_model_continue"]
+                    )
+                    # # If we are logging videos, we keep some frames.
+                    # if (
+                    #         cfg.record_video
+                    #         and (record._count + 1) % cfg.record_interval == 0
+                    # ):
+                    #     sampled_tensordict_save = (
+                    #         sampled_tensordict.select(
+                    #             "next" "state",
+                    #             "belief",
+                    #         )[:4]
+                    #         .detach()
+                    #         .to_tensordict()
+                    #     )
+                    # else:
+                    #     sampled_tensordict_save = None
+
+                    loss_world_model.backward()
+                    clip_grad_norm_(world_model.get_parameter("module"), cfg.grad_clip)
+                    world_model_opt.step()
+                    context_opt.step()
+
+                    for key in model_loss_td.keys():
+                        print(key, model_loss_td[key])
+
+                    for n, p in world_model.named_parameters():
+                        if torch.isnan(p).any():
+                            print("NaN in world model")
+                            print(n)
+                            exit(1)
+
+                    if do_log:
+                        log_scalar("world_model/total_loss", loss_world_model)
+                        log_scalar("world_model/grad", grad_norm(world_model_opt))
+                        log_scalar("world_model/kl_loss", model_loss_td["loss_model_kl"])
+                        log_scalar("world_model/reco_loss", model_loss_td["loss_model_reco"])
+                        log_scalar("world_model/reward_loss", model_loss_td["loss_model_reward"])
+                        log_scalar("world_model/continue_loss", model_loss_td["loss_model_continue"])
+                        log_scalar("world_model/mean_continue",
+                                   (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+                    world_model_opt.zero_grad()
                 else:
-                    sampled_tensordict_save = None
-
-                loss_world_model.backward()
-                clip_grad_norm_(world_model.get_parameter("module"), cfg.grad_clip)
-                world_model_opt.step()
-
-                if j == cfg.optim_steps_per_batch - 1 and do_log:
-                    log_scalar("world_model/total_loss", loss_world_model)
-                    log_scalar("world_model/grad", grad_norm(world_model_opt))
-                    log_scalar("world_model/kl_loss", model_loss_td["loss_model_kl"])
-                    log_scalar("world_model/reco_loss", model_loss_td["loss_model_reco"])
-                    log_scalar("world_model/reward_loss", model_loss_td["loss_model_reward"])
-                    log_scalar("world_model/continue_loss", model_loss_td["loss_model_continue"])
-                world_model_opt.zero_grad()
+                    grad = world_model_loss.reinforce(sampled_tensordict)
+                    logits = world_model.causal_mask.mask_logits
+                    logits.backward(grad)
+                    mask_logits_opt.step()
+                    if do_log:
+                        log_scalar("causal/sparsity", (logits < 0).float().mean())
+                        log_scalar("causal/mean_logits", logits.mean())
+                    mask_logits_opt.zero_grad()
 
                 if collected_frames >= cfg.train_agent_frames:
                     # update actor network
@@ -289,7 +317,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     actor_loss_td["loss_actor"].backward()
                     clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                     actor_opt.step()
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    if do_log:
                         log_scalar("actor/loss", actor_loss_td["loss_actor"])
                         log_scalar("actor/grad", grad_norm(actor_opt))
                         log_scalar("actor/action_mean", sampled_tensordict["action"].mean())
@@ -301,14 +329,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     value_loss_td["loss_value"].backward()
                     clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                     value_opt.step()
-                    if j == cfg.optim_steps_per_batch - 1 and do_log:
+                    if do_log:
                         log_scalar("value/loss", value_loss_td["loss_value"])
                         log_scalar("value/grad", grad_norm(value_opt))
                         log_scalar("value/target_mean", sampled_tensordict["lambda_target"].mean())
                         log_scalar("value/target_std", sampled_tensordict["lambda_target"].std())
                     value_opt.zero_grad()
-                    if j == cfg.optim_steps_per_batch - 1:
-                        do_log = False
+
+            if do_log:
+                for key, value in logging_scalar.items():
+                    if len(value) == 0:
+                        continue
+                    if len(value) > 1:
+                        value = torch.tensor(value).mean()
+                    else:
+                        value = value[0]
+                    logger.log_scalar(key, value, step=collected_frames)
 
             stats = retrieve_stats_from_state_dict(obs_norm_state_dict)
             call_record(

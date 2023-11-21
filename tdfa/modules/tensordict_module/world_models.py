@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 from tensordict.nn import TensorDictSequential, TensorDictModule
 from torchrl.modules.models.model_based import RSSMRollout
@@ -17,6 +18,12 @@ class CausalDreamerWrapper(TensorDictSequential):
             reward_model: TensorDictModule,
             continue_model: TensorDictModule = None,
     ):
+
+        self.variable_num = rssm_rollout.rssm_prior.variable_num
+        self.state_dim_per_variable = rssm_rollout.rssm_prior.state_dim_per_variable
+        self.hidden_dim_per_variable = rssm_rollout.rssm_prior.hidden_dim_per_variable
+        self.action_dim = rssm_rollout.rssm_prior.action_dim
+
         models = [obs_encoder, rssm_rollout, obs_decoder, reward_model]
         if continue_model is not None:
             models.append(continue_model)
@@ -25,6 +32,16 @@ class CausalDreamerWrapper(TensorDictSequential):
             self.pred_continue = False
 
         super().__init__(*models)
+
+    @property
+    def causal_mask(self):
+        _, rssm_rollout, *_ = self.module
+        return rssm_rollout.rssm_prior.causal_mask
+
+    @property
+    def context_model(self):
+        _, rssm_rollout, *_ = self.module
+        return rssm_rollout.rssm_prior.context_model
 
     def get_parameter(self, target: str):
         if target == "module":
@@ -41,6 +58,21 @@ class CausalDreamerWrapper(TensorDictSequential):
                     yield param
         else:
             raise NotImplementedError
+
+    def parallel_forward(self, tensordict, sampling_times=50):
+        assert len(tensordict.batch_size) == 2, "batch_size should be 2-d"
+        batch_size, batch_len = tensordict.batch_size
+
+        obs_encoder, rssm_rollout, *_ = self.module
+
+        tensordict = self._run_module(obs_encoder, tensordict)
+        tensordict = tensordict.select(*rssm_rollout.in_keys)
+
+        repeat_tensordict = tensordict.expand(sampling_times, *tensordict.batch_size).reshape(-1, batch_len)
+        out_tensordict = self._run_module(rssm_rollout, repeat_tensordict)
+        out_tensordict = out_tensordict.reshape(sampling_times, batch_size, batch_len)
+
+        return out_tensordict
 
 
 def build_example_causal_dreamer_wrapper(meta=False):
@@ -88,6 +120,7 @@ def build_example_causal_dreamer_wrapper(meta=False):
                 ("next", "prior_std"),
                 "_",
                 ("next", "belief"),
+                "causal_mask"
             ],
         ),
         SafeModule(
@@ -138,7 +171,7 @@ def build_example_causal_dreamer_wrapper(meta=False):
     return world_model
 
 
-def test_forward(meta=False):
+def get_example_data(meta=False):
     import torch
     from tensordict import TensorDict
 
@@ -159,24 +192,57 @@ def test_forward(meta=False):
             "state": torch.randn(batch_size, batch_len, variable_num * state_dim_per_variable),
             "belief": torch.randn(batch_size, batch_len, variable_num * hidden_dim_per_variable),
         },
-    }, batch_size=batch_size)
+    }, batch_size=(batch_size, batch_len))
 
     if meta:
         idx = torch.randint(0, task_num, (batch_size, 1))
         idx = idx.reshape(-1, 1, 1).expand(batch_size, batch_len, 1)
         input_td.set("idx", idx)
 
+    return input_td
+
+
+def test_forward(meta=False):
     world_model = build_example_causal_dreamer_wrapper(meta)
+    input_td = get_example_data(meta)
+
     output_td = world_model(input_td)
     output_td_0 = world_model(input_td[:, 0])
 
     equal = output_td[:, 0] == output_td_0
     for key in equal.keys(include_nested=True):
-        if key in ["action", "idx", ('next', 'pixels'), ('next', 'encoded_latents')]:
+        if key in ["action", "idx", "state", "belief",
+                   ('next', 'pixels'), ('next', 'encoded_latents')]:
             assert equal[key].all()
         else:
+            print(key)
             assert not equal[key].all()  # mask is stochastic
 
 
+def test_optimize():
+    from torch.nn.functional import binary_cross_entropy_with_logits
+
+    world_model = build_example_causal_dreamer_wrapper()
+    input_td = get_example_data()
+
+    output_td = world_model(input_td)
+
+    pred_continue = output_td.get(("next", "pred_continue"))
+    terminated = torch.randint(0, 2, pred_continue.shape).bool()
+
+    continue_loss = binary_cross_entropy_with_logits(
+        pred_continue,
+        1 - terminated.float(),
+        reduction="mean"
+    )
+
+    continue_loss.backward()
+
+    for param in world_model.get_parameter("module"):
+        if param.grad is not None:
+            assert not torch.isnan(param.grad).any()
+            assert not torch.isinf(param.grad).any()
+
+
 if __name__ == '__main__':
-    test_forward(meta=True)
+    model = test_optimize()

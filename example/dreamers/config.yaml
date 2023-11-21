@@ -21,6 +21,8 @@ buffer_size: 20000
 
 world_model_lr: 6e-4
 actor_value_lr: 8e-5
+context_lr: 1e-1
+mask_logits_lr: 1e-3
 
 record_video: 0
 record_interval: 1
@@ -33,6 +35,14 @@ state_dim_per_variable: 3
 hidden_dim_per_variable: 20
 rnn_input_dim_per_variable: 20
 
-lambda_continue: 1.0
+lambda_continue: 10.0
 
 pred_continue: True
+
+train_causal_iters: 0
+train_model_iters: 50
+
+sparse_weight: 0.005
+context_sparse_weight: 0.01
+context_max_weight: 0.2
+sampling_times: 30

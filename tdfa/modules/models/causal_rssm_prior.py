@@ -127,6 +127,7 @@ class CausalRSSMPrior(nn.Module):
             dim_map=self.mask_dim_map,
             deterministic=deterministic_mask
         )
+
         masked_action_state = self.action_state_projector(masked_projector_input)
         reshaped_belief = belief.reshape(-1, self.variable_num, self.hidden_dim_per_variable).permute(1, 0, 2)
 
@@ -146,7 +147,7 @@ class CausalRSSMPrior(nn.Module):
             prior_mean, prior_std, next_state, next_belief = prior_mean.squeeze(0), prior_std.squeeze(0), \
                 next_state.squeeze(0), next_belief.squeeze(0)
 
-        return prior_mean, prior_std, next_state, next_belief
+        return prior_mean, prior_std, next_state, next_belief, mask
 
 
 def test_causal_rssm_prior():

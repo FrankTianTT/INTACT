@@ -124,6 +124,7 @@ def _dreamer_make_world_model(
                 ("next", "prior_std"),
                 "_",
                 ("next", "belief"),
+                "causal_mask",
             ],
         ),
         SafeModule(
@@ -208,6 +209,14 @@ class DreamerConfig:
     pred_continue: bool = True
     # Whether to predict the continue signal
     train_agent_frames: int = 100000
+
+    train_causal_iters: int = 10
+    train_model_iters: int = 50
+
+    sparse_weight: float = 0.02
+    context_sparse_weight: float = 0.01
+    context_max_weight: float = 0.2
+    sampling_times: int = 30
 
 
 def test_make_causal_dreamer():
