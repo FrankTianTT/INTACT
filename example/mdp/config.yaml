@@ -5,7 +5,7 @@ termination_fns: cartpole
 reward_fns: ones
 
 # planning
-total_frames: 100000
+total_frames: 1000000
 init_random_frames: 1000
 frames_per_batch: 1
 planning_horizon: 15
@@ -15,19 +15,20 @@ top_k: 35
 
 # model learning
 batch_size: 256
-model_learning_per_step: 10
+model_learning_per_step: 5
 train_mask_iters: 10
 train_predictor_iters: 50
 world_model_lr: 0.001
 context_lr: 0.1
-mask_logits_lr: 0.001
+mask_logits_lr: 0.005
 lambda_transition: 1.0
-lambda_reward: 1.0
-lambda_terminated: 1.0
-lambda_mutual_info: 0
-sparse_weight: 0.02
+lambda_reward: 0.0
+lambda_terminated: 0.0
+lambda_mutual_info: 1.0
+
+sparse_weight: 0.005
 context_sparse_weight: 0.01
-context_max_weight: 0.2
+context_max_weight: 0.01
 sampling_times: 30
 
 # log
@@ -39,12 +40,13 @@ test_interval: 100
 test_env_nums: 1
 
 # meta-RL
+meta: False
 max_context_dim: 10
 task_num: 100
 oracle_context:
   gravity: [ 5.0, 20.0 ]
   masscart: [ 0.5, 4.5 ]
-  tau: [ 0.02, 0.2 ]
+#  tau: [ 0.02, 0.2 ]
 #  x_dot_bias: [ 0.01, 0.2 ]
 #  theta_dot_bias: [ 0.01, 0.2 ]
 

@@ -108,7 +108,7 @@ class CausalRSSMPrior(nn.Module):
             because time dimension is dealt in ``RSSMRollout`` class
         """
 
-        assert len(state.shape) == len(belief.shape) == len(action.shape) < 3, "state should be 1-d or 2-d"
+        assert 0 < len(state.shape) == len(belief.shape) == len(action.shape) < 3, "state should be 1-d or 2-d"
         one_dim = len(state.shape) == 1  # single state, used by policy
 
         if one_dim:

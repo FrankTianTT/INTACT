@@ -1,27 +1,8 @@
-import warnings
-from dataclasses import dataclass
-from typing import Optional, Tuple
-
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
-from tensordict.utils import NestedKey
 
-from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
-    default_value_kwargs,
-    distance_loss,
-    hold_out_net,
-    ValueEstimators,
-)
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 from torchrl.objectives.dreamer import DreamerModelLoss
-from tdfa.modules.tensordict_module.world_models import CausalDreamerWrapper
-from tdfa.utils.functional import total_mask_grad
+from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
 
 
 class CausalDreamerModelLoss(DreamerModelLoss):
@@ -43,7 +24,6 @@ class CausalDreamerModelLoss(DreamerModelLoss):
 
         self.variable_num = self.world_model.variable_num
         self.state_dim_per_variable = self.world_model.state_dim_per_variable
-        self.action_dim = self.world_model.action_dim
 
         self.causal_mask = self.world_model.causal_mask
 
@@ -64,11 +44,9 @@ class CausalDreamerModelLoss(DreamerModelLoss):
         sampling_loss = sampling_loss.sum(dim=-1)
         sampling_mask = tensordict.get("causal_mask")[:, mask]
 
-        mask_grad = total_mask_grad(
-            logits=self.causal_mask.mask_logits,
+        mask_grad = self.causal_mask.total_mask_grad(
             sampling_mask=sampling_mask,
             sampling_loss=sampling_loss,
-            observed_input_dim=self.action_dim + self.variable_num,
             sparse_weight=self.sparse_weight,
             context_sparse_weight=self.context_sparse_weight,
             context_max_weight=self.context_max_weight

@@ -1,0 +1,149 @@
+from functools import reduce
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.distributions import Bernoulli
+from torchrl.objectives.common import LossModule
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModuleBase
+
+from tdfa.modules.utils import build_parallel_layers
+from tdfa.stats.metric import mutual_info_estimation
+from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+
+
+class CausalWorldModelLoss(LossModule):
+    def __init__(
+            self,
+            world_model: CausalMDPWrapper,
+            lambda_transition: float = 1.0,
+            lambda_reward: float = 1.0,
+            lambda_terminated: float = 1.0,
+            lambda_mutual_info: float = 1.0,  # use for meta identify
+            sparse_weight: float = 0.05,
+            context_sparse_weight: float = 0.01,
+            context_max_weight: float = 0.1,
+            sampling_times: int = 50,
+    ):
+        super().__init__()
+        self.world_model = world_model
+        self.causal_mask = world_model.causal_mask
+
+        self.lambda_transition = lambda_transition
+        self.lambda_reward = lambda_reward
+        self.lambda_terminated = lambda_terminated
+        self.lambda_mutual_info = lambda_mutual_info
+        self.sparse_weight = sparse_weight
+        self.context_sparse_weight = context_sparse_weight
+        self.context_max_weight = context_max_weight
+        self.sampling_times = sampling_times
+
+    def loss(self, tensordict, reduction="none"):
+        assert len(tensordict.batch_size) == 1
+
+        transition_loss = F.gaussian_nll_loss(
+            tensordict.get("obs_mean"),
+            tensordict.get(("next", "observation")),
+            torch.exp(tensordict.get("obs_log_var")),
+            reduction=reduction
+        ) * self.lambda_transition
+
+        reward_loss = F.mse_loss(
+            tensordict.get("reward"),
+            tensordict.get(("next", "reward")),
+            reduction=reduction
+        ) * self.lambda_reward
+        terminated_loss = F.binary_cross_entropy_with_logits(
+            tensordict.get("terminated"),
+            tensordict.get(("next", "terminated")).float(),
+            reduction=reduction
+        ) * self.lambda_terminated
+
+        return TensorDict({
+            "transition_loss": transition_loss,
+            "reward_loss": reward_loss,
+            "terminated_loss": terminated_loss,
+        },
+            batch_size=transition_loss.shape[0]
+        )
+
+    def forward(self, tensordict: TensorDict, intermediate=False):
+        tensordict = tensordict.clone(recurse=False)
+        tensordict = self.world_model(tensordict)
+        return self.loss(tensordict)
+
+        # if self.world_model.is_meta and self.lambda_mutual_info > 0 and not intermediate:
+        #     sampled_context = self.world_model.context_hat[idx.squeeze()][:, self.world_model.valid_context_idx]
+        #     mutual_info = mutual_info_estimation(sampled_context, reduction="none")
+        #     mutual_info_loss = mutual_info.reshape(-1, 1) * self.lambda_mutual_info
+        #     all_loss = torch.cat([transition_loss, reward_loss, terminated_loss, mutual_info_loss], dim=-1)
+        # else:
+        #     all_loss = torch.cat([transition_loss, reward_loss, terminated_loss], dim=-1)
+
+        # if intermediate:
+        #     return all_loss, mask
+        # else:
+        #     return all_loss
+
+    def reinforce(self, tensordict: TensorDict):
+        tensordict = tensordict.clone()
+        tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
+
+        loss = self.loss(tensordict.reshape(-1), reduction="none").reshape(tensordict.batch_size)
+        sampling_loss = torch.cat([
+            loss.get("transition_loss"),
+            loss.get("reward_loss"),
+            loss.get("terminated_loss"),
+        ], dim=-1)
+
+        mask_grad = self.causal_mask.total_mask_grad(
+            sampling_mask=tensordict.get("causal_mask"),
+            sampling_loss=sampling_loss,
+            sparse_weight=self.sparse_weight,
+            context_sparse_weight=self.context_sparse_weight,
+            context_max_weight=self.context_max_weight
+        )
+
+        return mask_grad
+
+
+def test_causal_world_model_loss():
+    from tdfa.modules.models.causal_world_model import CausalWorldModel
+    from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+
+    obs_dim = 4
+    action_dim = 1
+    max_context_dim = 0
+    task_num = 0
+    batch_size = 32
+
+    world_model = CausalWorldModel(
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        max_context_dim=max_context_dim,
+        task_num=task_num,
+    )
+    causal_mdp_wrapper = CausalMDPWrapper(world_model)
+    mdp_loss = CausalWorldModelLoss(causal_mdp_wrapper)
+
+    td = TensorDict({
+        "observation": torch.randn(batch_size, obs_dim),
+        "action": torch.randn(batch_size, action_dim),
+        "next": {
+            "terminated": torch.randn(batch_size, 1) > 0,
+            "reward": torch.randn(batch_size, 1),
+            "observation": torch.randn(batch_size, obs_dim),
+        }
+    },
+        batch_size=batch_size,
+    )
+
+    td = causal_mdp_wrapper(td)
+    loss = mdp_loss.reinforce(td)
+
+    print(loss)
+
+
+if __name__ == '__main__':
+    test_causal_world_model_loss()

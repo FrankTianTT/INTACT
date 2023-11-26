@@ -333,6 +333,11 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
 if __name__ == '__main__':
     env = CartPoleContinuousEnv()
-    print(np.array([-0.02717833, -0.07598566, -0.04646705, 0.23267715]) in env.observation_space)
-    print(env.observation_space)
-    print(env.observation_space.sample() in env.observation_space)
+    env.reset()
+    for i in range(100):
+        action = env.action_space.sample()
+        obs, reward, done, t, info = env.step(action)
+        print(obs)
+
+        if done:
+            break

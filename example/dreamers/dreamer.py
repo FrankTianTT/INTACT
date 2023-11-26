@@ -282,15 +282,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     world_model_opt.step()
                     context_opt.step()
 
-                    for key in model_loss_td.keys():
-                        print(key, model_loss_td[key])
-
-                    for n, p in world_model.named_parameters():
-                        if torch.isnan(p).any():
-                            print("NaN in world model")
-                            print(n)
-                            exit(1)
-
                     if do_log:
                         log_scalar("world_model/total_loss", loss_world_model)
                         log_scalar("world_model/grad", grad_norm(world_model_opt))
@@ -334,6 +325,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         log_scalar("value/grad", grad_norm(value_opt))
                         log_scalar("value/target_mean", sampled_tensordict["lambda_target"].mean())
                         log_scalar("value/target_std", sampled_tensordict["lambda_target"].std())
+                        log_scalar("value/mean_continue",
+                                   (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
                     value_opt.zero_grad()
 
             if do_log:

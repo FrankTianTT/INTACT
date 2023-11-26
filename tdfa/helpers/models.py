@@ -13,8 +13,37 @@ from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_v
 from torchrl.modules.models.model_based import RSSMRollout
 
 from tdfa.modules.models.causal_rssm_prior import CausalRSSMPrior
-from tdfa.modules.tensordict_module.world_models import CausalDreamerWrapper
+from tdfa.modules.models.causal_world_model import CausalWorldModel
+from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
+from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+from tdfa.envs.mdp_env import MDPEnv
 from tdfa.helpers.envs import dreamer_env_constructor
+
+
+def make_causal_mlp(
+        cfg,
+        proof_env: EnvBase = None,
+):
+    obs_dim = proof_env.observation_spec["observation"].shape[0]
+    action_dim = proof_env.action_spec.shape[0]
+
+    world_model = CausalMDPWrapper(
+        CausalWorldModel(
+            obs_dim,
+            action_dim,
+            meta=cfg.meta,
+            max_context_dim=cfg.max_context_dim,
+            task_num=cfg.task_num
+        )
+    )
+    model_env = MDPEnv(
+        world_model,
+        termination_fns=cfg.termination_fns,
+        reward_fns=cfg.reward_fns
+    )
+    model_env.set_specs_from_env(proof_env)
+
+    return world_model, model_env
 
 
 def make_causal_dreamer(

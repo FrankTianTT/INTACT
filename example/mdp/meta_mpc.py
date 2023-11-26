@@ -1,5 +1,6 @@
 from itertools import product
 from functools import partial
+from collections import defaultdict
 
 from tqdm import tqdm
 import hydra
@@ -13,12 +14,11 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 
-from tdfa.mdp.world_model import CausalWorldModel, CausalWorldModelLoss
-from tdfa.mdp.model_based_env import MyMBEnv
+from example.mdp import CausalWorldModel, CausalWorldModelLoss
+from example.mdp import MyMBEnv
 from tdfa.envs.meta_transform import MetaIdxTransform
-from tdfa.envs.reward_truncated_transform import RewardTruncatedTransform
 from tdfa.utils.metrics import mean_corr_coef
-from tdfa.mdp.cem import MyCEMPlanner as CEMPlanner
+from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):
@@ -110,7 +110,7 @@ def build_world_model(cfg, proof_env):
     return world_model, world_model_loss, model_env, obs_dim, action_dim
 
 
-@hydra.main(version_base="1.1", config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg):
     # if torch.cuda.is_available() and not cfg.device != "":
     #     device = torch.device("cuda:0")
@@ -168,10 +168,12 @@ def main(cfg):
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        def log_scalar(name, value):
+        logging_scalar = defaultdict(list)
+
+        def log_scalar(key, value):
             if isinstance(value, torch.Tensor):
-                value = value.detach().cpu().item()
-            logger.log_scalar(name, value, step=collected_frames)
+                value = value.detach().item()
+            logging_scalar[key].append(value)
 
         if tensordict["next", "done"].any():
             episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]

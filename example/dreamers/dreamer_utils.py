@@ -21,7 +21,8 @@ def call_record(
         actor_model,
         cfg,
 ):
-    td_record = record(None)
+    # td_record = record(None)
+    td_record = None
     if td_record is not None and logger is not None:
         for key, value in td_record.items():
             if key in ["r_evaluation", "total_r_evaluation"]:
