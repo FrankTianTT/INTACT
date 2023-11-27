@@ -3,7 +3,7 @@ from collections import defaultdict
 from functools import partial
 from typing import Callable
 
-import tqdm
+from tqdm import tqdm
 import hydra
 import gym
 from gym.envs.mujoco.mujoco_env import BaseMujocoEnv
@@ -106,9 +106,12 @@ def main(cfg):
         lambda_transition=cfg.lambda_transition,
         lambda_reward=cfg.lambda_reward,
         lambda_terminated=cfg.lambda_terminated,
+        lambda_mutual_info=cfg.lambda_mutual_info,
         sparse_weight=cfg.sparse_weight,
+        context_sparse_weight=cfg.context_sparse_weight,
+        context_max_weight=cfg.context_max_weight,
         sampling_times=cfg.sampling_times,
-    )
+    ).to(cfg.device)
 
     planner = CEMPlanner(
         model_env,
@@ -126,7 +129,7 @@ def main(cfg):
     )
 
     collector = SyncDataCollector(
-        create_env_fn=SerialEnv(len(make_env_list), make_env_list),
+        create_env_fn=SerialEnv(len(make_env_list), make_env_list, shared_memory=False),
         policy=explore_policy,
         total_frames=cfg.total_frames,
         frames_per_batch=cfg.frames_per_batch,
@@ -146,7 +149,7 @@ def main(cfg):
     )
     del proof_env
 
-    pbar = tqdm.tqdm(total=cfg.total_frames)
+    pbar = tqdm(total=cfg.total_frames)
     collected_frames = 0
     model_learning_steps = 0
 
@@ -172,7 +175,7 @@ def main(cfg):
         if collected_frames < cfg.init_random_frames:
             continue
 
-        for j in range(cfg.model_learning_per_step):
+        for j in range(cfg.model_learning_per_step * cfg.task_num):
             world_model.zero_grad()
             sampled_tensordict = replay_buffer.sample(cfg.batch_size)
 
@@ -180,8 +183,8 @@ def main(cfg):
                 loss = world_model_loss(sampled_tensordict)
                 for dim in range(loss["transition_loss"].shape[-1]):
                     log_scalar("model_loss/{}".format(f"obs_{dim}"), loss["transition_loss"][..., dim].mean())
-                log_scalar("model_loss/{}".format(f"reward"), loss["reward_loss"].mean())
-                log_scalar("terminated_loss/{}".format(f"reward"), loss["terminated_loss"].mean())
+                log_scalar("model_loss/reward", loss["reward_loss"].mean())
+                log_scalar("model_loss/terminated", loss["terminated_loss"].mean())
 
                 mean_loss = loss["transition_loss"].mean() + loss["reward_loss"].mean() + loss["terminated_loss"].mean()
                 mean_loss.backward()
@@ -201,7 +204,7 @@ def main(cfg):
                 mask_opt.step()
             model_learning_steps += 1
 
-        if i % cfg.record_interval == 0:
+        if cfg.record_interval < cfg.task_num or i % (cfg.record_interval / cfg.task_num) == 0:
             for key, value in logging_scalar.items():
                 if len(value) == 0:
                     continue
@@ -211,10 +214,13 @@ def main(cfg):
                     value = value[0]
                 logger.log_scalar(key, value, step=collected_frames)
 
+            print()
             print(world_model.causal_mask.printing_mask)
 
-        # if i % cfg.test_interval == 0:
-        #     test_env = make_env()  # only for test
+            logging_scalar = defaultdict(list)
+
+        # if cfg.test_interval < cfg.task_num or i % (cfg.test_interval / cfg.task_num) == 0:
+        #     test_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
         #     rewards = []
         #     for j in range(cfg.test_env_nums):
         #         test_tensordict = test_env.rollout(1000, policy=planner)
