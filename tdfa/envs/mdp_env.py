@@ -17,8 +17,8 @@ class MDPEnv(ModelBasedEnvBase):
             reward_fns=None
     ):
         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        self.termination_fns = termination_fns_dict[termination_fns] if termination_fns is not None else None
-        self.reward_fns = reward_fns_dict[reward_fns] if reward_fns is not None else None
+        self.termination_fns = termination_fns_dict[termination_fns] if termination_fns is not "" else None
+        self.reward_fns = reward_fns_dict[reward_fns] if reward_fns is not "" else None
 
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         tensordict = TensorDict(
@@ -70,8 +70,8 @@ class MDPEnv(ModelBasedEnvBase):
 
 
 def test_mdp_env():
-    from tdfa.modules.models.causal_world_model import CausalWorldModel
-    from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+    from tdfa.modules.models.mdp_world_model import CausalWorldModel
+    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
     from torchrl.envs import GymEnv
 
     obs_dim = 4
@@ -85,7 +85,7 @@ def test_mdp_env():
         max_context_dim=max_context_dim,
         task_num=task_num,
     )
-    causal_mdp_wrapper = CausalMDPWrapper(world_model)
+    causal_mdp_wrapper = MDPWrapper(world_model)
 
     proof_env = GymEnv("CartPoleContinuous-v0")
     mdp_env = MDPEnv(causal_mdp_wrapper)

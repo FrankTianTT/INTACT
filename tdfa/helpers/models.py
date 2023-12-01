@@ -13,34 +13,45 @@ from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_v
 from torchrl.modules.models.model_based import RSSMRollout
 
 from tdfa.modules.models.causal_rssm_prior import CausalRSSMPrior
-from tdfa.modules.models.causal_world_model import CausalWorldModel
+from tdfa.modules.models.mdp_world_model import MDPWorldModel, CausalWorldModel
 from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
-from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
 from tdfa.envs.mdp_env import MDPEnv
 from tdfa.helpers.envs import dreamer_env_constructor
 
 
-def make_causal_mlp(
+def make_mlp_model(
         cfg,
         proof_env: EnvBase = None,
+        device: DEVICE_TYPING = "cpu",
 ):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    world_model = CausalMDPWrapper(
-        CausalWorldModel(
+    if cfg.causal:
+        world_model = CausalWorldModel(
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            meta=cfg.meta,
+            reinforce=cfg.reinforce,
+            max_context_dim=cfg.max_context_dim,
+            task_num=cfg.task_num,
+        )
+    else:
+        world_model = MDPWorldModel(
             obs_dim,
             action_dim,
             meta=cfg.meta,
             max_context_dim=cfg.max_context_dim,
             task_num=cfg.task_num
         )
-    )
+    world_model = MDPWrapper(world_model).to(device)
+
     model_env = MDPEnv(
         world_model,
         termination_fns=cfg.termination_fns,
         reward_fns=cfg.reward_fns
-    )
+    ).to(device)
     model_env.set_specs_from_env(proof_env)
 
     return world_model, model_env

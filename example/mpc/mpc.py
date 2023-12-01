@@ -1,12 +1,9 @@
 from itertools import product
 from collections import defaultdict
 from functools import partial
-from typing import Callable
 
 from tqdm import tqdm
 import hydra
-import gym
-from gym.envs.mujoco.mujoco_env import BaseMujocoEnv
 import torch
 from tensordict import TensorDict
 from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
@@ -16,10 +13,9 @@ from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from tdfa.helpers.models import make_causal_mlp
+from tdfa.helpers.models import make_mlp_model
 from tdfa.objectives.causal_mdp import CausalWorldModelLoss
 from tdfa.envs.meta_transform import MetaIdxTransform
-from tdfa.utils.metrics import mean_corr_coef
 from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 
@@ -75,11 +71,17 @@ def env_constructor(cfg):
         return [make_env], None
 
 
+# def model_train(sampled_tensordict, steps, cfg):
+#     if cfg.causal:
+#         pass
+#     else:
+#         pass
+#     return steps + 1
+
+
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg):
-    if torch.cuda.is_available() and not cfg.device != "":
-        device = torch.device("cuda:0")
-    elif cfg.device:
+    if torch.cuda.is_available():
         device = torch.device(cfg.device)
     else:
         device = torch.device("cpu")
@@ -98,8 +100,14 @@ def main(cfg):
     )
 
     make_env_list, oracle_context = env_constructor(cfg)
+    if oracle_context is not None:
+        context_gt = torch.stack(list(oracle_context.values()), dim=-1)  # only for test
+    else:
+        context_gt = None
+
+    env_num = len(make_env_list)
     proof_env = make_env_list[0]()
-    world_model, model_env = make_causal_mlp(cfg, proof_env)
+    world_model, model_env = make_mlp_model(cfg, proof_env, device=device)
 
     world_model_loss = CausalWorldModelLoss(
         world_model,
@@ -111,7 +119,7 @@ def main(cfg):
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
         sampling_times=cfg.sampling_times,
-    ).to(cfg.device)
+    ).to(device)
 
     planner = CEMPlanner(
         model_env,
@@ -140,7 +148,9 @@ def main(cfg):
 
     module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
     context_opt = torch.optim.Adam(world_model.get_parameter("context_hat"), lr=cfg.context_lr)
-    mask_opt = torch.optim.Adam(world_model.get_parameter("mask_logits"), lr=cfg.mask_logits_lr)
+    if cfg.causal:
+        observed_logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+        context_logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
     input_dim_map, output_dim_map = get_dim_map(
         obs_dim=proof_env.observation_spec["observation"].shape[0],
@@ -175,22 +185,25 @@ def main(cfg):
         if collected_frames < cfg.init_random_frames:
             continue
 
-        for j in range(cfg.model_learning_per_step * cfg.task_num):
+        for j in range(cfg.model_learning_per_step * env_num):
             world_model.zero_grad()
-            sampled_tensordict = replay_buffer.sample(cfg.batch_size)
+            sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
             if model_learning_steps % (cfg.train_mask_iters + cfg.train_predictor_iters) < cfg.train_predictor_iters:
-                loss = world_model_loss(sampled_tensordict)
-                for dim in range(loss["transition_loss"].shape[-1]):
-                    log_scalar("model_loss/{}".format(f"obs_{dim}"), loss["transition_loss"][..., dim].mean())
-                log_scalar("model_loss/reward", loss["reward_loss"].mean())
-                log_scalar("model_loss/terminated", loss["terminated_loss"].mean())
+                loss_td = world_model_loss(sampled_tensordict)
+                for dim in range(loss_td["transition_loss"].shape[-1]):
+                    log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
+                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
+                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
+                if "mutual_info_loss" in loss_td.keys():
+                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
 
-                mean_loss = loss["transition_loss"].mean() + loss["reward_loss"].mean() + loss["terminated_loss"].mean()
+                mean_loss = sum([loss_td[key].mean() for key in loss_td.keys()])
                 mean_loss.backward()
                 module_opt.step()
                 context_opt.step()
             else:
+                continue
                 grad = world_model_loss.reinforce(sampled_tensordict)
                 logits = world_model.causal_mask.mask_logits
 
@@ -201,10 +214,20 @@ def main(cfg):
                     )
 
                 logits.backward(grad)
-                mask_opt.step()
+                observed_logits_opt.step()
+                context_logits_opt.step()
             model_learning_steps += 1
 
-        if cfg.record_interval < cfg.task_num or i % (cfg.record_interval / cfg.task_num) == 0:
+        if cfg.record_interval < env_num or i % (cfg.record_interval / env_num) == 0:
+            if cfg.meta:
+                if cfg.causal:
+                    valid_context_idx = world_model.causal_mask.valid_context_idx
+                else:
+                    valid_context_idx = torch.arange(cfg.max_context_dim)
+                log_scalar("context/valid_num", len(valid_context_idx))
+                mcc, permutation = world_model.context_model.get_mcc(context_gt, valid_context_idx)
+                log_scalar("context/mcc", mcc)
+
             for key, value in logging_scalar.items():
                 if len(value) == 0:
                     continue
@@ -212,10 +235,15 @@ def main(cfg):
                     value = torch.tensor(value).mean()
                 else:
                     value = value[0]
-                logger.log_scalar(key, value, step=collected_frames)
 
-            print()
-            print(world_model.causal_mask.printing_mask)
+                if logger is not None:
+                    logger.log_scalar(key, value, step=collected_frames)
+                else:
+                    print(f"{key}: {value}")
+
+            if cfg.causal:
+                print()
+                print(world_model.causal_mask.mask_logits)
 
             logging_scalar = defaultdict(list)
 

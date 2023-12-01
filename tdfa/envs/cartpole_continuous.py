@@ -333,11 +333,42 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
 if __name__ == '__main__':
     env = CartPoleContinuousEnv()
-    env.reset()
-    for i in range(100):
+    obss, next_obss, acts = [], [], []
+
+    obs, info = env.reset()
+    for i in range(10):
         action = env.action_space.sample()
-        obs, reward, done, t, info = env.step(action)
-        print(obs)
+        next_obs, reward, done, t, info = env.step(action)
+
+        obss.append(obs)
+        next_obss.append(next_obs)
+        acts.append(action)
 
         if done:
-            break
+            obs, info = env.reset()
+        else:
+            obs = next_obs
+
+
+    def f(s, action):
+
+        for g in [2, 10, 50]:
+            x, x_dot, theta, theta_dot = s
+            force = env.force_mag * action.squeeze()
+            costheta = math.cos(theta)
+            sintheta = math.sin(theta)
+
+            temp = (force + env.polemass_length * theta_dot ** 2 * sintheta) / env.total_mass
+            thetaacc = (g * sintheta - costheta * temp) / (
+                    env.length * (4.0 / 3.0 - env.masspole * costheta ** 2 / env.total_mass)
+            )
+            xacc = temp - env.polemass_length * thetaacc * costheta / env.total_mass
+
+            print(theta + theta_dot)
+        print()
+
+
+    for i in range(len(obss)):
+        f(obss[i], acts[i])
+        # print((next_obss[i] - obss[i])[3])
+        # print()

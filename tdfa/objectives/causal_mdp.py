@@ -8,15 +8,15 @@ from torchrl.objectives.common import LossModule
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 
-from tdfa.modules.utils import build_parallel_layers
+from tdfa.modules.utils import build_mlp
 from tdfa.stats.metric import mutual_info_estimation
-from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
 
 class CausalWorldModelLoss(LossModule):
     def __init__(
             self,
-            world_model: CausalMDPWrapper,
+            world_model: MDPWrapper,
             lambda_transition: float = 1.0,
             lambda_reward: float = 1.0,
             lambda_terminated: float = 1.0,
@@ -28,7 +28,13 @@ class CausalWorldModelLoss(LossModule):
     ):
         super().__init__()
         self.world_model = world_model
-        self.causal_mask = world_model.causal_mask
+        self.causal = world_model.causal
+
+        if self.causal:
+            self.causal_mask = world_model.causal_mask
+        else:
+            self.causal_mask = None
+        self.context_model = world_model.context_model
 
         self.lambda_transition = lambda_transition
         self.lambda_reward = lambda_reward
@@ -68,10 +74,18 @@ class CausalWorldModelLoss(LossModule):
             batch_size=transition_loss.shape[0]
         )
 
-    def forward(self, tensordict: TensorDict, intermediate=False):
+    def forward(self, tensordict: TensorDict):
         tensordict = tensordict.clone(recurse=False)
         tensordict = self.world_model(tensordict)
-        return self.loss(tensordict)
+
+        loss_td = self.loss(tensordict)
+        if self.lambda_mutual_info > 0:
+            mutual_info_loss = self.context_model.get_mutual_info(
+                idx=tensordict["idx"],
+                reduction="none"
+            ) * self.lambda_mutual_info
+            loss_td.set("mutual_info_loss", mutual_info_loss)
+        return loss_td
 
         # if self.world_model.is_meta and self.lambda_mutual_info > 0 and not intermediate:
         #     sampled_context = self.world_model.context_hat[idx.squeeze()][:, self.world_model.valid_context_idx]
@@ -87,6 +101,9 @@ class CausalWorldModelLoss(LossModule):
         #     return all_loss
 
     def reinforce(self, tensordict: TensorDict):
+        assert self.causal, "reinforce is only available for CausalWorldModel"
+        assert self.causal_mask.reinforce, "causal_mask should be learned by reinforce"
+
         tensordict = tensordict.clone()
         tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
 
@@ -109,8 +126,8 @@ class CausalWorldModelLoss(LossModule):
 
 
 def test_causal_world_model_loss():
-    from tdfa.modules.models.causal_world_model import CausalWorldModel
-    from tdfa.modules.tensordict_module.causal_mdp_wrapper import CausalMDPWrapper
+    from tdfa.modules.models.mdp_world_model import CausalWorldModel
+    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
     obs_dim = 4
     action_dim = 1
@@ -124,7 +141,7 @@ def test_causal_world_model_loss():
         max_context_dim=max_context_dim,
         task_num=task_num,
     )
-    causal_mdp_wrapper = CausalMDPWrapper(world_model)
+    causal_mdp_wrapper = MDPWrapper(world_model)
     mdp_loss = CausalWorldModelLoss(causal_mdp_wrapper)
 
     td = TensorDict({

@@ -5,7 +5,7 @@ from torch.nn import functional as F
 from torch.distributions import Bernoulli
 from torch.utils.data import DataLoader, Dataset
 
-from tdfa.modules.utils import build_parallel_layers
+from tdfa.modules.utils import build_mlp
 from tdfa.utils.metrics import mean_corr_coef
 from example.identifiability.data_ganeration import gen_nonlinear_data
 from tdfa.stats.metric import mutual_info_estimation
@@ -109,7 +109,7 @@ def identify_theta(x, y, theta_size):
     task_num, sample_per_task, x_size = x.shape
     *_, y_size = y.shape
 
-    model = build_parallel_layers(x_size + theta_size, 1, [256, 256], extra_dims=[y_size])
+    model = build_mlp(x_size + theta_size, 1, [256, 256], extra_dims=[y_size])
     mask_logits = nn.Parameter(torch.randn(y_size, x_size + theta_size))
     theta_hat = torch.nn.Parameter(torch.randn(task_num, theta_size))
 

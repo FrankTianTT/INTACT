@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from tdfa.modules.utils import build_parallel_layers
+from tdfa.modules.utils import build_mlp
 
 
 def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):
@@ -47,7 +47,7 @@ def is_sparse(graph):
 
 
 def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):
-    model = build_parallel_layers(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name='Tanh')
+    model = build_mlp(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name='Tanh')
 
     for name, p in model.named_parameters():
         if 'weight' in name:

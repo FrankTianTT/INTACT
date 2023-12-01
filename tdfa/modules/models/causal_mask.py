@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.distributions import Bernoulli
 
 
@@ -26,28 +27,44 @@ class CausalMask(nn.Module):
             self,
             observed_input_dim,
             mask_output_dim,
+            reinforce=True,
+            gumbel_softmax=False,
             meta=False,
             context_input_dim=10,
             logits_clip=3.0,
-            logits_init_bias=1.0,
+            observed_logits_init_bias=0.3,
+            context_logits_init_bias=1.0,
             logits_init_scale=0.05,
     ):
         super().__init__()
 
         self.observed_input_dim = observed_input_dim
         self.mask_output_dim = mask_output_dim
+        self.reinforce = reinforce
+        self.gumbel_softmax = gumbel_softmax
         self.meta = meta
         self.context_input_dim = context_input_dim if meta else 0
         self.logits_clip = logits_clip
-        self.logits_init_bias = logits_init_bias
+        self.observed_logits_init_bias = observed_logits_init_bias
+        self.context_logits_init_bias = context_logits_init_bias
         self.logits_init_scale = logits_init_scale
 
-        init_logits = torch.randn(self.mask_output_dim, self.mask_input_dim) * logits_init_scale + logits_init_bias
-        self._mask_logits = nn.Parameter(init_logits)
+        self._observed_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.observed_input_dim)
+                                             * logits_init_scale + observed_logits_init_bias)
+        self._context_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.context_input_dim)
+                                            * logits_init_scale + context_logits_init_bias)
 
     @property
     def mask_input_dim(self):
         return self.observed_input_dim + self.context_input_dim
+
+    def get_parameter(self, target: str):
+        if target == "observed_logits":
+            return [self._observed_logits]
+        elif target == "context_logits":
+            return [self._context_logits]
+        else:
+            raise NotImplementedError
 
     @property
     def mask(self):
@@ -55,7 +72,8 @@ class CausalMask(nn.Module):
 
     @property
     def mask_logits(self):
-        return torch.clamp(self._mask_logits, -self.logits_clip, self.logits_clip)
+        mask_logits = torch.cat([self._observed_logits, self._context_logits], dim=-1)
+        return torch.clamp(mask_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def valid_context_idx(self):
@@ -73,21 +91,26 @@ class CausalMask(nn.Module):
         # shape: mask_output_dim * batch_size * input_dim
         repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
 
-        if deterministic:
-            original_mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
+        if self.reinforce:
+            if deterministic:
+                original_mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
+            else:
+                original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
+            mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
+            masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
+            return masked_inputs, original_mask
         else:
-            original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
-
-        if dim_map is not None:
-            mask = original_mask[:, :, dim_map]
-        else:
-            mask = original_mask
-
-        masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
-
-        return masked_inputs, original_mask
-
-    import torch
+            if self.gumbel_softmax:
+                original_mask = F.gumbel_softmax(
+                    logits=torch.stack((self.mask_logits, 1 - self.mask_logits)),
+                    hard=True,
+                    dim=0
+                )[0]
+            else:
+                original_mask = self.mask_logits.sigmoid()
+            mask = original_mask[:, dim_map] if dim_map is not None else original_mask
+            masked_inputs = torch.einsum("oi,obi->obi", mask, repeated_inputs)
+            return masked_inputs, None
 
     def total_mask_grad(
             self,
@@ -129,24 +152,51 @@ class CausalMask(nn.Module):
         return string
 
 
-if __name__ == '__main__':
+def test_causal_mask_reinforce():
     observed_input_dim = 5
     context_input_dim = 10
     real_input_dim = 100
     mask_output_dim = 20
     batch_size = 5
 
-    mask = CausalMask(
+    causal_mask = CausalMask(
         observed_input_dim=observed_input_dim,
         context_input_dim=context_input_dim,
         mask_output_dim=mask_output_dim,
+        meta=True
     )
 
     inputs = torch.randn(batch_size, real_input_dim)
     dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
-    print(dim_map)
 
-    masked_inputs, mask = mask(inputs, dim_map=dim_map)
+    masked_inputs, mask = causal_mask(inputs, dim_map=dim_map)
 
-    print(masked_inputs.shape)
-    print(mask.shape)
+    assert masked_inputs.shape == (mask_output_dim, batch_size, real_input_dim)
+    assert mask.shape == (batch_size, mask_output_dim, context_input_dim + observed_input_dim)
+
+
+def test_causal_mask_sigmoid():
+    observed_input_dim = 5
+    context_input_dim = 10
+    real_input_dim = 100
+    mask_output_dim = 20
+    batch_size = 5
+
+    causal_mask = CausalMask(
+        observed_input_dim=observed_input_dim,
+        context_input_dim=context_input_dim,
+        mask_output_dim=mask_output_dim,
+        meta=True,
+        reinforce=False
+    )
+
+    inputs = torch.randn(batch_size, real_input_dim)
+    dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
+
+    masked_inputs, _ = causal_mask(inputs, dim_map=dim_map)
+
+    assert masked_inputs.shape == (mask_output_dim, batch_size, real_input_dim)
+
+
+if __name__ == '__main__':
+    test_causal_mask_sigmoid()

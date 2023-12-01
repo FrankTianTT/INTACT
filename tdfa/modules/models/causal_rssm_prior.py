@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torchrl.modules.distributions import NormalParamWrapper
 
-from tdfa.modules.utils import build_parallel_layers
+from tdfa.modules.utils import build_mlp
 from tdfa.modules.models.layers import ParallelGRUCell
 from tdfa.modules.models.context_model import ContextModel
 from tdfa.modules.models.causal_mask import CausalMask
@@ -53,7 +53,7 @@ class CausalRSSMPrior(nn.Module):
         self.mask_dim_map = torch.Tensor(mask_dim_list).long()
 
         # action state projector
-        self.action_state_projector = build_parallel_layers(
+        self.action_state_projector = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.rnn_input_dim_per_variable,
             extra_dims=[self.variable_num],
@@ -70,7 +70,7 @@ class CausalRSSMPrior(nn.Module):
 
         # rnn to prior projector
         self.rnn_to_prior_projector = NormalParamWrapper(
-            build_parallel_layers(
+            build_mlp(
                 input_dim=self.hidden_dim_per_variable,
                 output_dim=self.state_dim_per_variable * 2,
                 extra_dims=[self.variable_num],
