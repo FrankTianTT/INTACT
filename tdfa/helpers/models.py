@@ -36,6 +36,7 @@ def make_mlp_model(
             reinforce=cfg.reinforce,
             max_context_dim=cfg.max_context_dim,
             task_num=cfg.task_num,
+            hidden_dims=cfg.hidden_dims,
         )
     else:
         world_model = MDPWorldModel(
@@ -43,7 +44,8 @@ def make_mlp_model(
             action_dim,
             meta=cfg.meta,
             max_context_dim=cfg.max_context_dim,
-            task_num=cfg.task_num
+            task_num=cfg.task_num,
+            hidden_dims=cfg.hidden_dims,
         )
     world_model = MDPWrapper(world_model).to(device)
 
@@ -285,4 +287,14 @@ def test_make_causal_dreamer():
 
 
 if __name__ == '__main__':
-    test_make_causal_dreamer()
+    # test_make_causal_dreamer()
+
+    import matplotlib.pyplot as plt
+
+    x = torch.randn(1000)
+    plt.hist(x, bins=100)
+    plt.show()
+
+    x = torch.pow(x, 3)
+    plt.hist(x, bins=100)
+    plt.show()

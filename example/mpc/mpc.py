@@ -1,6 +1,7 @@
 from itertools import product
 from collections import defaultdict
 from functools import partial
+import os
 
 from tqdm import tqdm
 import hydra
@@ -17,6 +18,8 @@ from tdfa.helpers.models import make_mlp_model
 from tdfa.objectives.causal_mdp import CausalWorldModelLoss
 from tdfa.envs.meta_transform import MetaIdxTransform
 from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
+
+from matplotlib import pyplot as plt
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):
@@ -71,14 +74,6 @@ def env_constructor(cfg):
         return [make_env], None
 
 
-# def model_train(sampled_tensordict, steps, cfg):
-#     if cfg.causal:
-#         pass
-#     else:
-#         pass
-#     return steps + 1
-
-
 @hydra.main(version_base="1.1", config_path="", config_name="config")
 def main(cfg):
     if torch.cuda.is_available():
@@ -90,7 +85,7 @@ def main(cfg):
     exp_name = generate_exp_name("MPC", cfg.exp_name)
     logger = get_logger(
         logger_type=cfg.logger,
-        logger_name="dreamers",
+        logger_name="mpc",
         experiment_name=exp_name,
         wandb_kwargs={
             "project": "causal_rl",
@@ -170,6 +165,12 @@ def main(cfg):
             value = value.detach().item()
         logging_scalar[key].append(value)
 
+    def train_logits(steps):
+        if not cfg.causal or not cfg.reinforce:
+            return False
+        else:
+            return steps % (cfg.train_mask_iters + cfg.train_model_iters) > cfg.train_model_iters
+
     for i, tensordict in enumerate(collector):
         pbar.update(tensordict.numel())
         current_frames = tensordict.numel()
@@ -189,21 +190,7 @@ def main(cfg):
             world_model.zero_grad()
             sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-            if model_learning_steps % (cfg.train_mask_iters + cfg.train_predictor_iters) < cfg.train_predictor_iters:
-                loss_td = world_model_loss(sampled_tensordict)
-                for dim in range(loss_td["transition_loss"].shape[-1]):
-                    log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
-                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
-                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
-                if "mutual_info_loss" in loss_td.keys():
-                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
-
-                mean_loss = sum([loss_td[key].mean() for key in loss_td.keys()])
-                mean_loss.backward()
-                module_opt.step()
-                context_opt.step()
-            else:
-                continue
+            if train_logits(model_learning_steps):
                 grad = world_model_loss.reinforce(sampled_tensordict)
                 logits = world_model.causal_mask.mask_logits
 
@@ -216,6 +203,20 @@ def main(cfg):
                 logits.backward(grad)
                 observed_logits_opt.step()
                 context_logits_opt.step()
+            else:
+                loss_td = world_model_loss(sampled_tensordict)
+                for dim in range(loss_td["transition_loss"].shape[-1]):
+                    log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
+                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
+                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
+                if "mutual_info_loss" in loss_td.keys():
+                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+
+                mean_loss = sum([loss_td[key].mean() for key in loss_td.keys()])
+                mean_loss.backward()
+                module_opt.step()
+                context_opt.step()
+
             model_learning_steps += 1
 
         if cfg.record_interval < env_num or i % (cfg.record_interval / env_num) == 0:
@@ -225,8 +226,14 @@ def main(cfg):
                 else:
                     valid_context_idx = torch.arange(cfg.max_context_dim)
                 log_scalar("context/valid_num", len(valid_context_idx))
-                mcc, permutation = world_model.context_model.get_mcc(context_gt, valid_context_idx)
+                mcc, permutation, context_hat = world_model.context_model.get_mcc(context_gt, valid_context_idx)
                 log_scalar("context/mcc", mcc)
+
+                if not os.path.exists("context_plot"):
+                    os.mkdir("context_plot")
+                plt.scatter(context_gt.detach().cpu().numpy(), context_hat)
+                plt.savefig("context_plot/{}.png".format(i))
+                plt.close()
 
             for key, value in logging_scalar.items():
                 if len(value) == 0:
@@ -243,7 +250,7 @@ def main(cfg):
 
             if cfg.causal:
                 print()
-                print(world_model.causal_mask.mask_logits)
+                print(world_model.causal_mask.printing_mask)
 
             logging_scalar = defaultdict(list)
 

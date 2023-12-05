@@ -11,13 +11,15 @@ class ContextModel(nn.Module):
             meta=False,
             max_context_dim=0,
             task_num=0,
+            init_scale=1,
     ):
         super().__init__()
         self.meta = meta
         self.max_context_dim = max_context_dim
         self.task_num = task_num
 
-        self.context_hat = torch.nn.Parameter(torch.randn(task_num, max_context_dim))
+        init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
+        self.context_hat = torch.nn.Parameter(init_context_hat)
 
     def forward(self, idx=None):
         if idx is None:
@@ -43,7 +45,7 @@ class ContextModel(nn.Module):
         mcc, permutation = mean_corr_coef(context_hat, context_gt, return_permutation=True)
         
         if return_permutation:
-            return mcc, permutation
+            return mcc, permutation, context_hat
         else:
             return mcc
 

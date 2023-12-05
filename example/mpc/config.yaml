@@ -19,11 +19,12 @@ reinforce: True
 batch_size: 256
 model_learning_per_step: 3
 train_mask_iters: 10
-train_predictor_iters: 50
+train_model_iters: 50
 world_model_lr: 0.001
-context_lr: 0.1
+context_lr: 0.001
 observed_logits_lr: 0.005
-context_logits_lr: 0.002
+context_logits_lr: 0.005
+hidden_dims: [ 256, 256 ]
 
 lambda_transition: 1.0
 lambda_reward: 1.0
