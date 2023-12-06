@@ -6,7 +6,7 @@ from torch.distributions import Bernoulli
 from torch.utils.data import DataLoader, Dataset
 
 from tdfa.modules.utils import build_mlp
-from tdfa.utils.metrics import mean_corr_coef
+from tdfa.stats.mcc import mean_corr_coef
 from example.identifiability.data_ganeration import gen_nonlinear_data
 from tdfa.stats.metric import mutual_info_estimation
 from tdfa.utils.functional import total_mask_grad

@@ -21,7 +21,7 @@ model_learning_per_step: 3
 train_mask_iters: 10
 train_model_iters: 50
 world_model_lr: 0.001
-context_lr: 0.001
+context_lr: 0.005
 observed_logits_lr: 0.005
 context_logits_lr: 0.005
 hidden_dims: [ 256, 256 ]
@@ -40,7 +40,7 @@ sampling_times: 30
 exp_name: default
 logger: "tensorboard"
 offline_logging: False
-record_interval: 10
+record_interval: 100
 test_interval: 100
 test_env_nums: 1
 

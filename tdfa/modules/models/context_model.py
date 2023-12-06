@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from tdfa.utils.metrics import mean_corr_coef
+from tdfa.stats.mcc import mean_corr_coef
 from tdfa.stats.metric import mutual_info_estimation
 
 
@@ -11,7 +11,7 @@ class ContextModel(nn.Module):
             meta=False,
             max_context_dim=0,
             task_num=0,
-            init_scale=1,
+            init_scale=0,
     ):
         super().__init__()
         self.meta = meta
@@ -43,7 +43,7 @@ class ContextModel(nn.Module):
             context_hat = self.context_hat[:, valid_idx].detach().cpu().numpy()
 
         mcc, permutation = mean_corr_coef(context_hat, context_gt, return_permutation=True)
-        
+
         if return_permutation:
             return mcc, permutation, context_hat
         else:

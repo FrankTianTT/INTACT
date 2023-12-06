@@ -31,7 +31,7 @@ def nmi_estimation(x, y):
     return nmi_matrix
 
 
-def mean_corr_coef(x, y, method='nmi', return_permutation=False):
+def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     """
     A numpy implementation of the mean correlation coefficient metric.
 
