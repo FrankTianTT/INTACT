@@ -28,9 +28,9 @@ class CausalWorldModelLoss(LossModule):
     ):
         super().__init__()
         self.world_model = world_model
-        self.causal = world_model.causal
+        self.model_type = world_model.model_type
 
-        if self.causal:
+        if self.model_type == "causal":
             self.causal_mask = world_model.causal_mask
         else:
             self.causal_mask = None
@@ -76,6 +76,7 @@ class CausalWorldModelLoss(LossModule):
 
     def forward(self, tensordict: TensorDict):
         tensordict = tensordict.clone(recurse=False)
+
         tensordict = self.world_model(tensordict)
 
         loss_td = self.loss(tensordict)
@@ -85,20 +86,14 @@ class CausalWorldModelLoss(LossModule):
                 reduction="none"
             ) * self.lambda_mutual_info
             loss_td.set("mutual_info_loss", mutual_info_loss)
+
+        if self.model_type == "inn":
+            tensordict = self.world_model.inv_forward(tensordict)
+
+            gt_context = self.context_model(tensordict["idx"])
+            context_loss = 0.5 * (tensordict["inv_context"] - gt_context) ** 2
+            loss_td.set("context_loss", context_loss)
         return loss_td
-
-        # if self.world_model.is_meta and self.lambda_mutual_info > 0 and not intermediate:
-        #     sampled_context = self.world_model.context_hat[idx.squeeze()][:, self.world_model.valid_context_idx]
-        #     mutual_info = mutual_info_estimation(sampled_context, reduction="none")
-        #     mutual_info_loss = mutual_info.reshape(-1, 1) * self.lambda_mutual_info
-        #     all_loss = torch.cat([transition_loss, reward_loss, terminated_loss, mutual_info_loss], dim=-1)
-        # else:
-        #     all_loss = torch.cat([transition_loss, reward_loss, terminated_loss], dim=-1)
-
-        # if intermediate:
-        #     return all_loss, mask
-        # else:
-        #     return all_loss
 
     def reinforce(self, tensordict: TensorDict):
         assert self.causal, "reinforce is only available for CausalWorldModel"
@@ -162,5 +157,38 @@ def test_causal_world_model_loss():
     print(loss)
 
 
+def test_inn_world_model_loss():
+    from tdfa.modules.models.mdp_world_model import INNWorldModel
+    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
+
+    obs_dim = 4
+    action_dim = 1
+    task_num = 100
+    batch_size = 32
+
+    world_model = INNWorldModel(
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        task_num=task_num,
+    )
+    inn_mdp_wrapper = MDPWrapper(world_model)
+    mdp_loss = CausalWorldModelLoss(inn_mdp_wrapper)
+
+    td = TensorDict({
+        "observation": torch.randn(batch_size, obs_dim),
+        "action": torch.randn(batch_size, action_dim),
+        "idx": torch.randint(0, task_num, (batch_size, 1)),
+        "next": {
+            "terminated": torch.randn(batch_size, 1) > 0,
+            "reward": torch.randn(batch_size, 1),
+            "observation": torch.randn(batch_size, obs_dim),
+        }
+    },
+        batch_size=batch_size,
+    )
+
+    loss = mdp_loss(td)
+
+
 if __name__ == '__main__':
-    test_causal_world_model_loss()
+    test_inn_world_model_loss()

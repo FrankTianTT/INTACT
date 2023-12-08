@@ -13,12 +13,12 @@ class MDPEnv(ModelBasedEnvBase):
             device="cpu",
             dtype=None,
             batch_size=None,
-            termination_fns=None,
-            reward_fns=None
+            termination_fns="",
+            reward_fns=""
     ):
         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        self.termination_fns = termination_fns_dict[termination_fns] if termination_fns is not "" else None
-        self.reward_fns = reward_fns_dict[reward_fns] if reward_fns is not "" else None
+        self.termination_fns = termination_fns_dict[termination_fns] if termination_fns != "" else None
+        self.reward_fns = reward_fns_dict[reward_fns] if reward_fns != "" else None
 
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         tensordict = TensorDict(
@@ -31,11 +31,17 @@ class MDPEnv(ModelBasedEnvBase):
         return tensordict
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
+        # print(tensordict["observation"].shape)
+        # print(tensordict["observation"].reshape(-1, 4)[0])
         tensordict_out = tensordict.clone()
         tensordict_out = self.world_model(tensordict_out)
 
-        obs_std = torch.exp(0.5 * tensordict_out["obs_log_var"])
+        if self.world_model.learn_obs_var:
+            obs_std = torch.exp(0.5 * tensordict_out["obs_log_var"])
+        else:
+            obs_std = torch.zeros_like(tensordict_out["observation"])
         tensordict_out["observation"] = tensordict_out["obs_mean"] + obs_std * torch.randn_like(obs_std)
+        # print(tensordict_out["observation"].reshape(-1, 4)[0])
 
         if self.termination_fns is None:
             tensordict_out["terminated"] = tensordict_out["terminated"] > 0  # terminated from world-model are logits

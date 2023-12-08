@@ -2,6 +2,7 @@ from itertools import product
 from collections import defaultdict
 from functools import partial
 import os
+import math
 
 from tqdm import tqdm
 import hydra
@@ -143,7 +144,7 @@ def main(cfg):
 
     module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
     context_opt = torch.optim.Adam(world_model.get_parameter("context_hat"), lr=cfg.context_lr)
-    if cfg.causal:
+    if cfg.model_type == "causal":
         observed_logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
         context_logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
@@ -166,7 +167,7 @@ def main(cfg):
         logging_scalar[key].append(value)
 
     def train_logits(steps):
-        if not cfg.causal or not cfg.reinforce:
+        if not cfg.model_type == "causal" or not cfg.reinforce:
             return False
         else:
             return steps % (cfg.train_mask_iters + cfg.train_model_iters) > cfg.train_model_iters
@@ -205,12 +206,15 @@ def main(cfg):
                 context_logits_opt.step()
             else:
                 loss_td = world_model_loss(sampled_tensordict)
+
                 for dim in range(loss_td["transition_loss"].shape[-1]):
                     log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
                 log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
                 log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
                 if "mutual_info_loss" in loss_td.keys():
                     log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                if "context_loss" in loss_td.keys():
+                    log_scalar("model_loss/context", loss_td["context_loss"].mean())
 
                 mean_loss = sum([loss_td[key].mean() for key in loss_td.keys()])
                 mean_loss.backward()
@@ -220,19 +224,35 @@ def main(cfg):
             model_learning_steps += 1
 
         if cfg.record_interval < env_num or i % (cfg.record_interval / env_num) == 0:
+            context_model = world_model.context_model
             if cfg.meta:
-                if cfg.causal:
+                if cfg.model_type == "causal":
                     valid_context_idx = world_model.causal_mask.valid_context_idx
                 else:
-                    valid_context_idx = torch.arange(cfg.max_context_dim)
+                    valid_context_idx = torch.arange(context_model.max_context_dim)
                 log_scalar("context/valid_num", len(valid_context_idx))
-                mcc, permutation, context_hat = world_model.context_model.get_mcc(context_gt, valid_context_idx)
+                mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
                 log_scalar("context/mcc", mcc)
 
                 if not os.path.exists("context_plot"):
                     os.mkdir("context_plot")
-                plt.scatter(context_gt.detach().cpu().numpy(), context_hat)
-                plt.savefig("context_plot/{}.png".format(i))
+
+                if context_gt.shape[1] == 1:
+                    plt.scatter(context_gt[:, 0], context_hat[:, 0])
+                else:
+                    num_cols = math.isqrt(context_gt.shape[1])
+                    num_rows = math.ceil(context_gt.shape[1] / num_cols)
+                    fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
+
+                    for j, name in enumerate(oracle_context.keys()):
+                        ax = axs.flatten()[j]
+                        ax.set(xticks=[], yticks=[], xlabel=name)
+                        ax.scatter(context_gt[:, j], context_hat[:, j])
+
+                    for j in range(context_gt.shape[1], len(axs.flat)):
+                        axs.flat[j].set_visible(False)
+
+                plt.savefig(f"context_plot/{i}.png")
                 plt.close()
 
             for key, value in logging_scalar.items():
@@ -248,7 +268,7 @@ def main(cfg):
                 else:
                     print(f"{key}: {value}")
 
-            if cfg.causal:
+            if cfg.model_type == "causal":
                 print()
                 print(world_model.causal_mask.printing_mask)
 

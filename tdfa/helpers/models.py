@@ -13,7 +13,7 @@ from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_v
 from torchrl.modules.models.model_based import RSSMRollout
 
 from tdfa.modules.models.causal_rssm_prior import CausalRSSMPrior
-from tdfa.modules.models.mdp_world_model import MDPWorldModel, CausalWorldModel
+from tdfa.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
 from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
 from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
 from tdfa.envs.mdp_env import MDPEnv
@@ -28,7 +28,7 @@ def make_mlp_model(
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    if cfg.causal:
+    if cfg.model_type == "causal":
         world_model = CausalWorldModel(
             obs_dim=obs_dim,
             action_dim=action_dim,
@@ -36,17 +36,28 @@ def make_mlp_model(
             reinforce=cfg.reinforce,
             max_context_dim=cfg.max_context_dim,
             task_num=cfg.task_num,
-            hidden_dims=cfg.hidden_dims,
+            hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
         )
-    else:
-        world_model = MDPWorldModel(
+    elif cfg.model_type == "plain":
+        world_model = PlainMDPWorldModel(
             obs_dim,
             action_dim,
             meta=cfg.meta,
             max_context_dim=cfg.max_context_dim,
             task_num=cfg.task_num,
-            hidden_dims=cfg.hidden_dims,
+            hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
         )
+    elif cfg.model_type == "inn":
+        world_model = INNWorldModel(
+            obs_dim,
+            action_dim,
+            meta=cfg.meta,
+            task_num=cfg.task_num,
+            hidden_size=cfg.hidden_size,
+            hidden_layers=cfg.hidden_layers
+        )
+    else:
+        raise NotImplementedError
     world_model = MDPWrapper(world_model).to(device)
 
     model_env = MDPEnv(

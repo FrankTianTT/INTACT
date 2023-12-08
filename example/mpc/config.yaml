@@ -14,7 +14,7 @@ num_candidates: 350
 top_k: 35
 
 # model learning
-causal: False
+model_type: plain
 reinforce: True
 batch_size: 256
 model_learning_per_step: 3
@@ -24,7 +24,8 @@ world_model_lr: 0.001
 context_lr: 0.005
 observed_logits_lr: 0.005
 context_logits_lr: 0.005
-hidden_dims: [ 256, 256 ]
+hidden_size: 256
+hidden_layers: 1
 
 lambda_transition: 1.0
 lambda_reward: 1.0

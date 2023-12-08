@@ -34,16 +34,6 @@ class GINCouplingBlock(_BaseCouplingBlock):
         self.subnet2 = subnet_constructor(self.split_len2 + self.condition_length, self.split_len1 * 2)
 
     def _coupling1(self, x1, u2, rev=False):
-
-        # notation (same for _coupling2):
-        # x: inputs (i.e. 'x-side' when rev is False, 'z-side' when rev is True)
-        # y: outputs (same scheme)
-        # *_c: variables with condition appended
-        # *1, *2: left half, right half
-        # a: all affine coefficients
-        # s, t: multiplicative and additive coefficients
-        # j: log det Jacobian
-
         a2 = self.subnet2(u2)
         s2, t2 = a2[:, :self.split_len1], a2[:, self.split_len1:]
         s2 = self.clamp * self.f_clamp(s2)
@@ -211,7 +201,7 @@ def inn_world_model(
 
         context_gt = torch.stack(list(context_dict.values()), dim=-1).detach().cpu().numpy()
         context_hat = model.mu.detach().cpu().numpy()
-        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True)
+        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True, method="spearman")
         print(f"Epoch {epoch}, mcc: {mcc}")
 
         os.makedirs("img", exist_ok=True)
@@ -283,4 +273,4 @@ def mlp(
 
 
 if __name__ == '__main__':
-    mlp("toy")
+    inn_world_model("toy", sparsity_reg=1)
