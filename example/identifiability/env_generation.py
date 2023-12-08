@@ -26,7 +26,7 @@ def env_constructor(
 ):
     if oracle_context is None:
         if env_name == 'CartPoleContinuous-v0':
-            oracle_context = dict(gravity=(2, 50))
+            oracle_context = dict(gravity=(1, 10))
         else:
             raise NotImplementedError("oracle_context is None, but env_name is {}".format(env_name))
 
@@ -55,8 +55,8 @@ def gen_meta_mdp_data(env_name='CartPoleContinuous-v0', task_num=100, sample_num
         action = torch.randn(sample_num, 1)
         idx = torch.randint(0, task_num, (sample_num, 1))
         next_obs = obs.clone()
-        next_obs[:, 0] += + context_dict["p0"][idx.squeeze()]
-        next_obs[:, 1] += + context_dict["p1"][idx.squeeze()]
+        next_obs[:, 0] += + torch.sin(context_dict["p0"][idx.squeeze()] * 2 * torch.pi)
+        next_obs[:, 1] += + torch.cos(context_dict["p1"][idx.squeeze()] * 2 * torch.pi)
 
         return obs, action, next_obs, idx, context_dict
 
