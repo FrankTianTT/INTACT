@@ -231,6 +231,7 @@ def mlp(
         task_num=100,
         sample_num=10000,
         batch_size=256,
+        context_dim=1,
         lr=1e-3,
         device="cuda",
 ):
@@ -242,16 +243,17 @@ def mlp(
         task_num=task_num,
         sample_num=sample_num
     )
+    context = nn.Parameter(torch.zeros(task_num, context_dim), requires_grad=True)
 
     model = nn.Sequential(
-        nn.Linear(obs.shape[1] + action.shape[1], 256),
+        nn.Linear(obs.shape[1] + action.shape[1] + context_dim, 256),
         nn.ReLU(),
         nn.Linear(256, 256),
         nn.ReLU(),
         nn.Linear(256, obs.shape[1])
     )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(list(model.parameters()) + [context], lr=lr)
 
     dataset = TensorDataset(obs, action, next_obs, idx)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
@@ -263,14 +265,22 @@ def mlp(
             obs, action, next_obs, idx = obs.to(device), action.to(device), next_obs.to(device), idx.to(device)
             model.zero_grad()
 
-            pred_next_obs = model(torch.cat([obs, action], dim=-1))
+            pred_next_obs = model(torch.cat([obs, action, context[idx[:, 0]]], dim=-1))
 
-            loss = nn.functional.mse_loss(next_obs, pred_next_obs)
+            loss = nn.functional.mse_loss(next_obs, pred_next_obs + obs)
             loss.backward()
             optimizer.step()
             losses.append(loss.item())
         print(f"Epoch {epoch}, loss: {np.mean(losses)}")
 
+        if epoch % 50 == 0:
+            context_gt = torch.stack(list(context_dict.values()), dim=-1).detach().cpu().numpy()
+            context_hat = context.detach().numpy()
+            plt.scatter(context_gt.reshape(-1), context_hat.reshape(-1))
+            plt.show()
+            mcc = mean_corr_coef(context_gt, context_hat)
+            print(mcc)
+
 
 if __name__ == '__main__':
-    inn_world_model("toy", sparsity_reg=1)
+    mlp()

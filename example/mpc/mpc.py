@@ -101,6 +101,8 @@ def main(cfg):
     else:
         context_gt = None
 
+    print(make_env_list)
+
     env_num = len(make_env_list)
     proof_env = make_env_list[0]()
     world_model, model_env = make_mlp_model(cfg, proof_env, device=device)
@@ -127,8 +129,8 @@ def main(cfg):
 
     explore_policy = AdditiveGaussianWrapper(
         planner,
-        sigma_init=0.3,
-        sigma_end=0.3,
+        sigma_init=0.5,
+        sigma_end=0.5,
         spec=proof_env.action_spec,
     )
 
@@ -167,10 +169,10 @@ def main(cfg):
         logging_scalar[key].append(value)
 
     def train_logits(steps):
-        if not cfg.model_type == "causal" or not cfg.reinforce:
+        if not (cfg.model_type == "causal" and cfg.reinforce):
             return False
         else:
-            return steps % (cfg.train_mask_iters + cfg.train_model_iters) > cfg.train_model_iters
+            return steps % (cfg.train_mask_iters + cfg.train_model_iters) < cfg.train_mask_iters
 
     for i, tensordict in enumerate(collector):
         pbar.update(tensordict.numel())
@@ -195,17 +197,11 @@ def main(cfg):
                 grad = world_model_loss.reinforce(sampled_tensordict)
                 logits = world_model.causal_mask.mask_logits
 
-                for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                    log_scalar(
-                        "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
-                        logits[out_dim, in_dim],
-                    )
-
                 logits.backward(grad)
                 observed_logits_opt.step()
                 context_logits_opt.step()
             else:
-                loss_td = world_model_loss(sampled_tensordict)
+                loss_td, all_loss = world_model_loss(sampled_tensordict)
 
                 for dim in range(loss_td["transition_loss"].shape[-1]):
                     log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
@@ -216,38 +212,53 @@ def main(cfg):
                 if "context_loss" in loss_td.keys():
                     log_scalar("model_loss/context", loss_td["context_loss"].mean())
 
-                mean_loss = sum([loss_td[key].mean() for key in loss_td.keys()])
-                mean_loss.backward()
+                all_loss.backward()
                 module_opt.step()
                 context_opt.step()
+
+                if cfg.model_type == "causal" and not cfg.reinforce:
+                    observed_logits_opt.step()
+                    context_logits_opt.step()
+
+            if cfg.model_type == "causal":
+                logits = world_model.causal_mask.mask_logits
+                for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
+                    log_scalar(
+                        "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
+                        logits[out_dim, in_dim],
+                    )
 
             model_learning_steps += 1
 
         if cfg.record_interval < env_num or i % (cfg.record_interval / env_num) == 0:
             context_model = world_model.context_model
             if cfg.meta:
-                if cfg.model_type == "causal":
-                    valid_context_idx = world_model.causal_mask.valid_context_idx
-                else:
-                    valid_context_idx = torch.arange(context_model.max_context_dim)
+                # if cfg.model_type == "causal":
+                #     valid_context_idx = world_model.causal_mask.valid_context_idx
+                # else:
+                #     valid_context_idx = torch.arange(context_model.max_context_dim)
+                valid_context_idx = torch.arange(context_model.max_context_dim)
                 log_scalar("context/valid_num", len(valid_context_idx))
                 mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
+                idxes_hat, idxes_gt = permutation
                 log_scalar("context/mcc", mcc)
 
                 if not os.path.exists("context_plot"):
                     os.mkdir("context_plot")
 
-                if context_gt.shape[1] == 1:
+                if len(idxes_gt) == 0:
+                    pass
+                elif len(idxes_gt) == 1:
                     plt.scatter(context_gt[:, 0], context_hat[:, 0])
                 else:
-                    num_cols = math.isqrt(context_gt.shape[1])
-                    num_rows = math.ceil(context_gt.shape[1] / num_cols)
+                    num_rows = math.ceil(math.sqrt(len(idxes_gt)))
+                    num_cols = math.ceil(len(idxes_gt) / num_rows)
                     fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
 
-                    for j, name in enumerate(oracle_context.keys()):
+                    for j, (idx_gt, idx_hat, name) in enumerate(zip(idxes_gt, idxes_hat, oracle_context.keys())):
                         ax = axs.flatten()[j]
-                        ax.set(xticks=[], yticks=[], xlabel=name)
-                        ax.scatter(context_gt[:, j], context_hat[:, j])
+                        ax.set(xlabel=name)
+                        ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat])
 
                     for j in range(context_gt.shape[1], len(axs.flat)):
                         axs.flat[j].set_visible(False)

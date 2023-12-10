@@ -75,9 +75,9 @@ class PlainMDPWorldModel(BaseMDPWorldModel):
             max_context_dim=10,
             task_num=100,
             residual=True,
-            learn_obs_var=False,
+            learn_obs_var=True,
             hidden_dims=None,
-            log_var_bounds=(-10.0, 0.5)
+            log_var_bounds=(-10.0, -2.0)
     ):
         """World-model class for environment learning with causal discovery.
 
@@ -148,7 +148,9 @@ class PlainMDPWorldModel(BaseMDPWorldModel):
         return next_obs_mean, next_obs_log_var, reward, terminated
 
     def forward(self, observation, action, idx=None):
-        inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
+        context = self.context_model(idx)
+
+        inputs = torch.cat([observation, action, context], dim=-1)
         batch_size, dim = inputs.shape[:-1], inputs.shape[-1]
 
         mean, log_var = self.module(inputs.reshape(-1, dim)).chunk(2, dim=-1)

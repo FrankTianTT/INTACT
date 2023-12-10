@@ -33,8 +33,9 @@ class CausalMask(nn.Module):
             context_input_dim=10,
             logits_clip=3.0,
             observed_logits_init_bias=0.3,
-            context_logits_init_bias=1.0,
-            logits_init_scale=0.05,
+            context_logits_init_bias=0.3,
+            observed_logits_init_scale=0.05,
+            context_logits_init_scale=0.5,
     ):
         super().__init__()
 
@@ -47,12 +48,13 @@ class CausalMask(nn.Module):
         self.logits_clip = logits_clip
         self.observed_logits_init_bias = observed_logits_init_bias
         self.context_logits_init_bias = context_logits_init_bias
-        self.logits_init_scale = logits_init_scale
+        self.observed_logits_init_scale = observed_logits_init_scale
+        self.context_logits_init_scale = context_logits_init_scale
 
         self._observed_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.observed_input_dim)
-                                             * logits_init_scale + observed_logits_init_bias)
+                                             * observed_logits_init_scale + observed_logits_init_bias)
         self._context_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.context_input_dim)
-                                            * logits_init_scale + context_logits_init_bias)
+                                            * context_logits_init_scale + context_logits_init_bias)
 
     @property
     def mask_input_dim(self):
@@ -96,9 +98,6 @@ class CausalMask(nn.Module):
                 original_mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
             else:
                 original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
-            mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
-            masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
-            return masked_inputs, original_mask
         else:
             if self.gumbel_softmax:
                 original_mask = F.gumbel_softmax(
@@ -108,9 +107,10 @@ class CausalMask(nn.Module):
                 )[0]
             else:
                 original_mask = self.mask_logits.sigmoid()
-            mask = original_mask[:, dim_map] if dim_map is not None else original_mask
-            masked_inputs = torch.einsum("oi,obi->obi", mask, repeated_inputs)
-            return masked_inputs, None
+            original_mask = original_mask.expand(batch_size, -1, -1)
+        mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
+        masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
+        return masked_inputs, original_mask
 
     def total_mask_grad(
             self,

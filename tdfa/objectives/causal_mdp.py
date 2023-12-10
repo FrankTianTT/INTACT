@@ -35,6 +35,7 @@ class CausalWorldModelLoss(LossModule):
         else:
             self.causal_mask = None
         self.context_model = world_model.context_model
+        self.learn_obs_var = world_model.learn_obs_var
 
         self.lambda_transition = lambda_transition
         self.lambda_reward = lambda_reward
@@ -48,25 +49,32 @@ class CausalWorldModelLoss(LossModule):
     def loss(self, tensordict, reduction="none"):
         assert len(tensordict.batch_size) == 1
 
-        transition_loss = F.gaussian_nll_loss(
-            tensordict.get("obs_mean"),
-            tensordict.get(("next", "observation")),
-            torch.exp(tensordict.get("obs_log_var")),
-            reduction=reduction
-        ) * self.lambda_transition
+        if self.learn_obs_var:
+            transition_loss = F.gaussian_nll_loss(
+                tensordict.get("obs_mean"),
+                tensordict.get(("next", "observation")),
+                torch.exp(tensordict.get("obs_log_var")),
+                reduction=reduction
+            )
+        else:
+            transition_loss = F.mse_loss(
+                tensordict.get("obs_mean"),
+                tensordict.get(("next", "observation")),
+                reduction=reduction
+            )
 
         reward_loss = F.mse_loss(
             tensordict.get("reward"),
             tensordict.get(("next", "reward")),
             reduction=reduction
-        ) * self.lambda_reward
+        )
         terminated_loss = F.binary_cross_entropy_with_logits(
             tensordict.get("terminated"),
             tensordict.get(("next", "terminated")).float(),
             reduction=reduction
-        ) * self.lambda_terminated
+        )
 
-        return TensorDict({
+        loss_td = TensorDict({
             "transition_loss": transition_loss,
             "reward_loss": reward_loss,
             "terminated_loss": terminated_loss,
@@ -74,18 +82,30 @@ class CausalWorldModelLoss(LossModule):
             batch_size=transition_loss.shape[0]
         )
 
+        loss_tensor = torch.cat([
+            transition_loss * self.lambda_transition,
+            reward_loss * self.lambda_reward,
+            terminated_loss * self.lambda_terminated
+        ], dim=1)
+
+        return loss_td, loss_tensor
+
     def forward(self, tensordict: TensorDict):
         tensordict = tensordict.clone(recurse=False)
 
         tensordict = self.world_model(tensordict)
 
-        loss_td = self.loss(tensordict)
+        loss_td, loss_tensor = self.loss(tensordict)
         if self.lambda_mutual_info > 0:
             mutual_info_loss = self.context_model.get_mutual_info(
                 idx=tensordict["idx"],
                 reduction="none"
-            ) * self.lambda_mutual_info
+            )
             loss_td.set("mutual_info_loss", mutual_info_loss)
+            loss_tensor = torch.cat([
+                loss_tensor,
+                mutual_info_loss * self.lambda_mutual_info
+            ], dim=-1)
 
         if self.model_type == "inn":
             tensordict = self.world_model.inv_forward(tensordict)
@@ -93,21 +113,18 @@ class CausalWorldModelLoss(LossModule):
             gt_context = self.context_model(tensordict["idx"])
             context_loss = 0.5 * (tensordict["inv_context"] - gt_context) ** 2
             loss_td.set("context_loss", context_loss)
-        return loss_td
+            # TODO: cat loss_tensor
+        return loss_td, loss_tensor.mean()
 
     def reinforce(self, tensordict: TensorDict):
-        assert self.causal, "reinforce is only available for CausalWorldModel"
+        assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"
         assert self.causal_mask.reinforce, "causal_mask should be learned by reinforce"
 
         tensordict = tensordict.clone()
         tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
 
-        loss = self.loss(tensordict.reshape(-1), reduction="none").reshape(tensordict.batch_size)
-        sampling_loss = torch.cat([
-            loss.get("transition_loss"),
-            loss.get("reward_loss"),
-            loss.get("terminated_loss"),
-        ], dim=-1)
+        _, loss_tensor = self.loss(tensordict.reshape(-1), reduction="none")
+        sampling_loss = loss_tensor.reshape(*tensordict.batch_size, -1)
 
         mask_grad = self.causal_mask.total_mask_grad(
             sampling_mask=tensordict.get("causal_mask"),

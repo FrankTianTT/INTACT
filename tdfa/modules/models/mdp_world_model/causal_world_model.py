@@ -63,10 +63,21 @@ class CausalWorldModel(PlainMDPWorldModel):
             meta=meta,
             context_input_dim=max_context_dim,
             logits_clip=logits_clip,
-            observed_logits_init_bias=observed_logits_init_bias,
-            context_logits_init_bias=context_logits_init_bias,
-            logits_init_scale=logits_init_scale,
+            # observed_logits_init_bias=observed_logits_init_bias,
+            # context_logits_init_bias=context_logits_init_bias,
+            # logits_init_scale=logits_init_scale,
         )
+
+        if meta:
+            self.util_model = build_mlp(
+                input_dim=self.all_input_dim,
+                output_dim=2 * self.output_dim,
+                hidden_dims=self.hidden_dims,
+                extra_dims=None,
+                activate_name="ReLU",
+            )
+        else:
+            self.util_model = None
 
     def build_module(self):
         return build_mlp(
@@ -89,15 +100,20 @@ class CausalWorldModel(PlainMDPWorldModel):
         else:
             raise NotImplementedError
 
-    def forward(self, observation, action, idx=None, deterministic_mask=True):
+    def forward(self, observation, action, idx=None, deterministic_mask=False):
         inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
         batch_size, dim = inputs.shape[:-1], inputs.shape[-1]
 
         masked_inputs, mask = self.causal_mask(inputs.reshape(-1, dim), deterministic=deterministic_mask)
-        mean, std = self.module(masked_inputs).permute(2, 1, 0)
+        mean, log_var = self.module(masked_inputs).permute(2, 1, 0)
+
+        # if self.util_model is not None:
+        #     util_mean, util_log_var = self.util_model(inputs.reshape(-1, dim)).chunk(2, dim=-1)
+        #     mean = (mean + util_mean) / 2
+        #     log_var = (log_var + util_log_var) / 2
 
         mask = mask.reshape(*batch_size, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
-        return *self.get_outputs(mean, std, observation, batch_size), mask
+        return *self.get_outputs(mean, log_var, observation, batch_size), mask
 
 
 def test_causal_world_model_without_meta():

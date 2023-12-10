@@ -93,9 +93,10 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             masspole: float = 0.1,
             length: float = 0.5,
             force_mag: float = 10.0,
-            tau: float = 0.02,
-            x_bias: float = 0.05,
-            theta_bias: float = 0.05,
+            tau: float = 0.05,
+            x_dot_bias: float = 1.0,
+            theta_dot_bias: float = 1.0,
+            theta_threshold_degree: float = 12,
             render_mode: Optional[str] = None
     ):
         self.gravity = gravity
@@ -108,11 +109,11 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.tau = tau  # seconds between state updates
         self.kinematics_integrator = "euler"
 
-        self.x_bias = x_bias
-        self.theta_bias = theta_bias
+        self.x_dot_bias = x_dot_bias
+        self.theta_dot_bias = theta_dot_bias
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360
+        self.theta_threshold_radians = theta_threshold_degree * 2 * math.pi / 360
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -203,8 +204,13 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         if self.render_mode == "human":
             self.render()
 
+        return self.get_obs(), reward, terminated, False, {}
+
+    def get_obs(self):
         obs = np.array(self.state, dtype=np.float32)
-        return obs, reward, terminated, False, {}
+        obs[1] += self.x_dot_bias
+        obs[3] += self.theta_dot_bias
+        return obs
 
     def reset(
             self,
@@ -223,7 +229,7 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         if self.render_mode == "human":
             self.render()
-        return np.array(self.state, dtype=np.float32), {}
+        return self.get_obs(), {}
 
     def render(self):
         if self.render_mode is None:
@@ -336,7 +342,7 @@ if __name__ == '__main__':
     obss, next_obss, acts = [], [], []
 
     obs, info = env.reset()
-    for i in range(10):
+    for i in range(1000):
         action = env.action_space.sample()
         next_obs, reward, done, t, info = env.step(action)
 
@@ -349,26 +355,30 @@ if __name__ == '__main__':
         else:
             obs = next_obs
 
+    next_obss = np.array(next_obss)
+    obss = np.array(obss)
+    print(obss[:10, 1])
+    print((next_obss[:10, 0] - obss[:10, 0]) / 0.02)
 
-    def f(s, action):
-
-        for g in [2, 10, 50]:
-            x, x_dot, theta, theta_dot = s
-            force = env.force_mag * action.squeeze()
-            costheta = math.cos(theta)
-            sintheta = math.sin(theta)
-
-            temp = (force + env.polemass_length * theta_dot ** 2 * sintheta) / env.total_mass
-            thetaacc = (g * sintheta - costheta * temp) / (
-                    env.length * (4.0 / 3.0 - env.masspole * costheta ** 2 / env.total_mass)
-            )
-            xacc = temp - env.polemass_length * thetaacc * costheta / env.total_mass
-
-            print(theta + theta_dot)
-        print()
-
-
-    for i in range(len(obss)):
-        f(obss[i], acts[i])
-        # print((next_obss[i] - obss[i])[3])
-        # print()
+    # def f(s, action):
+    #
+    #     for g in [2, 10, 50]:
+    #         x, x_dot, theta, theta_dot = s
+    #         force = env.force_mag * action.squeeze()
+    #         costheta = math.cos(theta)
+    #         sintheta = math.sin(theta)
+    #
+    #         temp = (force + env.polemass_length * theta_dot ** 2 * sintheta) / env.total_mass
+    #         thetaacc = (g * sintheta - costheta * temp) / (
+    #                 env.length * (4.0 / 3.0 - env.masspole * costheta ** 2 / env.total_mass)
+    #         )
+    #         xacc = temp - env.polemass_length * thetaacc * costheta / env.total_mass
+    #
+    #         print(theta + theta_dot)
+    #     print()
+    #
+    #
+    # for i in range(len(obss)):
+    #     f(obss[i], acts[i])
+    #     # print((next_obss[i] - obss[i])[3])
+    #     # print()

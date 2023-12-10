@@ -26,7 +26,8 @@ def env_constructor(
 ):
     if oracle_context is None:
         if env_name == 'CartPoleContinuous-v0':
-            oracle_context = dict(gravity=(1, 10))
+            # oracle_context = dict(gravity=(1, 10))
+            oracle_context = dict(x_dot_bias=(-2, 2))
         else:
             raise NotImplementedError("oracle_context is None, but env_name is {}".format(env_name))
 

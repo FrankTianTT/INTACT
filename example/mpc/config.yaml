@@ -14,48 +14,48 @@ num_candidates: 350
 top_k: 35
 
 # model learning
-model_type: plain
+model_type: causal
 reinforce: True
 batch_size: 256
-model_learning_per_step: 3
+model_learning_per_step: 10
 train_mask_iters: 10
 train_model_iters: 50
 world_model_lr: 0.001
-context_lr: 0.005
-observed_logits_lr: 0.005
-context_logits_lr: 0.005
+context_lr: 0.001
+observed_logits_lr: 0.002
+context_logits_lr: 0.002
 hidden_size: 256
-hidden_layers: 1
+hidden_layers: 2
 
 lambda_transition: 1.0
 lambda_reward: 1.0
-lambda_terminated: 5.0
+lambda_terminated: 20.0
 lambda_mutual_info: 0.0
 
-sparse_weight: 0.01
-context_sparse_weight: 0
-context_max_weight: 0.01
+sparse_weight: 0.05
+context_sparse_weight: 0.02
+context_max_weight: 0.05
 sampling_times: 30
 
 # log
 exp_name: default
 logger: "tensorboard"
 offline_logging: False
-record_interval: 100
+record_interval: 10
 test_interval: 100
 test_env_nums: 1
 
 # meta-RL
 meta: True
-max_context_dim: 1
-task_num: 100
+max_context_dim: 10
+task_num: 50
 oracle_context:
-  gravity: [ 2.0, 50.0 ]
-#  masscart: [ 0.5, 4.5 ]
-#  tau: [ 0.02, 0.2 ]
-#  x_dot_bias: [ 0.01, 0.2 ]
-#  theta_dot_bias: [ 0.01, 0.2 ]
-
+  #  gravity: [ 5.0, 20.0 ]
+  #  masscart: [ 0.5, 4.5 ]
+  #  tau: [ 0.02, 0.2 ]
+  x_dot_bias: [ -0.0, 0.0 ]
+#  theta_dot_bias: [ -2.0, 2.0 ]
+#  theta_threshold_degree: [ 10.0, 20.0 ]
 
 # other
 device: cuda:1
