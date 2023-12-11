@@ -97,10 +97,15 @@ class CausalWorldModelLoss(LossModule):
 
         loss_td, loss_tensor = self.loss(tensordict)
         if self.lambda_mutual_info > 0:
+            if self.model_type == "causal":
+                valid_context_idx = self.causal_mask.valid_context_idx
+            else:
+                valid_context_idx = torch.arange(self.context_model.max_context_dim)
             mutual_info_loss = self.context_model.get_mutual_info(
                 idx=tensordict["idx"],
+                valid_context_idx=valid_context_idx,
                 reduction="none"
-            )
+            ).reshape(-1, 1)
             loss_td.set("mutual_info_loss", mutual_info_loss)
             loss_tensor = torch.cat([
                 loss_tensor,
@@ -143,13 +148,14 @@ def test_causal_world_model_loss():
 
     obs_dim = 4
     action_dim = 1
-    max_context_dim = 0
-    task_num = 0
+    max_context_dim = 10
+    task_num = 100
     batch_size = 32
 
     world_model = CausalWorldModel(
         obs_dim=obs_dim,
         action_dim=action_dim,
+        meta=True,
         max_context_dim=max_context_dim,
         task_num=task_num,
     )
@@ -159,6 +165,7 @@ def test_causal_world_model_loss():
     td = TensorDict({
         "observation": torch.randn(batch_size, obs_dim),
         "action": torch.randn(batch_size, action_dim),
+        "idx": torch.randint(0, task_num, (batch_size, 1)),
         "next": {
             "terminated": torch.randn(batch_size, 1) > 0,
             "reward": torch.randn(batch_size, 1),
@@ -169,9 +176,9 @@ def test_causal_world_model_loss():
     )
 
     td = causal_mdp_wrapper(td)
-    loss = mdp_loss.reinforce(td)
+    loss_td, total_loss = mdp_loss(td)
 
-    print(loss)
+    print(loss_td)
 
 
 def test_inn_world_model_loss():
@@ -208,4 +215,4 @@ def test_inn_world_model_loss():
 
 
 if __name__ == '__main__':
-    test_inn_world_model_loss()
+    test_causal_world_model_loss()

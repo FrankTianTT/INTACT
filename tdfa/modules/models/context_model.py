@@ -29,8 +29,10 @@ class ContextModel(nn.Module):
         assert idx.shape[-1] == 1, "last dim of idx should be 1, got {}".format(idx.shape)
         return self.context_hat[idx[..., 0]]
 
-    def get_mutual_info(self, idx, reduction='mean'):
+    def get_mutual_info(self, idx, valid_context_idx=None, reduction='mean'):
         context_hat = self(idx)
+        if valid_context_idx is not None:
+            context_hat = context_hat[:, valid_context_idx]
         return mutual_info_estimation(context_hat, reduction=reduction)
 
     def get_mcc(self, context_gt, valid_idx=None, return_permutation=True):
@@ -42,7 +44,7 @@ class ContextModel(nn.Module):
         else:
             context_hat = self.context_hat[:, valid_idx].detach().cpu().numpy()
 
-        mcc, permutation = mean_corr_coef(context_hat, context_gt, return_permutation=True)
+        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True)
 
         if return_permutation:
             return mcc, permutation, context_hat

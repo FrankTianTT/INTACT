@@ -8,6 +8,7 @@ from tqdm import tqdm
 import hydra
 import torch
 from tensordict import TensorDict
+from torchrl.envs.utils import step_mdp
 from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
 from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -73,6 +74,32 @@ def env_constructor(cfg):
         return make_env_list, oracle_context
     else:
         return [make_env], None
+
+
+def test_rollout(env, policy, max_steps, device=torch.device("cpu")):
+    tensordicts = []
+
+    tensordict = env.reset().to(device)
+    ever_done = torch.zeros(*tensordict.batch_size, 1).to(bool).to(device)
+    with torch.no_grad():
+        for i in tqdm(range(max_steps)):
+            tensordict = policy(tensordict)
+            tensordict = env.step(tensordict.cpu()).to(device)
+            next_tensordict = step_mdp(tensordict, exclude_action=False)
+
+            tensordict.get(("next", "reward"))[ever_done] = 0
+            tensordicts.append(tensordict)
+
+            ever_done |= tensordict.get(("next", "done"))
+            if ever_done.all():
+                break
+            else:
+                tensordict = next_tensordict
+    batch_size = tensordict.batch_size
+    out_td = torch.stack(tensordicts, len(batch_size)).contiguous()
+    out_td.refine_names(..., "time")
+
+    return out_td
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
@@ -230,17 +257,24 @@ def main(cfg):
 
             model_learning_steps += 1
 
+        if cfg.test_interval < env_num or i % (cfg.test_interval / env_num) == 0:
+            test_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
+            rewards = []
+            for j in range(cfg.test_env_nums):
+                test_tensordict = test_rollout(test_env, planner, 200, device)
+                rewards.append(test_tensordict[("next", "reward")].sum(dim=1))
+            log_scalar("test/episode_reward", torch.stack(rewards).mean())
+
         if cfg.record_interval < env_num or i % (cfg.record_interval / env_num) == 0:
             context_model = world_model.context_model
             if cfg.meta:
-                # if cfg.model_type == "causal":
-                #     valid_context_idx = world_model.causal_mask.valid_context_idx
-                # else:
-                #     valid_context_idx = torch.arange(context_model.max_context_dim)
-                valid_context_idx = torch.arange(context_model.max_context_dim)
+                if cfg.model_type == "causal":
+                    valid_context_idx = world_model.causal_mask.valid_context_idx
+                else:
+                    valid_context_idx = torch.arange(context_model.max_context_dim)
                 log_scalar("context/valid_num", len(valid_context_idx))
                 mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
-                idxes_hat, idxes_gt = permutation
+                idxes_gt, idxes_hat = permutation
                 log_scalar("context/mcc", mcc)
 
                 if not os.path.exists("context_plot"):
@@ -255,9 +289,10 @@ def main(cfg):
                     num_cols = math.ceil(len(idxes_gt) / num_rows)
                     fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
 
-                    for j, (idx_gt, idx_hat, name) in enumerate(zip(idxes_gt, idxes_hat, oracle_context.keys())):
+                    context_names = list(oracle_context.keys())
+                    for j, (idx_gt, idx_hat) in enumerate(zip(idxes_gt, idxes_hat)):
                         ax = axs.flatten()[j]
-                        ax.set(xlabel=name)
+                        ax.set(xlabel=context_names[idx_gt], ylabel="{}th context".format(valid_context_idx[idx_hat]))
                         ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat])
 
                     for j in range(context_gt.shape[1], len(axs.flat)):
@@ -284,18 +319,6 @@ def main(cfg):
                 print(world_model.causal_mask.printing_mask)
 
             logging_scalar = defaultdict(list)
-
-        # if cfg.test_interval < cfg.task_num or i % (cfg.test_interval / cfg.task_num) == 0:
-        #     test_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
-        #     rewards = []
-        #     for j in range(cfg.test_env_nums):
-        #         test_tensordict = test_env.rollout(1000, policy=planner)
-        #         rewards.append(test_tensordict[("next", "reward")].sum())
-        #     logger.log_scalar(
-        #         "test/episode_reward",
-        #         torch.stack(rewards).mean().detach().item(),
-        #         step=collected_frames,
-        #     )
 
     collector.shutdown()
 

@@ -17,7 +17,7 @@ top_k: 35
 model_type: causal
 reinforce: True
 batch_size: 256
-model_learning_per_step: 10
+model_learning_per_step: 5
 train_mask_iters: 10
 train_model_iters: 50
 world_model_lr: 0.001
@@ -34,15 +34,15 @@ lambda_mutual_info: 0.0
 
 sparse_weight: 0.05
 context_sparse_weight: 0.02
-context_max_weight: 0.05
+context_max_weight: 0.1
 sampling_times: 30
 
 # log
 exp_name: default
 logger: "tensorboard"
 offline_logging: False
-record_interval: 10
-test_interval: 100
+record_interval: 100
+test_interval: 1000
 test_env_nums: 1
 
 # meta-RL
@@ -50,12 +50,12 @@ meta: True
 max_context_dim: 10
 task_num: 50
 oracle_context:
-  #  gravity: [ 5.0, 20.0 ]
-  #  masscart: [ 0.5, 4.5 ]
-  #  tau: [ 0.02, 0.2 ]
-  x_dot_bias: [ -0.0, 0.0 ]
-#  theta_dot_bias: [ -2.0, 2.0 ]
-#  theta_threshold_degree: [ 10.0, 20.0 ]
+  gravity: [ 5.0, 20.0 ]
+  masscart: [ 0.5, 4.5 ]
+  tau: [ 0.02, 0.2 ]
+  x_dot_bias: [ -2.0, 2.0 ]
+  theta_dot_bias: [ -2.0, 2.0 ]
+  theta_threshold_degree: [ 10.0, 20.0 ]
 
 # other
 device: cuda:1
