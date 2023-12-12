@@ -88,17 +88,14 @@ class CausalWorldModel(PlainMDPWorldModel):
             activate_name="ReLU",
         )
 
-    def get_parameter(self, target: str):
-        if target == "module":
-            return self.module.parameters()
-        elif target == "observed_logits":
-            return self.causal_mask.get_parameter("observed_logits")
-        elif target == "context_logits":
-            return self.causal_mask.get_parameter("context_logits")
-        elif target == "context_hat":
-            return self.context_model.parameters()
-        else:
-            raise NotImplementedError
+    @property
+    def params_dict(self):
+        return dict(
+            module=self.module.parameters(),
+            context=self.context_model.parameters(),
+            observed_logits=self.causal_mask.get_parameter("observed_logits"),
+            context_logits=self.causal_mask.get_parameter("context_logits"),
+        )
 
     def forward(self, observation, action, idx=None, deterministic_mask=False):
         inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)

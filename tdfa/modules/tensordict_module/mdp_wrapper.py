@@ -1,4 +1,5 @@
 from typing import Any
+from copy import deepcopy
 
 import torch
 from tensordict.nn import TensorDictSequential, TensorDictModule
@@ -44,6 +45,9 @@ class MDPWrapper(TensorDictModule):
     @property
     def context_model(self):
         return self.module.context_model
+
+    def reset_context(self, task_num=None):
+        self.module.reset_context(task_num)
 
     def parallel_forward(self, tensordict, sampling_times=50):
         assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"

@@ -56,6 +56,13 @@ class CausalMask(nn.Module):
         self._context_logits = nn.Parameter(torch.randn(self.mask_output_dim, self.context_input_dim)
                                             * context_logits_init_scale + context_logits_init_bias)
 
+    def extra_repr(self):
+        return 'observed_input_dim={}, mask_output_dim={}, context_input_dim={}'.format(
+            self.observed_input_dim,
+            self.mask_output_dim,
+            self.context_input_dim
+        )
+
     @property
     def mask_input_dim(self):
         return self.observed_input_dim + self.context_input_dim

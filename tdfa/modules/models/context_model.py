@@ -21,6 +21,15 @@ class ContextModel(nn.Module):
         init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
         self.context_hat = torch.nn.Parameter(init_context_hat)
 
+    def extra_repr(self):
+        if self.meta:
+            return 'max_context_dim={}, task_num={}'.format(
+                self.max_context_dim,
+                self.task_num,
+            )
+        else:
+            return ""
+
     def forward(self, idx=None):
         if idx is None:
             assert not self.meta, "idx should not be None when meta is True"

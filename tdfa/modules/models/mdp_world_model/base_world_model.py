@@ -1,4 +1,6 @@
 from functools import reduce
+from copy import deepcopy
+from abc import abstractmethod
 
 import torch
 import torch.nn as nn
@@ -43,17 +45,24 @@ class BaseMDPWorldModel(nn.Module):
         self.module = self.build_module()
 
     @property
+    @abstractmethod
     def learn_obs_var(self):
         raise NotImplementedError
 
+    @abstractmethod
     def build_module(self):
         raise NotImplementedError
 
+    @property
+    def params_dict(self):
+        return dict(
+            module=self.module.parameters(),
+            context=self.context_model.parameters()
+        )
+
     def get_parameter(self, target: str):
-        if target == "module":
-            return self.module.parameters()
-        elif target == "context_hat":
-            return self.context_model.parameters()
+        if target in self.params_dict:
+            return self.params_dict[target]
         else:
             raise NotImplementedError
 
@@ -64,6 +73,24 @@ class BaseMDPWorldModel(nn.Module):
     @property
     def output_dim(self):
         return self.obs_dim + 2
+
+    def freeze_module(self):
+        for name in self.params_dict.keys():
+            if name == "context":
+                continue
+            for param in self.params_dict[name]:
+                param.requires_grad = False
+
+    def reset_context(self, task_num=None):
+        task_num = task_num or self.task_num
+        device = next(self.parameters()).device
+
+        self.task_num = task_num
+        self.context_model = ContextModel(
+            meta=self.meta,
+            max_context_dim=self.max_context_dim,
+            task_num=task_num
+        ).to(device)
 
 
 class PlainMDPWorldModel(BaseMDPWorldModel):
@@ -117,14 +144,6 @@ class PlainMDPWorldModel(BaseMDPWorldModel):
             activate_name="ReLU",
         )
 
-    def get_parameter(self, target: str):
-        if target == "module":
-            return self.module.parameters()
-        elif target == "context_hat":
-            return self.context_model.parameters()
-        else:
-            raise NotImplementedError
-
     def get_log_var(self, log_var):
         min_log_var, max_log_var = self.log_var_bounds
         log_var = max_log_var - F.softplus(max_log_var - log_var)
@@ -175,5 +194,40 @@ def test_plain_world_model():
         assert reward.shape == terminated.shape == (*batch_shape, 1)
 
 
+def test_clone_module():
+    from torch.optim import Adam
+
+    obs_dim = 4
+    action_dim = 1
+    task_num = 100
+    new_task_num = 10
+    max_context_dim = 10
+    batch_size = 32
+
+    world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=True,
+                                     task_num=task_num, max_context_dim=max_context_dim)
+    cloned_world_model = world_model.clone_module(task_num=new_task_num)
+
+    optimizer = Adam(cloned_world_model.get_parameter("context"), lr=0.001)
+
+    observation = torch.randn(batch_size, obs_dim)
+    action = torch.randn(batch_size, action_dim)
+    idx = torch.randint(0, new_task_num, (batch_size, 1))
+    next_observation = torch.randn(batch_size, obs_dim)
+
+    cloned_world_model.zero_grad()
+    next_obs_mean, next_obs_log_var, reward, terminated = cloned_world_model(observation, action, idx)
+    loss = nn.functional.mse_loss(next_observation, next_obs_mean)
+    loss.backward()
+    optimizer.step()
+
+    for name, p in world_model.named_parameters():
+        if name == "context_model.context_hat":
+            assert p.shape == (task_num, max_context_dim)
+            assert cloned_world_model.state_dict()[name].shape == (new_task_num, max_context_dim)
+        else:
+            assert (p == cloned_world_model.state_dict()[name]).all()
+
+
 if __name__ == '__main__':
-    test_plain_world_model()
+    test_clone_module()

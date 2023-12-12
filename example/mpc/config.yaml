@@ -4,10 +4,11 @@ cancel_mujoco_frame_skip: True # work when env is mujoco env
 termination_fns: ""
 reward_fns: ""
 
+# learning
+train_frames_per_task: 1000
+init_frames_per_task: 50
+
 # planning
-total_frames: 300000
-init_random_frames: 3000
-frames_per_batch: 1
 planning_horizon: 15
 optim_steps: 5
 num_candidates: 350
@@ -17,7 +18,7 @@ top_k: 35
 model_type: causal
 reinforce: True
 batch_size: 256
-model_learning_per_step: 5
+model_learning_per_frame: 5
 train_mask_iters: 10
 train_model_iters: 50
 world_model_lr: 0.001
@@ -41,21 +42,24 @@ sampling_times: 30
 exp_name: default
 logger: "tensorboard"
 offline_logging: False
-record_interval: 100
-test_interval: 1000
-test_env_nums: 1
+record_interval_frames_per_task: 1
+eval_interval_frames_per_task: 50
+eval_repeat_nums: 1
 
 # meta-RL
 meta: True
 max_context_dim: 10
 task_num: 50
+meta_test_task_num: 10
+meta_test_interval_frames_per_task: 100
+meta_task_adjust_frames_per_task: 100
+meta_test_model_learning_per_frame: 5
 oracle_context:
   gravity: [ 5.0, 20.0 ]
-  masscart: [ 0.5, 4.5 ]
-  tau: [ 0.02, 0.2 ]
+  #  masscart: [ 0.5, 4.5 ]
   x_dot_bias: [ -2.0, 2.0 ]
   theta_dot_bias: [ -2.0, 2.0 ]
-  theta_threshold_degree: [ 10.0, 20.0 ]
+#  theta_threshold_degree: [ 10.0, 20.0 ]
 
 # other
-device: cuda:1
+device: cuda:0
