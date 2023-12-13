@@ -28,6 +28,15 @@ from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
 from matplotlib import pyplot as plt
 
 
+class MultiOptimizer:
+    def __init__(self, **optimizers):
+        self.optimizers = optimizers
+
+    def step(self):
+        for opt in self.optimizers.values():
+            opt.step()
+
+
 def get_dim_map(obs_dim, action_dim, context_dim):
     def input_dim_map(dim):
         assert dim < obs_dim + action_dim + context_dim
@@ -89,7 +98,7 @@ def evaluate_policy(
     eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
     device = next(policy.parameters()).device
 
-    pbar = tqdm(total=cfg.eval_repeat_nums * max_steps, desc=prefix)
+    pbar = tqdm(total=cfg.eval_repeat_nums * max_steps, desc="{}_eval".format(prefix))
     repeat_rewards = []
     for repeat in range(cfg.eval_repeat_nums):
         rewards = torch.zeros(len(make_env_list), device=device)
@@ -133,6 +142,43 @@ def find_world_model(policy, task_num):
     return new_policy, new_world_model
 
 
+def train_model(
+        cfg,
+        replay_buffer,
+        world_model,
+        world_model_loss,
+        training_steps,
+        model_opt,
+        logits_opt=None,
+        log_scalar=None
+):
+    device = next(world_model.parameters()).device
+    train_logits = cfg.model_type == "causal" and cfg.reinforce and logits_opt is not None
+
+    for step in range(training_steps):
+        world_model.zero_grad()
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+
+        if train_logits and step % (cfg.train_mask_iters + cfg.train_model_iters) < cfg.train_mask_iters:
+            grad = world_model_loss.reinforce(sampled_tensordict)
+            logits = world_model.causal_mask.mask_logits
+            logits.backward(grad)
+            logits_opt.step()
+        else:
+            loss_td, all_loss = world_model_loss(sampled_tensordict)
+            all_loss.backward()
+            model_opt.step()
+            if log_scalar is not None:
+                for dim in range(loss_td["transition_loss"].shape[-1]):
+                    log_scalar("model_loss/obs_{}".format(dim), loss_td["transition_loss"][..., dim].mean())
+                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
+                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
+                if "mutual_info_loss" in loss_td.keys():
+                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                if "context_loss" in loss_td.keys():
+                    log_scalar("model_loss/context", loss_td["context_loss"].mean())
+
+
 def meta_test(
         cfg,
         make_env_list,
@@ -168,21 +214,23 @@ def meta_test(
 
     replay_buffer = TensorDictReplayBuffer()
 
-    context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.world_model_lr)
+    context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
     pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
     for frames, tensordict in enumerate(collector):
         pbar.update(task_num)
         replay_buffer.extend(tensordict.reshape(-1))
-
-        for steps in range(cfg.meta_test_model_learning_per_frame * task_num):
-            world_model.zero_grad()
-            sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
-
-            loss_td, all_loss = world_model_loss(sampled_tensordict)
-            all_loss.backward()
-            context_opt.step()
+        train_model(cfg, replay_buffer, world_model, world_model_loss, model_opt=context_opt,
+                    training_steps=cfg.meta_test_model_learning_per_frame * task_num)
         plot_context(cfg, world_model, oracle_context, log_scalar, frames, prefix="meta_test")
+
+    with torch.no_grad():
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+        loss_td, all_loss = world_model_loss(sampled_tensordict)
+        for dim in range(loss_td["transition_loss"].shape[-1]):
+            log_scalar("meta_test_model_loss/obs_{}".format(dim), loss_td["transition_loss"][..., dim].mean())
+        log_scalar("meta_test_model_loss/reward", loss_td["reward_loss"].mean())
+        log_scalar("meta_test_model_loss/terminated", loss_td["terminated_loss"].mean())
 
     evaluate_policy(cfg, make_env_list, policy, log_scalar, prefix="meta_test")
     plot_context(cfg, world_model, oracle_context, log_scalar, frames_per_task, prefix="meta_test")

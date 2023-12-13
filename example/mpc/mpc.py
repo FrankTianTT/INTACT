@@ -22,7 +22,7 @@ from tdfa.objectives.causal_mdp import CausalWorldModelLoss
 from tdfa.envs.meta_transform import MetaIdxTransform
 from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
-from utils import env_constructor, get_dim_map, evaluate_policy, meta_test, plot_context
+from utils import env_constructor, get_dim_map, evaluate_policy, meta_test, plot_context, MultiOptimizer, train_model
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
@@ -89,11 +89,16 @@ def main(cfg):
 
     replay_buffer = TensorDictReplayBuffer()
 
-    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
+    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    model_opt = MultiOptimizer(module=module_opt, context=context_opt)
     if cfg.model_type == "causal":
-        observed_logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
-        context_logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        logits_opt = MultiOptimizer(
+            observed_logits=torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr),
+            context_logits=torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        )
+    else:
+        logits_opt = None
 
     input_dim_map, output_dim_map = get_dim_map(
         obs_dim=proof_env.observation_spec["observation"].shape[0],
@@ -108,12 +113,6 @@ def main(cfg):
         if isinstance(value, torch.Tensor):
             value = value.detach().item()
         logging_scalar[key].append(value)
-
-    def train_logits(steps):
-        if not (cfg.model_type == "causal" and cfg.reinforce):
-            return False
-        else:
-            return steps % (cfg.train_mask_iters + cfg.train_model_iters) < cfg.train_mask_iters
 
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
     collected_frames = 0
@@ -131,52 +130,26 @@ def main(cfg):
         if frames_per_task < cfg.init_frames_per_task:
             continue
 
-        for steps in range(cfg.model_learning_per_frame * task_num):
-            world_model.zero_grad()
-            sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+        train_model(cfg, replay_buffer, world_model, world_model_loss,
+                    cfg.model_learning_per_frame * task_num, model_opt, logits_opt, log_scalar)
+        if frames_per_task % cfg.reset_context_frames_per_task == 0:
+            world_model.reset_context()
+            train_model(cfg, replay_buffer, world_model, world_model_loss,
+                        cfg.model_learning_per_frame * task_num, context_opt)
 
-            if train_logits(model_learning_steps):
-                grad = world_model_loss.reinforce(sampled_tensordict)
-                logits = world_model.causal_mask.mask_logits
+        if cfg.model_type == "causal":
+            logits = world_model.causal_mask.mask_logits
+            for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
+                log_scalar(
+                    "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
+                    logits[out_dim, in_dim],
+                )
 
-                logits.backward(grad)
-                observed_logits_opt.step()
-                context_logits_opt.step()
-            else:
-                loss_td, all_loss = world_model_loss(sampled_tensordict)
-
-                for dim in range(loss_td["transition_loss"].shape[-1]):
-                    log_scalar("model_loss/{}".format(f"obs_{dim}"), loss_td["transition_loss"][..., dim].mean())
-                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
-                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
-                if "mutual_info_loss" in loss_td.keys():
-                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
-                if "context_loss" in loss_td.keys():
-                    log_scalar("model_loss/context", loss_td["context_loss"].mean())
-
-                all_loss.backward()
-                module_opt.step()
-                context_opt.step()
-
-                if cfg.model_type == "causal" and not cfg.reinforce:
-                    observed_logits_opt.step()
-                    context_logits_opt.step()
-
-            if cfg.model_type == "causal":
-                logits = world_model.causal_mask.mask_logits
-                for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                    log_scalar(
-                        "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
-                        logits[out_dim, in_dim],
-                    )
-
-            model_learning_steps += 1
-
-        if frames_per_task % cfg.eval_interval_frames_per_task == 0:
-            evaluate_policy(cfg, train_make_env_list, explore_policy, log_scalar)
-
-        if frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, log_scalar, frames_per_task)
+        # if frames_per_task % cfg.eval_interval_frames_per_task == 0:
+        #     evaluate_policy(cfg, train_make_env_list, explore_policy, log_scalar)
+        #
+        # if frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
+        #     meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, log_scalar, frames_per_task)
 
         if frames_per_task % cfg.record_interval_frames_per_task == 0:
             if cfg.meta:

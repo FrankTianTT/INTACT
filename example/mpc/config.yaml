@@ -20,9 +20,9 @@ reinforce: True
 batch_size: 256
 model_learning_per_frame: 5
 train_mask_iters: 10
-train_model_iters: 50
+train_model_iters: 40
 world_model_lr: 0.001
-context_lr: 0.001
+context_lr: 0.01
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
 hidden_size: 256
@@ -52,6 +52,7 @@ max_context_dim: 10
 task_num: 50
 meta_test_task_num: 10
 meta_test_interval_frames_per_task: 100
+reset_context_frames_per_task: 10
 meta_task_adjust_frames_per_task: 100
 meta_test_model_learning_per_frame: 5
 oracle_context:
@@ -62,4 +63,4 @@ oracle_context:
 #  theta_threshold_degree: [ 10.0, 20.0 ]
 
 # other
-device: cuda:0
+device: cuda:1

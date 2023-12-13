@@ -17,9 +17,18 @@ class ContextModel(nn.Module):
         self.meta = meta
         self.max_context_dim = max_context_dim
         self.task_num = task_num
+        self.init_scale = init_scale
 
-        init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
-        self.context_hat = torch.nn.Parameter(init_context_hat)
+        self.init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
+        self.context_hat = torch.nn.Parameter(self.init_context_hat)
+
+    def reset(self, task_num=None):
+        if task_num is None:
+            self.context_hat.data = self.context_hat
+        else:
+            device = self.context_hat.device
+            init_context_hat = torch.randn(task_num, self.max_context_dim) * self.init_scale
+            self.context_hat = torch.nn.Parameter(init_context_hat).to(device)
 
     def extra_repr(self):
         if self.meta:
