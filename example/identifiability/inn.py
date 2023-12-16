@@ -14,7 +14,7 @@ from FrEIA.modules import PermuteRandom, RNVPCouplingBlock
 from FrEIA.modules.coupling_layers import _BaseCouplingBlock
 from tqdm import tqdm
 
-from tdfa.stats.mcc import mean_corr_coef
+from causal_meta.stats.mcc import mean_corr_coef
 
 from env_generation import gen_meta_mdp_data
 

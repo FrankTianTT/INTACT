@@ -5,8 +5,8 @@ Target domain fast-adaptation for meta-RL with identifiable causal world model.
 ## Installation
 
 ```shell
-conda create -n tdfa python=3.8
-conda activate tdfa
+conda create -n causal_meta python=3.11
+conda activate causal_meta
 
 # for cuda 11
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

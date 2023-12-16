@@ -10,3 +10,5 @@ tensordict>=0.2.1
 torchrl>=0.2.1
 tqdm==4.66.1
 wandb==0.15.12
+causal-learn>=0.1.3.7
+FrEIA>=0.2

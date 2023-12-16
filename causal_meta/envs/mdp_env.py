@@ -4,7 +4,7 @@ from tensordict.nn import TensorDictModuleBase
 from torchrl.envs import EnvBase, TransformedEnv
 from torchrl.envs.model_based import ModelBasedEnvBase
 
-from tdfa.envs import reward_fns_dict, termination_fns_dict
+from causal_meta.envs import reward_fns_dict, termination_fns_dict
 
 
 class MDPEnv(ModelBasedEnvBase):
@@ -76,8 +76,8 @@ class MDPEnv(ModelBasedEnvBase):
 
 
 def test_mdp_env():
-    from tdfa.modules.models.mdp_world_model import CausalWorldModel
-    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
+    from causal_meta.modules.models.mdp_world_model import CausalWorldModel
+    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
     from torchrl.envs import GymEnv
 
     obs_dim = 4

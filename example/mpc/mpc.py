@@ -17,12 +17,21 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
 
-from tdfa.helpers.models import make_mlp_model
-from tdfa.objectives.causal_mdp import CausalWorldModelLoss
-from tdfa.envs.meta_transform import MetaIdxTransform
-from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
+from causal_meta.helpers.models import make_mlp_model
+from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
+from causal_meta.envs.meta_transform import MetaIdxTransform
+from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
-from utils import env_constructor, get_dim_map, evaluate_policy, meta_test, plot_context, MultiOptimizer, train_model
+from utils import (
+    env_constructor,
+    get_dim_map,
+    evaluate_policy,
+    meta_test,
+    plot_context,
+    MultiOptimizer,
+    MyLogger,
+    train_model
+)
 
 
 @hydra.main(version_base="1.1", config_path="", config_name="config")
@@ -33,20 +42,13 @@ def main(cfg):
         device = torch.device("cpu")
     print(f"Using device {device}")
 
-    exp_name = generate_exp_name("MPC", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger,
-        logger_name="mpc",
-        experiment_name=exp_name,
-        wandb_kwargs={
-            "project": "causal_rl",
-            "group": f"MPC_{cfg.env_name}",
-            "offline": cfg.offline_logging,
-        },
-    )
+    logger = MyLogger(cfg)
 
     train_make_env_list, train_oracle_context = env_constructor(cfg, mode="train")
     test_make_env_list, test_oracle_context = env_constructor(cfg, mode="test")
+    torch.save(train_oracle_context, "train_oracle_context.pt")
+    torch.save(test_oracle_context, "test_oracle_context.pt")
+    print("train_make_env_list", train_make_env_list)
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
@@ -107,23 +109,13 @@ def main(cfg):
     )
     del proof_env
 
-    logging_scalar = defaultdict(list)
-
-    def log_scalar(key, value):
-        if isinstance(value, torch.Tensor):
-            value = value.detach().item()
-        logging_scalar[key].append(value)
-
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
-    collected_frames = 0
-    model_learning_steps = 0
     for frames_per_task, tensordict in enumerate(collector):
         pbar.update(task_num)
-        collected_frames += task_num
 
         if tensordict["next", "done"].any():
             episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
-            log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
+            logger.log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
 
         replay_buffer.extend(tensordict.reshape(-1))
 
@@ -131,48 +123,36 @@ def main(cfg):
             continue
 
         train_model(cfg, replay_buffer, world_model, world_model_loss,
-                    cfg.model_learning_per_frame * task_num, model_opt, logits_opt, log_scalar)
-        if frames_per_task % cfg.reset_context_frames_per_task == 0:
-            world_model.reset_context()
-            train_model(cfg, replay_buffer, world_model, world_model_loss,
-                        cfg.model_learning_per_frame * task_num, context_opt)
+                    cfg.model_learning_per_frame * task_num, model_opt, logits_opt, logger)
+        # if frames_per_task % cfg.reset_context_frames_per_task == 0:
+        #     world_model.context_model.reset()
+        #     train_model(cfg, replay_buffer, world_model, world_model_loss,
+        #                 cfg.model_learning_per_frame * task_num, context_opt, deterministic_mask=True)
 
         if cfg.model_type == "causal":
             logits = world_model.causal_mask.mask_logits
             for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                log_scalar(
+                logger.log_scalar(
                     "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
                     logits[out_dim, in_dim],
                 )
 
-        # if frames_per_task % cfg.eval_interval_frames_per_task == 0:
-        #     evaluate_policy(cfg, train_make_env_list, explore_policy, log_scalar)
-        #
-        # if frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
-        #     meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, log_scalar, frames_per_task)
+        if frames_per_task % cfg.eval_interval_frames_per_task == 0:
+            evaluate_policy(cfg, train_make_env_list, explore_policy, logger)
 
-        if frames_per_task % cfg.record_interval_frames_per_task == 0:
-            if cfg.meta:
-                plot_context(cfg, world_model, train_oracle_context, log_scalar, frames_per_task)
+        if frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
+            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, frames_per_task)
 
-            for key, value in logging_scalar.items():
-                if len(value) == 0:
-                    continue
-                if len(value) > 1:
-                    value = torch.tensor(value).mean()
-                else:
-                    value = value[0]
+        if cfg.meta:
+            plot_context(cfg, world_model, train_oracle_context, logger, frames_per_task)
+        if cfg.model_type == "causal":
+            print()
+            print(world_model.causal_mask.printing_mask)
+        logger.update(frames_per_task)
 
-                if logger is not None:
-                    logger.log_scalar(key, value, step=collected_frames)
-                else:
-                    print(f"{key}: {value}")
-
-            if cfg.model_type == "causal":
-                print()
-                print(world_model.causal_mask.printing_mask)
-
-            logging_scalar = defaultdict(list)
+        if frames_per_task % 100 == 0:
+            os.makedirs("world_model", exist_ok=True)
+            torch.save(world_model.state_dict(), os.path.join(f"world_model/{frames_per_task}.pt"))
 
     collector.shutdown()
 

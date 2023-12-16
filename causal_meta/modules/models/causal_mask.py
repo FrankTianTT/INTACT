@@ -86,7 +86,7 @@ class CausalMask(nn.Module):
 
     @property
     def valid_context_idx(self):
-        non_zero = self.mask[:, -self.context_input_dim:].any(dim=0)
+        non_zero = self.mask[:, self.observed_input_dim:].any(dim=0)
         return torch.where(non_zero)[0]
 
     def forward(self, inputs, dim_map=None, deterministic=False):

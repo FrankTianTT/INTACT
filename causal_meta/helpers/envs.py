@@ -363,7 +363,7 @@ class EnvConfig:
 
 
 def test_dreamer_env_constructor():
-    import tdfa.envs
+    import causal_meta.envs
     from PIL import Image
 
     cfg = EnvConfig()

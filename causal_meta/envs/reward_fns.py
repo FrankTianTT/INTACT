@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import torch
 
-from tdfa.envs import termination_fns
+from causal_meta.envs import termination_fns
 
 
 def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:

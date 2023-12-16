@@ -12,12 +12,12 @@ from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_v
     _dreamer_make_actors
 from torchrl.modules.models.model_based import RSSMRollout
 
-from tdfa.modules.models.causal_rssm_prior import CausalRSSMPrior
-from tdfa.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
-from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
-from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
-from tdfa.envs.mdp_env import MDPEnv
-from tdfa.helpers.envs import dreamer_env_constructor
+from causal_meta.modules.models.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
+from causal_meta.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
+from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
+from causal_meta.envs.mdp_env import MDPEnv
+from causal_meta.helpers.envs import dreamer_env_constructor
 
 
 def make_mlp_model(

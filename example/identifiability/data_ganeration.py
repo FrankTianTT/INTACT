@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from tdfa.modules.utils import build_mlp
+from causal_meta.modules.utils import build_mlp
 
 
 def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):

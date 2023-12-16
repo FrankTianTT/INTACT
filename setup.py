@@ -13,14 +13,14 @@ with open("README.md", "r") as f:
     long_description = f.read()
 
 setup(
-    name="tdfa",
+    name="causal_meta",
     version="0.01",
     author="Honglong Tian",
     description="Target domain fast-adaptation for meta-RL with identifiable causal world model.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/FrankTianTT/tdfa",
-    packages=[package for package in find_packages() if package.startswith("tdfa")],
+    packages=[package for package in find_packages() if package.startswith("causal_meta")],
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",

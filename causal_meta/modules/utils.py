@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from torch import nn
 
-from tdfa.modules.models.layers import ParallelLinear
+from causal_meta.modules.models.layers import ParallelLinear
 
 
 def get_activate(name: str = "ReLU"):

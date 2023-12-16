@@ -1,32 +1,20 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment
-from scipy.stats import spearmanr, gaussian_kde
+from scipy.stats import spearmanr, gaussian_kde, differential_entropy
+from sklearn.feature_selection import mutual_info_regression
+from causallearn.utils.KCI.KCI import KCI_UInd
 
 
-def nmi_estimation(x, y):
-    """Estimate the normalized mutual information between x and y.
-
-    :param x: shape: (samples_num, x_dim)
-    :param y: shape: (samples_num, y_dim)
-    :return: normalized mutual information matrix, shape: (x_dim, y_dim)
-    """
-
-    # x, y = x / np.std(x, axis=0) - np.mean(x, axis=0), y / np.std(y, axis=0) - np.mean(y, axis=0)
+def kernel_independence_test(x, y):
     x_dim, y_dim = x.shape[1], y.shape[1]
 
-    log_pdf_x = np.stack([gaussian_kde(x[:, i]).logpdf(x[:, i]) for i in range(x_dim)])
-    log_pdf_y = np.stack([gaussian_kde(y[:, j]).logpdf(y[:, j]) for j in range(y_dim)])
-    hx = -np.mean(log_pdf_x, axis=-1)
-    hy = -np.mean(log_pdf_y, axis=-1)
+    ci_test = KCI_UInd(approx=False)
 
     nmi_matrix = np.zeros((x_dim, y_dim))
     for i in range(x_dim):
         for j in range(y_dim):
-            xy = np.stack([x[:, i], y[:, j]], axis=0)
-            log_pdf_ij = gaussian_kde(xy).logpdf(xy)
-            mutual_info_ij = (log_pdf_ij - log_pdf_x[i] - log_pdf_y[j]).mean()
-            print(mutual_info_ij, hx[i], hy[j])
-            nmi_matrix[i, j] = mutual_info_ij / np.sqrt(hx[i] * hy[j])
+            p_value, test_stat = ci_test.compute_pvalue(x[:, i:i + 1], y[:, j:j + 1])
+            nmi_matrix[i, j] = 1 - min(0.05, p_value) * 20
 
     return nmi_matrix
 
@@ -44,8 +32,8 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
                     use Pearson's correlation coefficient
                 'spearman':
                     use Spearman's nonparametric rank correlation coefficient
-                'nmi':
-                    use normalized mutual information
+                'kernel':
+                    use KCI
     :param return_permutation: bool, optional
     :return: float
     """
@@ -57,8 +45,8 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     elif method == 'spearman':
         cc = spearmanr(x, y)[0][:d, d:]
         cc = np.abs(cc)
-    elif method == 'nmi':  # normalized mutual information
-        cc = nmi_estimation(x, y)
+    elif method == 'kernel':
+        cc = kernel_independence_test(x, y)
     else:
         raise ValueError('not a valid method: {}'.format(method))
 
@@ -67,7 +55,11 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
 
     permutation = linear_sum_assignment(-1 * cc)
 
-    score = cc[permutation].mean()
+    if len(permutation[0]) == 0:
+        score = 0
+    else:
+        score = cc[permutation].mean()
+
     if return_permutation:
         return score, permutation
     else:
@@ -75,17 +67,29 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
 
 
 def test_non_linear():
+    import matplotlib.pyplot as plt
+
     sample_num = 1000
 
-    x = np.random.randn(sample_num, 1)
-    y = np.abs(x)
+    x = (np.random.random([sample_num, 1]) - 0.5) * 2
+    y = np.abs(x) + np.random.random([sample_num, 1]) * 0.2
+    plt.scatter(x, y)
+    plt.show()
 
-    mcc1 = mean_corr_coef(x, y, "nmi")
+    mcc1 = mean_corr_coef(x, y, "kernel")
     mcc2 = mean_corr_coef(x, y, "pearson")
 
     print(mcc1, mcc2)
 
 
+def test_mcc():
+    sample_num = 100
+
+    x = np.random.random([sample_num, 1])
+    y = np.random.random([sample_num, 0])
+
+    mcc = mean_corr_coef(x, y, "kernel")
+
+
 if __name__ == '__main__':
-    # test_non_linear()
-    print(np.sqrt(-1))
+    test_mcc()

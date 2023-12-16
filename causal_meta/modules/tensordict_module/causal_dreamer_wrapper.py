@@ -6,7 +6,7 @@ from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
 from torchrl.modules.models.models import MLP
 
-from tdfa.modules.models.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.causal_rssm_prior import CausalRSSMPrior
 
 
 class CausalDreamerWrapper(TensorDictSequential):

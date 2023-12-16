@@ -2,7 +2,7 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.objectives.dreamer import DreamerModelLoss
-from tdfa.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
+from causal_meta.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
 
 
 class CausalDreamerModelLoss(DreamerModelLoss):

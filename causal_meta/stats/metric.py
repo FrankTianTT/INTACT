@@ -1,6 +1,6 @@
 import torch
 
-from tdfa.stats.kernel import kernel_classes
+from causal_meta.stats.kernel import kernel_classes
 
 
 def mutual_info_estimation(

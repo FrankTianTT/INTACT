@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from tdfa.stats.mcc import mean_corr_coef
-from tdfa.stats.metric import mutual_info_estimation
+from causal_meta.stats.mcc import mean_corr_coef
+from causal_meta.stats.metric import mutual_info_estimation
 
 
 class ContextModel(nn.Module):
@@ -19,16 +19,15 @@ class ContextModel(nn.Module):
         self.task_num = task_num
         self.init_scale = init_scale
 
-        self.init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
-        self.context_hat = torch.nn.Parameter(self.init_context_hat)
+        init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
+        self.context_hat = torch.nn.Parameter(init_context_hat)
 
     def reset(self, task_num=None):
-        if task_num is None:
-            self.context_hat.data = self.context_hat
-        else:
-            device = self.context_hat.device
-            init_context_hat = torch.randn(task_num, self.max_context_dim) * self.init_scale
-            self.context_hat = torch.nn.Parameter(init_context_hat).to(device)
+        device = self.context_hat.device
+        self.task_num = task_num or self.task_num
+
+        init_context_hat = torch.randn(self.task_num, self.max_context_dim) * self.init_scale
+        self.context_hat.data = init_context_hat.to(device)
 
     def extra_repr(self):
         if self.meta:
@@ -53,7 +52,7 @@ class ContextModel(nn.Module):
             context_hat = context_hat[:, valid_context_idx]
         return mutual_info_estimation(context_hat, reduction=reduction)
 
-    def get_mcc(self, context_gt, valid_idx=None, return_permutation=True):
+    def get_mcc(self, context_gt, valid_idx=None, return_permutation=True, method="kernel"):
         if isinstance(context_gt, torch.Tensor):
             context_gt = context_gt.detach().cpu().numpy()
 
@@ -62,7 +61,7 @@ class ContextModel(nn.Module):
         else:
             context_hat = self.context_hat[:, valid_idx].detach().cpu().numpy()
 
-        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True)
+        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True, method=method)
 
         if return_permutation:
             return mcc, permutation, context_hat

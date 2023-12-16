@@ -4,7 +4,7 @@ from sklearn.linear_model import LinearRegression
 from matplotlib import pyplot as plt
 import seaborn as sns
 
-from tdfa.stats.mcc import mean_corr_coef
+from causal_meta.stats.mcc import mean_corr_coef
 from example.identifiability.data_ganeration import gen_linear_data
 
 

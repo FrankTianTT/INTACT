@@ -28,10 +28,10 @@ from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArg
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
-from tdfa.helpers.envs import EnvConfig, make_recorder_env, dreamer_env_constructor, parallel_dreamer_env_constructor
-from tdfa.helpers.models import make_causal_dreamer, DreamerConfig
-import tdfa.envs
-from tdfa.objectives.causal_dreamer import CausalDreamerModelLoss
+from causal_meta.helpers.envs import EnvConfig, make_recorder_env, dreamer_env_constructor, parallel_dreamer_env_constructor
+from causal_meta.helpers.models import make_causal_dreamer, DreamerConfig
+import causal_meta.envs
+from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 from dreamer_utils import call_record, grad_norm, match_length, retrieve_stats_from_state_dict
 
 config_fields = [

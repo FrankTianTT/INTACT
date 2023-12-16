@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from tdfa.modules.utils import build_mlp
-from tdfa.modules.models.mdp_world_model.base_world_model import PlainMDPWorldModel
-from tdfa.modules.models.causal_mask import CausalMask
+from causal_meta.modules.utils import build_mlp
+from causal_meta.modules.models.mdp_world_model.base_world_model import PlainMDPWorldModel
+from causal_meta.modules.models.causal_mask import CausalMask
 
 
 class CausalWorldModel(PlainMDPWorldModel):

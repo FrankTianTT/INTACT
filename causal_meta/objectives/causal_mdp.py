@@ -8,9 +8,9 @@ from torchrl.objectives.common import LossModule
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 
-from tdfa.modules.utils import build_mlp
-from tdfa.stats.metric import mutual_info_estimation
-from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
+from causal_meta.modules.utils import build_mlp
+from causal_meta.stats.metric import mutual_info_estimation
+from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
 
 class CausalWorldModelLoss(LossModule):
@@ -90,10 +90,13 @@ class CausalWorldModelLoss(LossModule):
 
         return loss_td, loss_tensor
 
-    def forward(self, tensordict: TensorDict):
+    def forward(self, tensordict: TensorDict, deterministic_mask=False):
         tensordict = tensordict.clone(recurse=False)
 
-        tensordict = self.world_model(tensordict)
+        if self.model_type == "causal":
+            tensordict = self.world_model(tensordict, deterministic_mask=deterministic_mask)
+        else:
+            tensordict = self.world_model(tensordict)
 
         loss_td, loss_tensor = self.loss(tensordict)
         if self.lambda_mutual_info > 0:
@@ -143,8 +146,8 @@ class CausalWorldModelLoss(LossModule):
 
 
 def test_causal_world_model_loss():
-    from tdfa.modules.models.mdp_world_model import CausalWorldModel
-    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
+    from causal_meta.modules.models.mdp_world_model import CausalWorldModel
+    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
     obs_dim = 4
     action_dim = 1
@@ -182,8 +185,8 @@ def test_causal_world_model_loss():
 
 
 def test_inn_world_model_loss():
-    from tdfa.modules.models.mdp_world_model import INNWorldModel
-    from tdfa.modules.tensordict_module.mdp_wrapper import MDPWrapper
+    from causal_meta.modules.models.mdp_world_model import INNWorldModel
+    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
     obs_dim = 4
     action_dim = 1

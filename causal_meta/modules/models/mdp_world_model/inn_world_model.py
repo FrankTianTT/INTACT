@@ -8,9 +8,9 @@ from FrEIA.framework import Node, InputNode, GraphINN, ConditionNode, OutputNode
 from FrEIA.modules import PermuteRandom, RNVPCouplingBlock
 from FrEIA.modules.coupling_layers import _BaseCouplingBlock
 
-from tdfa.modules.utils import build_mlp
-from tdfa.modules.models.mdp_world_model.base_world_model import BaseMDPWorldModel
-from tdfa.modules.models.causal_mask import CausalMask
+from causal_meta.modules.utils import build_mlp
+from causal_meta.modules.models.mdp_world_model.base_world_model import BaseMDPWorldModel
+from causal_meta.modules.models.causal_mask import CausalMask
 
 
 class GINCouplingBlock(_BaseCouplingBlock):

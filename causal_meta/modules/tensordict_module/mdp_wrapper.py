@@ -5,7 +5,7 @@ import torch
 from tensordict.nn import TensorDictSequential, TensorDictModule
 from tensordict import TensorDict, TensorDictBase
 
-from tdfa.modules.models.mdp_world_model import BaseMDPWorldModel, PlainMDPWorldModel, CausalWorldModel, INNWorldModel
+from causal_meta.modules.models.mdp_world_model import BaseMDPWorldModel, PlainMDPWorldModel, CausalWorldModel, INNWorldModel
 
 
 class MDPWrapper(TensorDictModule):

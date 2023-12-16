@@ -19,11 +19,11 @@ from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from tdfa.helpers.models import make_mlp_model
-from tdfa.objectives.causal_mdp import CausalWorldModelLoss
-from tdfa.envs.meta_transform import MetaIdxTransform
-from tdfa.envs.mdp_env import MDPEnv
-from tdfa.modules.planners.cem import MyCEMPlanner as CEMPlanner
+from causal_meta.helpers.models import make_mlp_model
+from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
+from causal_meta.envs.meta_transform import MetaIdxTransform
+from causal_meta.envs.mdp_env import MDPEnv
+from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 from matplotlib import pyplot as plt
 
@@ -35,6 +35,40 @@ class MultiOptimizer:
     def step(self):
         for opt in self.optimizers.values():
             opt.step()
+
+
+class MyLogger:
+    def __init__(self, cfg):
+        exp_name = generate_exp_name("MPC", cfg.exp_name)
+        self.logger = get_logger(
+            logger_type=cfg.logger,
+            logger_name="mpc",
+            experiment_name=exp_name,
+            wandb_kwargs={
+                "project": "causal_rl",
+                "group": f"MPC_{cfg.env_name}",
+                "offline": cfg.offline_logging,
+            },
+        )
+        self._cache = defaultdict(list)
+
+    def log_scalar(self, key, value):
+        if isinstance(value, torch.Tensor):
+            value = value.detach().item()
+        self._cache[key].append(value)
+
+    def update(self, step):
+        for key, value in self._cache.items():
+            if len(value) == 0:
+                continue
+            if len(value) > 1:
+                value = torch.tensor(value).mean()
+            else:
+                value = value[0]
+
+            self.logger.log_scalar(key, value, step=step)
+
+        self._cache = defaultdict(list)
 
 
 def get_dim_map(obs_dim, action_dim, context_dim):
@@ -91,7 +125,7 @@ def evaluate_policy(
         cfg,
         make_env_list,
         policy,
-        log_scalar,
+        logger=None,
         max_steps=200,
         prefix="meta_train",
 ):
@@ -120,7 +154,10 @@ def evaluate_policy(
                 tensordict = step_mdp(tensordict, exclude_action=False)
         repeat_rewards.append(rewards)
 
-    log_scalar("{}/eval_episode_reward".format(prefix), torch.stack(repeat_rewards).mean())
+    if logger is not None:
+        logger.log_scalar("{}/eval_episode_reward".format(prefix), torch.stack(repeat_rewards).mean())
+
+    return repeat_rewards
 
 
 def find_world_model(policy, task_num):
@@ -137,7 +174,7 @@ def find_world_model(policy, task_num):
     new_model_env = sub_module
 
     new_world_model = new_model_env.world_model
-    new_world_model.reset_context(task_num=task_num)
+    new_world_model.context_model.reset(task_num=task_num)
 
     return new_policy, new_world_model
 
@@ -150,7 +187,9 @@ def train_model(
         training_steps,
         model_opt,
         logits_opt=None,
-        log_scalar=None
+        logger=None,
+        deterministic_mask=False,
+        prefix="model"
 ):
     device = next(world_model.parameters()).device
     train_logits = cfg.model_type == "causal" and cfg.reinforce and logits_opt is not None
@@ -165,18 +204,21 @@ def train_model(
             logits.backward(grad)
             logits_opt.step()
         else:
-            loss_td, all_loss = world_model_loss(sampled_tensordict)
+            loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=deterministic_mask)
             all_loss.backward()
             model_opt.step()
-            if log_scalar is not None:
+            if logger is not None:
                 for dim in range(loss_td["transition_loss"].shape[-1]):
-                    log_scalar("model_loss/obs_{}".format(dim), loss_td["transition_loss"][..., dim].mean())
-                log_scalar("model_loss/reward", loss_td["reward_loss"].mean())
-                log_scalar("model_loss/terminated", loss_td["terminated_loss"].mean())
+                    logger.log_scalar(f"{prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
+                logger.log_scalar(f"{prefix}/reward", loss_td["reward_loss"].mean())
+                logger.log_scalar(f"{prefix}/terminated", loss_td["terminated_loss"].mean())
                 if "mutual_info_loss" in loss_td.keys():
-                    log_scalar("model_loss/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                    logger.log_scalar(f"{prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
                 if "context_loss" in loss_td.keys():
-                    log_scalar("model_loss/context", loss_td["context_loss"].mean())
+                    logger.log_scalar(f"{prefix}/context", loss_td["context_loss"].mean())
+
+            # if logits_opt is None:
+            #     print(world_model.context_model.context_hat.data.std(dim=0))
 
 
 def meta_test(
@@ -184,9 +226,11 @@ def meta_test(
         make_env_list,
         oracle_context,
         policy,
-        log_scalar,
+        logger,
         frames_per_task
 ):
+    logger.update(frames_per_task)
+
     task_num = len(make_env_list)
 
     policy, world_model = find_world_model(policy, task_num=task_num)
@@ -220,29 +264,27 @@ def meta_test(
     for frames, tensordict in enumerate(collector):
         pbar.update(task_num)
         replay_buffer.extend(tensordict.reshape(-1))
-        train_model(cfg, replay_buffer, world_model, world_model_loss, model_opt=context_opt,
-                    training_steps=cfg.meta_test_model_learning_per_frame * task_num)
-        plot_context(cfg, world_model, oracle_context, log_scalar, frames, prefix="meta_test")
+        train_model(
+            cfg, replay_buffer, world_model, world_model_loss,
+            model_opt=context_opt,
+            training_steps=cfg.meta_test_model_learning_per_frame * task_num,
+            deterministic_mask=True,
+            logger=logger,
+            prefix=f"meta_test_model_{frames_per_task}"
+        )
+        plot_context(cfg, world_model, oracle_context, logger, frames, prefix=f"meta_test_model_{frames_per_task}")
+        logger.update(frames)
 
-    with torch.no_grad():
-        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
-        loss_td, all_loss = world_model_loss(sampled_tensordict)
-        for dim in range(loss_td["transition_loss"].shape[-1]):
-            log_scalar("meta_test_model_loss/obs_{}".format(dim), loss_td["transition_loss"][..., dim].mean())
-        log_scalar("meta_test_model_loss/reward", loss_td["reward_loss"].mean())
-        log_scalar("meta_test_model_loss/terminated", loss_td["terminated_loss"].mean())
-
-    evaluate_policy(cfg, make_env_list, policy, log_scalar, prefix="meta_test")
-    plot_context(cfg, world_model, oracle_context, log_scalar, frames_per_task, prefix="meta_test")
+    evaluate_policy(cfg, make_env_list, policy, logger, prefix="meta_test")
 
 
 def plot_context(
         cfg,
         world_model,
         oracle_context,
-        log_scalar,
+        logger,
         frames_per_task,
-        prefix="meta_train"
+        prefix="model"
 ):
     context_model = world_model.context_model
     context_gt = torch.stack([v for v in oracle_context.values()], dim=-1)
@@ -251,11 +293,11 @@ def plot_context(
         valid_context_idx = world_model.causal_mask.valid_context_idx
     else:
         valid_context_idx = torch.arange(context_model.max_context_dim)
-    log_scalar("{}/valid_context_num".format(prefix), float(len(valid_context_idx)))
+    logger.log_scalar("{}/valid_context_num".format(prefix), float(len(valid_context_idx)))
 
     mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
     idxes_gt, idxes_hat = permutation
-    log_scalar("{}/mcc".format(prefix), mcc)
+    logger.log_scalar("{}/mcc".format(prefix), mcc)
 
     os.makedirs(prefix, exist_ok=True)
 
