@@ -9,3 +9,8 @@ from causal_meta.envs import termination_fns
 
 def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
     return torch.ones(*next_obs.shape[:-1], 1).to(next_obs.device)
+
+
+reward_fns_dict = {
+    "ones": ones,
+}

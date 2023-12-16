@@ -49,6 +49,8 @@ def inverted_pendulum(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tens
 
 def no_termination(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
     return torch.zeros(*next_obs.shape[:-1], 1).bool().to(next_obs.device)
+
+
 #
 #
 # def walker2d(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
@@ -81,3 +83,11 @@ def no_termination(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor)
 #
 #     done = done[:, None]
 #     return done
+
+termination_fns_dict = {
+    "cartpole": cartpole,
+    "inverted_pendulum": inverted_pendulum,
+    "no_termination": no_termination,
+    # "walker2d": termination_fns.walker2d,
+    # "ant": termination_fns.ant,
+}
