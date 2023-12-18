@@ -13,6 +13,7 @@ from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Co
 from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
@@ -76,8 +77,8 @@ def main(cfg):
 
     explore_policy = AdditiveGaussianWrapper(
         planner,
-        sigma_init=0.5,
-        sigma_end=0.5,
+        sigma_init=0.3,
+        sigma_end=0.3,
         spec=proof_env.action_spec,
     )
 
@@ -89,7 +90,10 @@ def main(cfg):
         init_random_frames=cfg.init_frames_per_task * task_num,
     )
 
-    replay_buffer = TensorDictReplayBuffer()
+    buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
+    replay_buffer = TensorDictReplayBuffer(
+        storage=ListStorage(max_size=buffer_size),
+    )
 
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
     module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
@@ -110,6 +114,7 @@ def main(cfg):
     del proof_env
 
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
+    train_model_iters = 0
     for frames_per_task, tensordict in enumerate(collector):
         pbar.update(task_num)
 
@@ -122,12 +127,17 @@ def main(cfg):
         if frames_per_task < cfg.init_frames_per_task:
             continue
 
-        train_model(cfg, replay_buffer, world_model, world_model_loss,
-                    cfg.model_learning_per_frame * task_num, model_opt, logits_opt, logger)
-        # if frames_per_task % cfg.reset_context_frames_per_task == 0:
-        #     world_model.context_model.reset()
+        train_model_iters = train_model(
+            cfg, replay_buffer, world_model, world_model_loss,
+            cfg.model_learning_per_frame * task_num, model_opt, logits_opt, logger,
+            iters=train_model_iters
+        )
+
+        # if (frames_per_task > cfg.reset_context_after_frames_per_task and
+        #         frames_per_task % cfg.reset_context_frames_per_task == 0):
+        #     world_model.reset()
         #     train_model(cfg, replay_buffer, world_model, world_model_loss,
-        #                 cfg.model_learning_per_frame * task_num, context_opt, deterministic_mask=True)
+        #                 cfg.model_learning_per_frame * task_num, model_opt, deterministic_mask=True)
 
         if cfg.model_type == "causal":
             logits = world_model.causal_mask.mask_logits
@@ -140,7 +150,7 @@ def main(cfg):
         if frames_per_task % cfg.eval_interval_frames_per_task == 0:
             evaluate_policy(cfg, train_make_env_list, explore_policy, logger)
 
-        if frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
+        if cfg.meta and frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
             meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, frames_per_task)
 
         if cfg.meta:
