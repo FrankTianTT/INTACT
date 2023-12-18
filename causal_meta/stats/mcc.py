@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment
-from scipy.stats import spearmanr, gaussian_kde, differential_entropy
-from sklearn.feature_selection import mutual_info_regression
+from scipy.stats import spearmanr
 from causallearn.utils.KCI.KCI import KCI_UInd
+from sklearn.kernel_ridge import KernelRidge
+from sklearn.metrics import r2_score
 
 
 def kernel_independence_test(x, y):
@@ -10,13 +11,27 @@ def kernel_independence_test(x, y):
 
     ci_test = KCI_UInd(approx=False)
 
-    nmi_matrix = np.zeros((x_dim, y_dim))
+    result_matrix = np.zeros((x_dim, y_dim))
     for i in range(x_dim):
         for j in range(y_dim):
             p_value, test_stat = ci_test.compute_pvalue(x[:, i:i + 1], y[:, j:j + 1])
-            nmi_matrix[i, j] = 1 - min(0.05, p_value) * 20
+            result_matrix[i, j] = 1 - min(0.05, p_value) * 20
+    return result_matrix
 
-    return nmi_matrix
+
+def kernel_ridge_regression(x, y):
+    x_dim, y_dim = x.shape[1], y.shape[1]
+
+    result_matrix = np.zeros((x_dim, y_dim))
+    for i in range(x_dim):
+        for j in range(y_dim):
+            krr = KernelRidge(alpha=1.0, kernel='rbf', gamma=3.0)
+            krr.fit(x[:, i:i + 1], y[:, j])
+            y_hat = krr.predict(x[:, i:i + 1])
+            r2 = r2_score(y[:, j], y_hat)
+
+            result_matrix[i, j] = r2
+    return result_matrix
 
 
 def mean_corr_coef(x, y, method='pearson', return_permutation=False):
@@ -45,8 +60,10 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     elif method == 'spearman':
         cc = spearmanr(x, y)[0][:d, d:]
         cc = np.abs(cc)
-    elif method == 'kernel':
+    elif method == 'kit':
         cc = kernel_independence_test(x, y)
+    elif method == 'krr':
+        cc = kernel_ridge_regression(x, y)
     else:
         raise ValueError('not a valid method: {}'.format(method))
 
@@ -69,14 +86,14 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
 def test_non_linear():
     import matplotlib.pyplot as plt
 
-    sample_num = 1000
+    sample_num = 100
 
     x = (np.random.random([sample_num, 1]) - 0.5) * 2
-    y = np.abs(x) + np.random.random([sample_num, 1]) * 0.2
-    plt.scatter(x, y)
-    plt.show()
+    y = np.abs(x)  # + np.random.random([sample_num, 1]) * 0.2
+    # plt.scatter(x, y)
+    # plt.show()
 
-    mcc1 = mean_corr_coef(x, y, "kernel")
+    mcc1 = mean_corr_coef(x, y, "krr")
     mcc2 = mean_corr_coef(x, y, "pearson")
 
     print(mcc1, mcc2)
@@ -92,4 +109,4 @@ def test_mcc():
 
 
 if __name__ == '__main__':
-    test_mcc()
+    test_non_linear()
