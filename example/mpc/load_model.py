@@ -15,6 +15,7 @@ from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Co
 from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
@@ -53,7 +54,7 @@ def restore_make_env_list(cfg, oracle_context):
     return make_env_list
 
 
-def main(path, model_frame):
+def main(path, load_frames, train_frames_per_task):
     cfg_path = os.path.join(path, ".hydra", "config.yaml")
     cfg = OmegaConf.load(cfg_path)
 
@@ -62,6 +63,8 @@ def main(path, model_frame):
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
+
+    logger = MyLogger(cfg, log_dir=os.path.join(path, "load_model"))
 
     train_oracle_context = torch.load(os.path.join(path, "train_oracle_context.pt"), map_location=device)
     test_oracle_context = torch.load(os.path.join(path, "test_oracle_context.pt"), map_location=device)
@@ -72,7 +75,7 @@ def main(path, model_frame):
 
     proof_env = train_make_env_list[0]()
     world_model, model_env = make_mlp_model(cfg, proof_env, device=device)
-    world_model.load_state_dict(torch.load(os.path.join(path, "world_model", f"{model_frame}.pt"), map_location=device))
+    world_model.load_state_dict(torch.load(os.path.join(path, "world_model", f"{load_frames}.pt"), map_location=device))
 
     world_model_loss = CausalWorldModelLoss(
         world_model,
@@ -102,38 +105,92 @@ def main(path, model_frame):
     )
     del proof_env
 
+    if train_frames_per_task == -1:
+        train_frames_per_task = cfg.meta_task_adjust_frames_per_task
+
     collector = SyncDataCollector(
         create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
         policy=explore_policy,
-        total_frames=cfg.train_frames_per_task * task_num,
+        total_frames=train_frames_per_task * task_num,
         frames_per_batch=task_num,
-        init_random_frames=cfg.init_frames_per_task * task_num,
+        init_random_frames=0,
     )
 
-    replay_buffer = TensorDictReplayBuffer()
-
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(max_size=cfg.train_frames_per_task * task_num),
+    )
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
+    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    model_opt = MultiOptimizer(module=module_opt, context=context_opt)
 
-    print(world_model.context_model.context_hat.shape)
+    cfg.eval_repeat_nums = 10
     repeat_rewards = evaluate_policy(cfg, train_make_env_list, explore_policy)
     print(repeat_rewards)
-    world_model.context_model.reset()
-    # print(world_model.context_model.context_hat)
-
-    pbar = tqdm(total=cfg.train_frames_per_task * task_num)
+    print("mean", repeat_rewards.mean(dim=0))
+    print("std", repeat_rewards.std(dim=0))
+    print("max", repeat_rewards.max(dim=0))
+    print("min", repeat_rewards.min(dim=0))
+    plot_context(
+        cfg, world_model, train_oracle_context,
+        plot_path=os.path.join(path, "load_model", "before_context.png"),
+        color_values=repeat_rewards.mean(dim=0).cpu().numpy()
+    )
+    #
+    # world_model.reset()
+    # # plot_context(
+    # #     cfg, world_model, train_oracle_context,
+    # #     plot_path=os.path.join(path, "load_model", "before_context.png"),
+    # #     # color_values=repeat_rewards.mean(dim=0).cpu().numpy()
+    # # )
+    # # repeat_rewards = evaluate_policy(cfg, train_make_env_list, explore_policy)
+    #
+    # print(world_model.causal_mask.printing_mask)
+    #
+    pbar = tqdm(total=train_frames_per_task * task_num)
     for frames_per_task, tensordict in enumerate(collector):
         pbar.update(task_num)
+        if tensordict["next", "done"].any():
+            episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
+            logger.log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
+
         replay_buffer.extend(tensordict.reshape(-1))
 
-        train_model(cfg, replay_buffer, world_model, world_model_loss,
-                    cfg.model_learning_per_frame * task_num, context_opt)
+        # train_model(
+        #     cfg, replay_buffer, world_model, world_model_loss,
+        #     cfg.model_learning_per_frame * task_num, model_opt,
+        #     logger=logger,
+        #     deterministic_mask=True
+        # )
+
+        # with torch.no_grad():
+        #     sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+        #     loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=True)
+        #     log_prefix = "model"
+        #     for dim in range(loss_td["transition_loss"].shape[-1]):
+        #         logger.log_scalar(f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
+        #     logger.log_scalar(f"{log_prefix}/reward", loss_td["reward_loss"].mean())
+        #     logger.log_scalar(f"{log_prefix}/terminated", loss_td["terminated_loss"].mean())
+        #     if "mutual_info_loss" in loss_td.keys():
+        #         logger.log_scalar(f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+        #     if "context_loss" in loss_td.keys():
+        #         logger.log_scalar(f"{log_prefix}/context", loss_td["context_loss"].mean())
+
+        logger.update(frames_per_task)
+
+    # repeat_rewards = evaluate_policy(cfg, train_make_env_list, explore_policy)
+    plot_context(
+        cfg, world_model, train_oracle_context,
+        plot_path=os.path.join(path, "load_model", "after_context.png"),
+        # color_values=repeat_rewards.mean(dim=0).cpu().numpy()
+    )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('path', type=str)
-    parser.add_argument('model_frame', type=int)
+    parser.add_argument('load_frames', type=int)
+    parser.add_argument('--train_frames_per_task', type=int, default=-1)
 
     args = parser.parse_args()
 
-    main(args.path, args.model_frame)
+    main(args.path, args.load_frames, args.train_frames_per_task)

@@ -94,8 +94,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             length: float = 0.5,
             force_mag: float = 10.0,
             tau: float = 0.05,
-            x_dot_bias: float = 1.0,
-            theta_dot_bias: float = 1.0,
+            x_dot_bias: float = 0.0,
+            theta_dot_bias: float = 0.0,
             theta_threshold_degree: float = 12,
             render_mode: Optional[str] = None
     ):

@@ -34,20 +34,25 @@ class MDPWrapper(TensorDictModule):
         self.causal = isinstance(mdp_world_model, CausalWorldModel)
         self.learn_obs_var = mdp_world_model.learn_obs_var
 
+    @property
+    def world_model(self) -> BaseMDPWorldModel:
+        assert isinstance(self.module, BaseMDPWorldModel)
+        return self.module
+
     def get_parameter(self, key):
-        return self.module.get_parameter(key)
+        return self.world_model.get_parameter(key)
 
     @property
     def causal_mask(self):
         assert self.causal, "causal_mask is only available for CausalWorldModel"
-        return self.module.causal_mask
+        return self.world_model.causal_mask
 
     @property
     def context_model(self):
-        return self.module.context_model
+        return self.world_model.context_model
 
-    def reset_context(self, task_num=None):
-        self.module.reset_context(task_num)
+    def reset(self, task_num=None):
+        self.world_model.reset(task_num)
 
     def parallel_forward(self, tensordict, sampling_times=50):
         assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"
@@ -68,14 +73,14 @@ class MDPWrapper(TensorDictModule):
         in_keys = ["observation", "action", ("next", "observation"), ("next", "reward"), ("next", "terminated")]
         out_keys = ["inv_context", "inv_log_jac_det"]
         tensors = tuple(tensordict.get(in_key, None) for in_key in in_keys)
-        tensors = self.module.inv_forward(*tensors)
+        tensors = self.world_model.inv_forward(*tensors)
 
         tensordict_out = self._write_to_tensordict(tensordict, tensors, out_keys=out_keys)
         return tensordict_out
 
     def forward(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
-        tensors = self.module(*tensors, **kwargs)
+        tensors = self.world_model(*tensors, **kwargs)
         tensordict_out = self._write_to_tensordict(tensordict, tensors)
         return tensordict_out
 

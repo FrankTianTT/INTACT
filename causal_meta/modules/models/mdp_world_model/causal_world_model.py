@@ -1,4 +1,5 @@
 from functools import reduce
+import math
 
 import torch
 import torch.nn as nn
@@ -112,6 +113,15 @@ class CausalWorldModel(PlainMDPWorldModel):
         mask = mask.reshape(*batch_size, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
         return *self.get_outputs(mean, log_var, observation, batch_size), mask
 
+    def reset(self, task_num=None):
+        self.context_model.reset(task_num)
+
+        # last_module = self.module[0]
+        # nn.init.kaiming_uniform_(
+        #     last_module.weight[:, :, self.obs_dim + self.action_dim:],
+        #     a=math.sqrt(5)
+        # )
+
 
 def test_causal_world_model_without_meta():
     obs_dim = 4
@@ -160,6 +170,21 @@ def test_causal_world_model_with_meta():
         assert mask.shape == (*batch_shape, obs_dim + 2, obs_dim + action_dim + max_context_dim)
 
 
+def test_reset():
+    obs_dim = 4
+    action_dim = 1
+    max_context_dim = 10
+    task_num = 100
+
+    world_model = CausalWorldModel(
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        meta=True,
+        max_context_dim=max_context_dim,
+        task_num=task_num
+    )
+    world_model.reset()
+
+
 if __name__ == '__main__':
-    test_causal_world_model_with_meta()
-    test_causal_world_model_without_meta()
+    test_reset()

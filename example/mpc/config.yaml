@@ -1,11 +1,10 @@
 # env cfg
 env_name: CartPoleContinuous-v0
-cancel_mujoco_frame_skip: True # work when env is mujoco env
-termination_fns: ""
-reward_fns: ""
+termination_fns: "cartpole"
+reward_fns: "ones"
 
 # learning
-train_frames_per_task: 2000
+train_frames_per_task: 20000
 init_frames_per_task: 50
 
 # planning
@@ -15,9 +14,10 @@ num_candidates: 350
 top_k: 35
 
 # model learning
-model_type: causal
+model_type: plain
 reinforce: True
 batch_size: 256
+buffer_size: 10000
 model_learning_per_frame: 5
 train_mask_iters: 10
 train_model_iters: 40
@@ -25,12 +25,12 @@ world_model_lr: 0.001
 context_lr: 0.01
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
-hidden_size: 64
+hidden_size: 256
 hidden_layers: 2
 
 lambda_transition: 1.0
-lambda_reward: 1.0
-lambda_terminated: 20.0
+lambda_reward: 0.0
+lambda_terminated: 0.0
 lambda_mutual_info: 0.0
 
 sparse_weight: 0.05
@@ -40,28 +40,29 @@ sampling_times: 30
 
 # log
 exp_name: default
-logger: "tensorboard"
+logger: "wandb"
 offline_logging: False
-#eval_interval_frames_per_task: 50
-eval_interval_frames_per_task: 500000
-eval_repeat_nums: 1
+eval_interval_frames_per_task: 50
+#eval_interval_frames_per_task: 500000
+eval_repeat_nums: 3
 
 # meta-RL
 meta: True
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
-#meta_test_interval_frames_per_task: 100
-meta_test_interval_frames_per_task: 100000
+meta_test_interval_frames_per_task: 200
+#meta_test_interval_frames_per_task: 100000
+reset_context_after_frames_per_task: 100
 reset_context_frames_per_task: 10
-meta_task_adjust_frames_per_task: 20
-meta_test_model_learning_per_frame: 10
+meta_task_adjust_frames_per_task: 50
+meta_test_model_learning_per_frame: 5
 oracle_context:
 #  gravity: [ 5.0, 20.0 ]
   #  masscart: [ 0.5, 4.5 ]
-  x_dot_bias: [ -3.0, 3.0 ]
-  theta_dot_bias: [ -3.0, 3.0 ]
+  x_dot_bias: [ -1.0, 1.0 ]
+  theta_dot_bias: [ -1.0, 1.0 ]
 #  theta_threshold_degree: [ 10.0, 20.0 ]
 
 # other
-device: cuda:1
+device: cuda:0

@@ -31,8 +31,6 @@ class MDPEnv(ModelBasedEnvBase):
         return tensordict
 
     def _step(self, tensordict: TensorDict) -> TensorDict:
-        # print(tensordict["observation"].shape)
-        # print(tensordict["observation"].reshape(-1, 4)[0])
         tensordict_out = tensordict.clone()
         tensordict_out = self.world_model(tensordict_out)
 

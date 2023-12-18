@@ -52,7 +52,7 @@ class ContextModel(nn.Module):
             context_hat = context_hat[:, valid_context_idx]
         return mutual_info_estimation(context_hat, reduction=reduction)
 
-    def get_mcc(self, context_gt, valid_idx=None, return_permutation=True, method="kernel"):
+    def get_mcc(self, context_gt, valid_idx=None, return_permutation=True, method="krr"):
         if isinstance(context_gt, torch.Tensor):
             context_gt = context_gt.detach().cpu().numpy()
 
@@ -61,7 +61,7 @@ class ContextModel(nn.Module):
         else:
             context_hat = self.context_hat[:, valid_idx].detach().cpu().numpy()
 
-        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True, method=method)
+        mcc, permutation = mean_corr_coef(context_hat, context_gt, return_permutation=True, method=method)
 
         if return_permutation:
             return mcc, permutation, context_hat

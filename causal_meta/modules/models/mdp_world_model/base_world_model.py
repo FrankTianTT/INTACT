@@ -1,6 +1,7 @@
 from functools import reduce
 from copy import deepcopy
 from abc import abstractmethod
+import math
 
 import torch
 import torch.nn as nn
@@ -74,15 +75,15 @@ class BaseMDPWorldModel(nn.Module):
     def output_dim(self):
         return self.obs_dim + 2
 
+    def reset(self, task_num=None):
+        self.context_model.reset(task_num)
+
     def freeze_module(self):
         for name in self.params_dict.keys():
             if name == "context":
                 continue
             for param in self.params_dict[name]:
                 param.requires_grad = False
-
-    def reset_context(self, task_num=None):
-        self.context_model.reset(task_num)
 
 
 class PlainMDPWorldModel(BaseMDPWorldModel):
@@ -167,6 +168,15 @@ class PlainMDPWorldModel(BaseMDPWorldModel):
         mean, log_var = self.module(inputs.reshape(-1, dim)).chunk(2, dim=-1)
         return self.get_outputs(mean, log_var, observation, batch_size)
 
+    def reset(self, task_num=None):
+        self.context_model.reset(task_num)
+
+        last_module = self.module[0]
+        nn.init.kaiming_uniform_(
+            last_module.weight[self.obs_dim + self.action_dim:, :],
+            a=math.sqrt(5)
+        )
+
 
 def test_plain_world_model():
     obs_dim = 4
@@ -186,7 +196,7 @@ def test_plain_world_model():
         assert reward.shape == terminated.shape == (*batch_shape, 1)
 
 
-def test_reset_context():
+def test_reset():
     from torch.optim import Adam
 
     obs_dim = 4
@@ -198,31 +208,8 @@ def test_reset_context():
 
     world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=True,
                                      task_num=task_num, max_context_dim=max_context_dim)
-    cloned_world_model = deepcopy(world_model)
-    optimizer1 = Adam(cloned_world_model.get_parameter("context"), lr=0.001)
-    cloned_world_model.reset_context(new_task_num)
-    optimizer2 = Adam(cloned_world_model.get_parameter("context"), lr=0.001)
-
-    observation = torch.randn(batch_size, obs_dim)
-    action = torch.randn(batch_size, action_dim)
-    idx = torch.randint(0, new_task_num, (batch_size, 1))
-    next_observation = torch.randn(batch_size, obs_dim)
-
-    print(cloned_world_model.context_model.context_hat)
-    cloned_world_model.zero_grad()
-    next_obs_mean, next_obs_log_var, reward, terminated = cloned_world_model(observation, action, idx)
-    loss = nn.functional.mse_loss(next_observation, next_obs_mean)
-    loss.backward()
-    optimizer1.step()
-    print(cloned_world_model.context_model.context_hat)
-
-    # for name, p in world_model.named_parameters():
-    #     if name == "context_model.context_hat":
-    #         assert p.shape == (task_num, max_context_dim)
-    #         assert cloned_world_model.state_dict()[name].shape == (new_task_num, max_context_dim)
-    #     else:
-    #         assert (p == cloned_world_model.state_dict()[name]).all()
+    world_model.reset()
 
 
 if __name__ == '__main__':
-    test_reset_context()
+    test_reset()

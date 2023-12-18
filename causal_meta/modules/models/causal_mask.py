@@ -102,7 +102,7 @@ class CausalMask(nn.Module):
 
         if self.reinforce:
             if deterministic:
-                original_mask = torch.gt(self.mask_logits, 0).float().expand(batch_size, -1, -1)
+                original_mask = self.mask.float().expand(batch_size, -1, -1)
             else:
                 original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
         else:
