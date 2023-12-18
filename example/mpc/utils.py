@@ -4,7 +4,9 @@ from functools import partial
 from copy import deepcopy
 import os
 import math
+from warnings import catch_warnings, filterwarnings
 
+import numpy as np
 from tqdm import tqdm
 import hydra
 import torch
@@ -17,15 +19,16 @@ from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
+from torchrl.data.replay_buffers.storages import ListStorage
+from matplotlib import pyplot as plt
+from matplotlib import colors as mcolors
+from matplotlib import cm
 
 from causal_meta.helpers.models import make_mlp_model
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.envs.mdp_env import MDPEnv
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
-
-from matplotlib import pyplot as plt
 
 
 class MultiOptimizer:
@@ -38,11 +41,14 @@ class MultiOptimizer:
 
 
 class MyLogger:
-    def __init__(self, cfg):
-        exp_name = generate_exp_name("MPC", cfg.exp_name)
+    def __init__(self, cfg, name="mpc", log_dir=""):
+        exp_name = generate_exp_name(name.upper(), cfg.exp_name)
+        if log_dir == "":
+            log_dir = os.path.join(log_dir, name)
+
         self.logger = get_logger(
             logger_type=cfg.logger,
-            logger_name="mpc",
+            logger_name=log_dir,
             experiment_name=exp_name,
             wandb_kwargs={
                 "project": "causal_rl",
@@ -127,12 +133,12 @@ def evaluate_policy(
         policy,
         logger=None,
         max_steps=200,
-        prefix="meta_train",
+        log_prefix="meta_train",
 ):
     eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
     device = next(policy.parameters()).device
 
-    pbar = tqdm(total=cfg.eval_repeat_nums * max_steps, desc="{}_eval".format(prefix))
+    pbar = tqdm(total=cfg.eval_repeat_nums * max_steps, desc="{}_eval".format(log_prefix))
     repeat_rewards = []
     for repeat in range(cfg.eval_repeat_nums):
         rewards = torch.zeros(len(make_env_list), device=device)
@@ -141,8 +147,11 @@ def evaluate_policy(
 
         for _ in range(max_steps):
             pbar.update()
-            with torch.no_grad() and set_interaction_mode("mode"):
-                tensordict = eval_env.step(policy(tensordict).cpu()).to(device)
+            with set_interaction_mode("mode"):
+                action = policy(tensordict).cpu()
+                with catch_warnings():
+                    filterwarnings("ignore", category=UserWarning)
+                    tensordict = eval_env.step(action).to(device)
 
             reward = tensordict.get(("next", "reward"))
             reward[ever_done] = 0
@@ -155,9 +164,9 @@ def evaluate_policy(
         repeat_rewards.append(rewards)
 
     if logger is not None:
-        logger.log_scalar("{}/eval_episode_reward".format(prefix), torch.stack(repeat_rewards).mean())
+        logger.log_scalar("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
 
-    return repeat_rewards
+    return torch.stack(repeat_rewards)
 
 
 def find_world_model(policy, task_num):
@@ -174,7 +183,7 @@ def find_world_model(policy, task_num):
     new_model_env = sub_module
 
     new_world_model = new_model_env.world_model
-    new_world_model.context_model.reset(task_num=task_num)
+    new_world_model.reset(task_num=task_num)
 
     return new_policy, new_world_model
 
@@ -189,7 +198,8 @@ def train_model(
         logits_opt=None,
         logger=None,
         deterministic_mask=False,
-        prefix="model"
+        log_prefix="model",
+        iters=0
 ):
     device = next(world_model.parameters()).device
     train_logits = cfg.model_type == "causal" and cfg.reinforce and logits_opt is not None
@@ -198,7 +208,7 @@ def train_model(
         world_model.zero_grad()
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-        if train_logits and step % (cfg.train_mask_iters + cfg.train_model_iters) < cfg.train_mask_iters:
+        if train_logits and iters % (cfg.train_mask_iters + cfg.train_model_iters) < cfg.train_mask_iters:
             grad = world_model_loss.reinforce(sampled_tensordict)
             logits = world_model.causal_mask.mask_logits
             logits.backward(grad)
@@ -209,16 +219,19 @@ def train_model(
             model_opt.step()
             if logger is not None:
                 for dim in range(loss_td["transition_loss"].shape[-1]):
-                    logger.log_scalar(f"{prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
-                logger.log_scalar(f"{prefix}/reward", loss_td["reward_loss"].mean())
-                logger.log_scalar(f"{prefix}/terminated", loss_td["terminated_loss"].mean())
+                    logger.log_scalar(f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
+                logger.log_scalar(f"{log_prefix}/reward", loss_td["reward_loss"].mean())
+                logger.log_scalar(f"{log_prefix}/terminated", loss_td["terminated_loss"].mean())
                 if "mutual_info_loss" in loss_td.keys():
-                    logger.log_scalar(f"{prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                    logger.log_scalar(f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
                 if "context_loss" in loss_td.keys():
-                    logger.log_scalar(f"{prefix}/context", loss_td["context_loss"].mean())
+                    logger.log_scalar(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
-            # if logits_opt is None:
-            #     print(world_model.context_model.context_hat.data.std(dim=0))
+        iters += 1
+
+        # if logits_opt is None:
+        #     print(world_model.context_model.context_hat.data.std(dim=0))
+    return iters
 
 
 def meta_test(
@@ -256,9 +269,12 @@ def meta_test(
         init_random_frames=0,
     )
 
-    replay_buffer = TensorDictReplayBuffer()
-
+    replay_buffer = TensorDictReplayBuffer(
+        storage=ListStorage(max_size=cfg.meta_task_adjust_frames_per_task * task_num),
+    )
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
+    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    model_opt = MultiOptimizer(module=module_opt, context=context_opt)
 
     pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
     for frames, tensordict in enumerate(collector):
@@ -266,58 +282,82 @@ def meta_test(
         replay_buffer.extend(tensordict.reshape(-1))
         train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            model_opt=context_opt,
+            model_opt=model_opt,
             training_steps=cfg.meta_test_model_learning_per_frame * task_num,
             deterministic_mask=True,
             logger=logger,
-            prefix=f"meta_test_model_{frames_per_task}"
+            log_prefix=f"meta_test_model_{frames_per_task}"
         )
-        plot_context(cfg, world_model, oracle_context, logger, frames, prefix=f"meta_test_model_{frames_per_task}")
+        plot_context(cfg, world_model, oracle_context, logger, frames, log_prefix=f"meta_test_model_{frames_per_task}")
         logger.update(frames)
 
-    evaluate_policy(cfg, make_env_list, policy, logger, prefix="meta_test")
+    evaluate_policy(cfg, make_env_list, policy, logger, log_prefix="meta_test")
 
 
 def plot_context(
         cfg,
         world_model,
         oracle_context,
-        logger,
-        frames_per_task,
-        prefix="model"
+        logger=None,
+        frames_per_task=0,
+        log_prefix="model",
+        plot_path="",
+        color_values=None
 ):
     context_model = world_model.context_model
-    context_gt = torch.stack([v for v in oracle_context.values()], dim=-1)
+    context_gt = torch.stack([v for v in oracle_context.values()], dim=-1).cpu()
 
     if cfg.model_type == "causal":
         valid_context_idx = world_model.causal_mask.valid_context_idx
     else:
         valid_context_idx = torch.arange(context_model.max_context_dim)
-    logger.log_scalar("{}/valid_context_num".format(prefix), float(len(valid_context_idx)))
 
     mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
-    idxes_gt, idxes_hat = permutation
-    logger.log_scalar("{}/mcc".format(prefix), mcc)
+    idxes_hat, idxes_gt = permutation
 
-    os.makedirs(prefix, exist_ok=True)
+    os.makedirs(log_prefix, exist_ok=True)
+
+    if color_values is None:
+        cmap = None
+    else:
+        norm = mcolors.Normalize(vmin=min(color_values), vmax=max(color_values))
+        cmap = cm.ScalarMappable(norm, plt.get_cmap('Blues')).cmap
 
     if len(idxes_gt) == 0:
         pass
     elif len(idxes_gt) == 1:
-        plt.scatter(context_gt[:, 0], context_hat[:, 0])
+        plt.scatter(context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]], c=color_values, cmap=cmap)
     else:
         num_rows = math.ceil(math.sqrt(len(idxes_gt)))
         num_cols = math.ceil(len(idxes_gt) / num_rows)
         fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
 
         context_names = list(oracle_context.keys())
+        scatters = []
         for j, (idx_gt, idx_hat) in enumerate(zip(idxes_gt, idxes_hat)):
             ax = axs.flatten()[j]
             ax.set(xlabel=context_names[idx_gt], ylabel="{}th context".format(valid_context_idx[idx_hat]))
-            ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat])
+            scatter = ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat], c=color_values, cmap=cmap)
+            scatters.append(scatter)
 
         for j in range(len(idxes_gt), len(axs.flat)):
             axs.flat[j].set_visible(False)
 
-    plt.savefig("{}/{}.png".format(prefix, frames_per_task))
+        if color_values is not None and len(scatters) > 0:
+            plt.colorbar(scatters[0], ax=axs)
+
+    if plot_path == "":
+        plot_path = os.path.join(log_prefix, f"{frames_per_task}.png")
+    plt.savefig(plot_path)
     plt.close()
+
+    if logger is not None:
+        logger.log_scalar("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
+        logger.log_scalar("{}/mcc".format(log_prefix), mcc)
+
+
+if __name__ == '__main__':
+    from torchrl.envs.utils import exploration_type, ExplorationType
+
+    with set_interaction_mode("mode"):
+        print(exploration_type())
