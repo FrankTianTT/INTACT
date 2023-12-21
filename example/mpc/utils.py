@@ -318,14 +318,13 @@ def meta_test(
         print(mean_transition_loss)
         print(adapt_idx)
         world_model.causal_mask.reset(adapt_idx)
-        # world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
-        world_model.context_model.fix([3])
+        world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
         module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
         model_opt = MultiOptimizer(module=module_opt, context=context_opt)
         logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
-        for frame in range(cfg.meta_task_adjust_frames_per_task, 2 * cfg.meta_task_adjust_frames_per_task):
+        for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
                 training_steps=cfg.meta_test_model_learning_per_frame * task_num,

@@ -4,7 +4,7 @@ termination_fns: cartpole
 reward_fns: ones
 
 # learning
-train_frames_per_task: 1000
+train_frames_per_task: 2000
 init_frames_per_task: 50
 
 # planning
@@ -44,8 +44,7 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-#eval_interval_frames_per_task: 50
-eval_interval_frames_per_task: 500000
+eval_interval_frames_per_task: 200
 eval_repeat_nums: 3
 
 # meta-RL
@@ -70,4 +69,4 @@ new_oracle_context:
 
 
 # other
-device: cuda:1
+device: cuda:0
