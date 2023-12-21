@@ -90,7 +90,7 @@ class CausalWorldModelLoss(LossModule):
 
         return loss_td, loss_tensor
 
-    def forward(self, tensordict: TensorDict, deterministic_mask=False):
+    def forward(self, tensordict: TensorDict, deterministic_mask=False, only_train=None):
         tensordict = tensordict.clone(recurse=False)
 
         if self.model_type == "causal":
@@ -122,9 +122,14 @@ class CausalWorldModelLoss(LossModule):
             context_loss = 0.5 * (tensordict["inv_context"] - gt_context) ** 2
             loss_td.set("context_loss", context_loss)
             # TODO: cat loss_tensor
+
+        if only_train is not None:
+            not_train = torch.ones(loss_tensor.shape[-1]).to(bool)
+            not_train[only_train] = False
+            loss_tensor[..., not_train] = 0
         return loss_td, loss_tensor.mean()
 
-    def reinforce(self, tensordict: TensorDict):
+    def reinforce(self, tensordict: TensorDict, only_train=None):
         assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"
         assert self.causal_mask.reinforce, "causal_mask should be learned by reinforce"
 
@@ -141,6 +146,11 @@ class CausalWorldModelLoss(LossModule):
             context_sparse_weight=self.context_sparse_weight,
             context_max_weight=self.context_max_weight
         )
+
+        if only_train is not None:
+            not_train = torch.ones(mask_grad.shape[0]).to(bool)
+            not_train[only_train] = False
+            mask_grad[not_train] = 0
 
         return mask_grad
 

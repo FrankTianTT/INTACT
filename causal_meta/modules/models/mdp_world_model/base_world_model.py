@@ -171,11 +171,11 @@ class PlainMDPWorldModel(BaseMDPWorldModel):
     def reset(self, task_num=None):
         self.context_model.reset(task_num)
 
-        last_module = self.module[0]
-        nn.init.kaiming_uniform_(
-            last_module.weight[self.obs_dim + self.action_dim:, :],
-            a=math.sqrt(5)
-        )
+        # last_module = self.module[0]
+        # nn.init.kaiming_uniform_(
+        #     last_module.weight[self.obs_dim + self.action_dim:, :],
+        #     a=math.sqrt(5)
+        # )
 
 
 def test_plain_world_model():

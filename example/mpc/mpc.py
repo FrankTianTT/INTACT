@@ -45,8 +45,8 @@ def main(cfg):
 
     logger = MyLogger(cfg)
 
-    train_make_env_list, train_oracle_context = env_constructor(cfg, mode="train")
-    test_make_env_list, test_oracle_context = env_constructor(cfg, mode="test")
+    train_make_env_list, train_oracle_context = env_constructor(cfg, mode="meta_train")
+    test_make_env_list, test_oracle_context = env_constructor(cfg, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
@@ -95,8 +95,9 @@ def main(cfg):
         storage=ListStorage(max_size=buffer_size),
     )
 
-    context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
-    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
+    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr,
+                                  weight_decay=cfg.world_model_weight_decay)
     model_opt = MultiOptimizer(module=module_opt, context=context_opt)
     if cfg.model_type == "causal":
         logits_opt = MultiOptimizer(
@@ -136,16 +137,11 @@ def main(cfg):
         # if (frames_per_task > cfg.reset_context_after_frames_per_task and
         #         frames_per_task % cfg.reset_context_frames_per_task == 0):
         #     world_model.reset()
-        #     train_model(cfg, replay_buffer, world_model, world_model_loss,
-        #                 cfg.model_learning_per_frame * task_num, model_opt, deterministic_mask=True)
-
-        if cfg.model_type == "causal":
-            logits = world_model.causal_mask.mask_logits
-            for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                logger.log_scalar(
-                    "mask_logits/{},{}".format(output_dim_map(out_dim), input_dim_map(in_dim)),
-                    logits[out_dim, in_dim],
-                )
+        #     train_model(
+        #         cfg, replay_buffer, world_model, world_model_loss,
+        #         cfg.model_learning_per_frame * task_num * 10, model_opt,
+        #         deterministic_mask=True
+        #     )
 
         if frames_per_task % cfg.eval_interval_frames_per_task == 0:
             evaluate_policy(cfg, train_make_env_list, explore_policy, logger)

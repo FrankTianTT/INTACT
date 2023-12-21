@@ -1,10 +1,10 @@
 # env cfg
 env_name: CartPoleContinuous-v0
-termination_fns: "cartpole"
-reward_fns: "ones"
+termination_fns: cartpole
+reward_fns: ones
 
 # learning
-train_frames_per_task: 20000
+train_frames_per_task: 1000
 init_frames_per_task: 50
 
 # planning
@@ -14,17 +14,19 @@ num_candidates: 350
 top_k: 35
 
 # model learning
-model_type: plain
+model_type: causal
 reinforce: True
 batch_size: 256
 buffer_size: 10000
 model_learning_per_frame: 5
+#model_learning_per_frame: 0
 train_mask_iters: 10
 train_model_iters: 40
 world_model_lr: 0.001
-context_lr: 0.01
+context_lr: 0.001
 observed_logits_lr: 0.002
-context_logits_lr: 0.002
+context_logits_lr: 0.0005
+world_model_weight_decay: 0.001
 hidden_size: 256
 hidden_layers: 2
 
@@ -40,10 +42,10 @@ sampling_times: 30
 
 # log
 exp_name: default
-logger: "wandb"
+logger: tensorboard
 offline_logging: False
-eval_interval_frames_per_task: 50
-#eval_interval_frames_per_task: 500000
+#eval_interval_frames_per_task: 50
+eval_interval_frames_per_task: 500000
 eval_repeat_nums: 3
 
 # meta-RL
@@ -52,17 +54,20 @@ max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
 meta_test_interval_frames_per_task: 200
-#meta_test_interval_frames_per_task: 100000
-reset_context_after_frames_per_task: 100
-reset_context_frames_per_task: 10
 meta_task_adjust_frames_per_task: 50
 meta_test_model_learning_per_frame: 5
+#meta_test_interval_frames_per_task: 1
+#meta_task_adjust_frames_per_task: 1
+#meta_test_model_learning_per_frame: 1
 oracle_context:
 #  gravity: [ 5.0, 20.0 ]
   #  masscart: [ 0.5, 4.5 ]
-  x_dot_bias: [ -1.0, 1.0 ]
-  theta_dot_bias: [ -1.0, 1.0 ]
+  x_dot_bias: [ -0.5, 0.5 ]
+  theta_dot_bias: [ -0.5, 0.5 ]
 #  theta_threshold_degree: [ 10.0, 20.0 ]
+new_oracle_context:
+  gravity: [ 5.0, 20.0 ]
+
 
 # other
-device: cuda:0
+device: cuda:1
