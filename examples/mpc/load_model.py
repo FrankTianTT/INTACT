@@ -55,7 +55,7 @@ def restore_make_env_list(cfg, oracle_context):
 
 
 def main(path, load_frames, train_frames_per_task):
-    cfg_path = os.path.join(path, ".hydra", "config.yaml")
+    cfg_path = os.path.join(path, ".hydra", "main.yaml")
     cfg = OmegaConf.load(cfg_path)
 
     if torch.cuda.is_available():

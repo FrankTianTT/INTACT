@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from causal_meta.stats.mcc import mean_corr_coef
-from example.identifiability.data_ganeration import gen_linear_data
+from examples.identifiability.data_ganeration import gen_linear_data
 from causal_meta.stats.metric import mutual_info_estimation
 
 

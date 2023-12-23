@@ -1,7 +1,10 @@
+defaults:
+  - overrides: cartpole
+
 # env cfg
-env_name: CartPoleContinuous-v0
-termination_fns: cartpole
-reward_fns: ones
+env_name: ${overrides.env_name}
+termination_fns: ${overrides.termination_fns}
+reward_fns: ${overrides.reward_fns}
 
 # learning
 train_frames_per_task: 2000
@@ -25,14 +28,14 @@ train_model_iters: 40
 world_model_lr: 0.001
 context_lr: 0.001
 observed_logits_lr: 0.002
-context_logits_lr: 0.0005
+context_logits_lr: 0.002
 world_model_weight_decay: 0.001
 hidden_size: 256
 hidden_layers: 2
 
 lambda_transition: 1.0
 lambda_reward: 0.0
-lambda_terminated: 0.0
+lambda_terminated: 10.0
 lambda_mutual_info: 0.0
 
 sparse_weight: 0.05
@@ -69,4 +72,4 @@ new_oracle_context:
 
 
 # other
-device: cuda:0
+device: cuda:1

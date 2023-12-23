@@ -35,7 +35,7 @@ from utils import (
 )
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg):
     if torch.cuda.is_available():
         device = torch.device(cfg.device)

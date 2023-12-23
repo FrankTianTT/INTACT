@@ -301,7 +301,6 @@ def meta_test(
             cfg, replay_buffer, world_model, world_model_loss,
             training_steps=cfg.meta_test_model_learning_per_frame * task_num,
             model_opt=context_opt,
-            deterministic_mask=True,
             logger=logger,
             log_prefix=f"meta_test_model_{frames_per_task}",
             iters=train_model_iters
@@ -329,7 +328,6 @@ def meta_test(
                 cfg, replay_buffer, world_model, world_model_loss,
                 training_steps=cfg.meta_test_model_learning_per_frame * task_num,
                 model_opt=model_opt, logits_opt=logits_opt,
-                deterministic_mask=False,
                 logger=logger,
                 log_prefix=f"meta_test_model_{frames_per_task}",
                 iters=train_model_iters,
