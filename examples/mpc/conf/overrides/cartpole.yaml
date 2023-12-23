@@ -1,3 +1,14 @@
-env_name: CartPoleContinuous-v0
-termination_fns: ""
+env_name: MyCartPole-v0
+termination_fns: "cartpole"
 reward_fns: ""
+
+train_frames_per_task: 2000
+init_frames_per_task: 50
+eval_interval_frames_per_task: 200
+meta_test_interval_frames_per_task: 400
+
+oracle_context:
+  x_dot_bias: [ -0.5, 0.5 ]
+  theta_dot_bias: [ -0.5, 0.5 ]
+new_oracle_context:
+  gravity: [ 5.0, 20.0 ]

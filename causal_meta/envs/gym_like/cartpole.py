@@ -14,7 +14,7 @@ from gym.envs.classic_control import utils
 from gym.error import DependencyNotInstalled
 
 
-class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
+class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
     """
     ### Description
 
@@ -94,8 +94,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             length: float = 0.5,
             force_mag: float = 10.0,
             tau: float = 0.05,
-            x_dot_bias: float = 0.0,
-            theta_dot_bias: float = 0.0,
+            cart_vel_bias: float = 0.0,
+            pole_vel_bias: float = 0.0,
             theta_threshold_degree: float = 12,
             render_mode: Optional[str] = None
     ):
@@ -109,8 +109,8 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.tau = tau  # seconds between state updates
         self.kinematics_integrator = "euler"
 
-        self.x_dot_bias = x_dot_bias
-        self.theta_dot_bias = theta_dot_bias
+        self.x_dot_bias = cart_vel_bias
+        self.theta_dot_bias = pole_vel_bias
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = theta_threshold_degree * 2 * math.pi / 360
@@ -172,9 +172,6 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             theta_dot = theta_dot + self.tau * thetaacc
             theta = theta + self.tau * theta_dot
 
-        # x += self.x_bias
-        # theta += self.theta_bias
-
         self.state = (x, x_dot, theta, theta_dot)
 
         terminated = bool(
@@ -203,7 +200,6 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         if self.render_mode == "human":
             self.render()
-
         return self.get_obs(), reward, terminated, False, {}
 
     def get_obs(self):
@@ -335,50 +331,3 @@ class CartPoleContinuousEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.display.quit()
             pygame.quit()
             self.isopen = False
-
-
-if __name__ == '__main__':
-    env = CartPoleContinuousEnv()
-    obss, next_obss, acts = [], [], []
-
-    obs, info = env.reset()
-    for i in range(1000):
-        action = env.action_space.sample()
-        next_obs, reward, done, t, info = env.step(action)
-
-        obss.append(obs)
-        next_obss.append(next_obs)
-        acts.append(action)
-
-        if done:
-            obs, info = env.reset()
-        else:
-            obs = next_obs
-
-    next_obss = np.array(next_obss)
-    obss = np.array(obss)
-    print(obss[:10, 1])
-    print((next_obss[:10, 0] - obss[:10, 0]) / 0.02)
-
-    # def f(s, action):
-    #
-    #     for g in [2, 10, 50]:
-    #         x, x_dot, theta, theta_dot = s
-    #         force = env.force_mag * action.squeeze()
-    #         costheta = math.cos(theta)
-    #         sintheta = math.sin(theta)
-    #
-    #         temp = (force + env.polemass_length * theta_dot ** 2 * sintheta) / env.total_mass
-    #         thetaacc = (g * sintheta - costheta * temp) / (
-    #                 env.length * (4.0 / 3.0 - env.masspole * costheta ** 2 / env.total_mass)
-    #         )
-    #         xacc = temp - env.polemass_length * thetaacc * costheta / env.total_mass
-    #
-    #         print(theta + theta_dot)
-    #     print()
-    #
-    #
-    # for i in range(len(obss)):
-    #     f(obss[i], acts[i])
-    #     # print((next_obss[i] - obss[i])[3])
-    #     # print()

@@ -24,7 +24,7 @@ from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
 
-from causal_meta.helpers.models import make_mlp_model
+from causal_meta.helpers.models import make_mdp_model
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.envs.mdp_env import MDPEnv

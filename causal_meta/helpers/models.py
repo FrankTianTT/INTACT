@@ -20,7 +20,7 @@ from causal_meta.envs.mdp_env import MDPEnv
 from causal_meta.helpers.envs import dreamer_env_constructor
 
 
-def make_mlp_model(
+def make_mdp_model(
         cfg,
         proof_env: EnvBase = None,
         device: DEVICE_TYPING = "cpu",

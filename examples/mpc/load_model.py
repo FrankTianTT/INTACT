@@ -20,7 +20,7 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
 
-from causal_meta.helpers.models import make_mlp_model
+from causal_meta.helpers.models import make_mdp_model
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
@@ -74,7 +74,7 @@ def main(path, load_frames, train_frames_per_task):
     task_num = len(train_make_env_list)
 
     proof_env = train_make_env_list[0]()
-    world_model, model_env = make_mlp_model(cfg, proof_env, device=device)
+    world_model, model_env = make_mdp_model(cfg, proof_env, device=device)
     world_model.load_state_dict(torch.load(os.path.join(path, "world_model", f"{load_frames}.pt"), map_location=device))
 
     world_model_loss = CausalWorldModelLoss(

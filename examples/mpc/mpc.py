@@ -18,7 +18,7 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
 
-from causal_meta.helpers.models import make_mlp_model
+from causal_meta.helpers.models import make_mdp_model
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
@@ -53,13 +53,13 @@ def main(cfg):
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    world_model, model_env = make_mlp_model(cfg, proof_env, device=device)
+    world_model, model_env = make_mdp_model(cfg, proof_env, device=device)
 
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
-        lambda_reward=cfg.lambda_reward,
-        lambda_terminated=cfg.lambda_terminated,
+        lambda_reward=cfg.lambda_reward if cfg.reward_fns != "" else 0.,
+        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns != "" else 0.,
         lambda_mutual_info=cfg.lambda_mutual_info,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
@@ -134,19 +134,10 @@ def main(cfg):
             iters=train_model_iters
         )
 
-        # if (frames_per_task > cfg.reset_context_after_frames_per_task and
-        #         frames_per_task % cfg.reset_context_frames_per_task == 0):
-        #     world_model.reset()
-        #     train_model(
-        #         cfg, replay_buffer, world_model, world_model_loss,
-        #         cfg.model_learning_per_frame * task_num * 10, model_opt,
-        #         deterministic_mask=True
-        #     )
-
-        if frames_per_task % cfg.eval_interval_frames_per_task == 0:
+        if (frames_per_task + 1) % cfg.eval_interval_frames_per_task == 0:
             evaluate_policy(cfg, train_make_env_list, explore_policy, logger)
 
-        if cfg.meta and frames_per_task % cfg.meta_test_interval_frames_per_task == 0:
+        if cfg.meta and (frames_per_task + 1) % cfg.meta_test_interval_frames_per_task == 0:
             meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, frames_per_task)
 
         if cfg.meta:
@@ -156,7 +147,7 @@ def main(cfg):
             print(world_model.causal_mask.printing_mask)
         logger.update(frames_per_task)
 
-        if frames_per_task % 100 == 0:
+        if (frames_per_task + 1) % cfg.save_model_frames_per_task == 0:
             os.makedirs("world_model", exist_ok=True)
             torch.save(world_model.state_dict(), os.path.join(f"world_model/{frames_per_task}.pt"))
 
