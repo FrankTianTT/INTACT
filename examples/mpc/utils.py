@@ -14,7 +14,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.probabilistic import set_interaction_mode
 from torchrl.envs.utils import step_mdp
-from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
+from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose, StepCounter
 from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
@@ -105,7 +105,7 @@ def env_constructor(cfg, mode="train"):
         if gym_kwargs is None:
             gym_kwargs = {}
         env = GymEnv(cfg.env_name, **gym_kwargs)
-        transforms = [DoubleToFloat(), RewardSum()]
+        transforms = [DoubleToFloat(), RewardSum(), StepCounter()]
         if idx is not None:
             transforms.append(MetaIdxTransform(idx, task_num))
         return TransformedEnv(env, transform=Compose(*transforms))
@@ -136,20 +136,21 @@ def evaluate_policy(
         make_env_list,
         policy,
         logger=None,
-        max_steps=200,
         log_prefix="meta_train",
 ):
     eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
     device = next(policy.parameters()).device
 
-    pbar = tqdm(total=cfg.eval_repeat_nums * max_steps, desc="{}_eval".format(log_prefix))
+    pbar = tqdm(total=cfg.eval_repeat_nums * cfg.env_max_steps, desc="{}_eval".format(log_prefix))
     repeat_rewards = []
+    repeat_lengths = []
     for repeat in range(cfg.eval_repeat_nums):
         rewards = torch.zeros(len(make_env_list), device=device)
+        lengths = torch.zeros(len(make_env_list), device=device)
         tensordict = eval_env.reset().to(device)
         ever_done = torch.zeros(*tensordict.batch_size, 1).to(bool).to(device)
 
-        for _ in range(max_steps):
+        for _ in range(cfg.env_max_steps):
             pbar.update()
             with set_interaction_mode("mode"):
                 action = policy(tensordict).cpu()
@@ -161,14 +162,17 @@ def evaluate_policy(
             reward[ever_done] = 0
             rewards += reward.reshape(-1)
             ever_done |= tensordict.get(("next", "done"))
+            lengths += (~ever_done).float().reshape(-1)
             if ever_done.all():
                 break
             else:
                 tensordict = step_mdp(tensordict, exclude_action=False)
         repeat_rewards.append(rewards)
+        repeat_lengths.append(lengths)
 
     if logger is not None:
         logger.log_scalar("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
+        logger.log_scalar("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
 
     return torch.stack(repeat_rewards)
 

@@ -51,6 +51,7 @@ logger: tensorboard
 offline_logging: False
 eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
 eval_repeat_nums: 3
+env_max_steps: ${overrides.env_max_steps}
 
 # meta-RL
 meta: True

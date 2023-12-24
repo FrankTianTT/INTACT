@@ -1,6 +1,7 @@
 env_name: MyCartPole-v0
 termination_fns: "cartpole"
 reward_fns: ""
+env_max_steps: 200
 
 train_frames_per_task: 2000
 init_frames_per_task: 50

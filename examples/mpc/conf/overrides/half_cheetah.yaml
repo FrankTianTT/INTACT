@@ -1,10 +1,15 @@
 env_name: MyHalfCheetah-v0
 termination_fns: "no_termination"
 reward_fns: ""
+env_max_steps: 1000
 
-train_frames_per_task: 5000
+#train_frames_per_task: 5000
+#init_frames_per_task: 100
+#eval_interval_frames_per_task: 500
+#meta_test_interval_frames_per_task: 1000
+train_frames_per_task: 50000
 init_frames_per_task: 100
-eval_interval_frames_per_task: 500
+eval_interval_frames_per_task: 1000
 meta_test_interval_frames_per_task: 1000
 
 planning_horizon: 30

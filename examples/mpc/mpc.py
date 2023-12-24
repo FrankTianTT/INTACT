@@ -119,7 +119,9 @@ def main(cfg):
 
         if tensordict["next", "done"].any():
             episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
+            episode_length = tensordict["next", "step_count"][tensordict["next", "done"]].float()
             logger.log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
+            logger.log_scalar("meta_train/rollout_episode_length", episode_length.mean())
 
         replay_buffer.extend(tensordict.reshape(-1))
 
