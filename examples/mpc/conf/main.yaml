@@ -36,7 +36,7 @@ observed_logits_lr: 0.002
 context_logits_lr: 0.002
 world_model_weight_decay: 0.001
 hidden_size: 256
-hidden_layers: 2
+hidden_layers: 4
 
 lambda_transition: 1.0
 lambda_reward: 10.0

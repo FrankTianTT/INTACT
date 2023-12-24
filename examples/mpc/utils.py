@@ -109,18 +109,20 @@ def evaluate_policy(
         if repeat < cfg.eval_record_nums:
             eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
 
-        rewards = torch.zeros(len(make_env_list), device=device)
-        lengths = torch.zeros(len(make_env_list), device=device)
+        rewards = torch.zeros(len(make_env_list))
+        lengths = torch.zeros(len(make_env_list))
         tensordict = eval_env.reset().to(device)
-        ever_done = torch.zeros(*tensordict.batch_size, 1).to(bool).to(device)
+        ever_done = torch.zeros(*tensordict.batch_size, 1).to(bool)
 
         for _ in range(cfg.env_max_steps):
             pbar.update()
             with set_interaction_mode("mode"):
-                action = policy(tensordict).cpu()
+                if "pixels" in tensordict.keys():
+                    del tensordict["pixels"]
+                action = policy(tensordict.to(device)).cpu()
                 with catch_warnings():
                     filterwarnings("ignore", category=UserWarning)
-                    tensordict = eval_env.step(action).to(device)
+                    tensordict = eval_env.step(action)
 
             reward = tensordict.get(("next", "reward"))
             reward[ever_done] = 0

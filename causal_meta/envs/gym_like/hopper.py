@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 from gym import utils
 from gym.envs.mujoco import MujocoEnv
@@ -332,11 +333,18 @@ class HopperEnv(MujocoEnv, utils.EzPickle):
 
 
 if __name__ == '__main__':
-    env = HopperEnv(render_mode="human")
-    env.reset()
-    for _ in range(1000000):
-        env.render()
-        obs, reward, done, t, info = env.step(env.action_space.sample())
+    from causal_meta.envs.termination_fns import hopper as hopper_termination_fns
 
-        if done or t:
-            env.reset()
+    env = HopperEnv()
+    obs, info = env.reset()
+    for _ in range(1000):
+        action = env.action_space.sample()
+        next_obs, reward, terminated, timeout, info = env.step(action)
+
+        t = hopper_termination_fns(None, None, torch.from_numpy(next_obs)).item()
+        assert t == terminated
+
+        if terminated:
+            obs, info = env.reset()
+        else:
+            obs = next_obs
