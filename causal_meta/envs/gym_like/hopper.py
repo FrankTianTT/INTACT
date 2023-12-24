@@ -145,7 +145,7 @@ class HopperEnv(MujocoEnv, utils.EzPickle):
             "rgb_array",
             "depth_array",
         ],
-        "render_fps": 100,
+        "render_fps": 50,
     }
 
     def __init__(
@@ -216,7 +216,7 @@ class HopperEnv(MujocoEnv, utils.EzPickle):
 
     def _initialize_simulation(self):
         super()._initialize_simulation()
-        self.model.opt.timestep = 0.01
+        self.model.opt.timestep = 0.02
 
     @property
     def healthy_reward(self):

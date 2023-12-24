@@ -2,6 +2,7 @@ from itertools import product
 from collections import defaultdict
 from functools import partial
 import os
+import time
 import math
 
 from tqdm import tqdm
@@ -12,7 +13,7 @@ from torchrl.envs.utils import step_mdp
 from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
 from torchrl.envs.libs import GymEnv
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.trainers.helpers.collectors import MultiaSyncDataCollector, SyncDataCollector
 from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
@@ -58,8 +59,8 @@ def main(cfg):
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
-        lambda_reward=cfg.lambda_reward if cfg.reward_fns != "" else 0.,
-        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns != "" else 0.,
+        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
+        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.,
         lambda_mutual_info=cfg.lambda_mutual_info,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
@@ -81,13 +82,17 @@ def main(cfg):
         sigma_end=0.3,
         spec=proof_env.action_spec,
     )
+    del proof_env
 
     collector = SyncDataCollector(
+        # create_env_fn=[lambda: SerialEnv(task_num, train_make_env_list, shared_memory=False)],
         create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
         policy=explore_policy,
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=task_num,
         init_random_frames=cfg.init_frames_per_task * task_num,
+        device=device,
+        storing_device=device,
     )
 
     buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
@@ -106,13 +111,6 @@ def main(cfg):
         )
     else:
         logits_opt = None
-
-    input_dim_map, output_dim_map = get_dim_map(
-        obs_dim=proof_env.observation_spec["observation"].shape[0],
-        action_dim=proof_env.action_spec.shape[0],
-        context_dim=cfg.max_context_dim if cfg.meta else 0
-    )
-    del proof_env
 
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
     train_model_iters = 0

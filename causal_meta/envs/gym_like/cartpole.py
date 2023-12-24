@@ -109,8 +109,8 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.tau = tau  # seconds between state updates
         self.kinematics_integrator = "euler"
 
-        self.x_dot_bias = cart_vel_bias
-        self.theta_dot_bias = pole_vel_bias
+        self.cart_vel_bias = cart_vel_bias
+        self.pole_vel_bias = pole_vel_bias
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = theta_threshold_degree * 2 * math.pi / 360
@@ -204,8 +204,8 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
     def get_obs(self):
         obs = np.array(self.state, dtype=np.float32)
-        obs[1] += self.x_dot_bias
-        obs[3] += self.theta_dot_bias
+        obs[1] += self.cart_vel_bias
+        obs[3] += self.pole_vel_bias
         return obs
 
     def reset(

@@ -192,6 +192,9 @@ def find_world_model(policy, task_num):
     return new_policy, new_world_model
 
 
+from time import time
+
+
 def train_model(
         cfg,
         replay_buffer,
@@ -211,7 +214,9 @@ def train_model(
 
     for step in range(training_steps):
         world_model.zero_grad()
-        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size)
+        sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
 
         if train_logits and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
             grad = world_model_loss.reinforce(sampled_tensordict, only_train)
@@ -244,7 +249,6 @@ def train_model(
                     logger.log_scalar(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
         iters += 1
-
         # if logits_opt is None:
         #     print(world_model.context_model.context_hat.data.std(dim=0))
     return iters

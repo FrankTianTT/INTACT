@@ -139,7 +139,7 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
             "rgb_array",
             "depth_array",
         ],
-        "render_fps": 100,
+        "render_fps": 50,
     }
 
     def __init__(
@@ -191,9 +191,9 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
             self, "half_cheetah.xml", 1, observation_space=observation_space, **kwargs
         )
 
-    # def _initialize_simulation(self):
-    #     super()._initialize_simulation()
-    #     self.model.opt.timestep = 0.01
+    def _initialize_simulation(self):
+        super()._initialize_simulation()
+        self.model.opt.timestep = 0.02
 
     def control_cost(self, action):
         control_cost = self._ctrl_cost_weight * np.sum(np.square(action))
@@ -279,11 +279,15 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
 
 
 if __name__ == '__main__':
-    env = HalfCheetahEnv(render_mode="human")
+    env = HalfCheetahEnv()
     env.reset()
-    for _ in range(1000000):
-        env.render()
+    vel = []
+    for _ in range(10000):
         obs, reward, done, t, info = env.step(env.action_space.sample())
+        vel.append(obs[8:11])
 
         if done or t:
             env.reset()
+
+    print(np.array(vel).max(0))
+    print(np.array(vel).min(0))

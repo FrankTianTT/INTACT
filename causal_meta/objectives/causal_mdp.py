@@ -134,18 +134,19 @@ class CausalWorldModelLoss(LossModule):
         assert self.causal_mask.reinforce, "causal_mask should be learned by reinforce"
 
         tensordict = tensordict.clone()
-        tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
+        with torch.no_grad():
+            tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
+            _, loss_tensor = self.loss(tensordict.reshape(-1), reduction="none")
 
-        _, loss_tensor = self.loss(tensordict.reshape(-1), reduction="none")
-        sampling_loss = loss_tensor.reshape(*tensordict.batch_size, -1)
+            sampling_loss = loss_tensor.reshape(*tensordict.batch_size, -1)
 
-        mask_grad = self.causal_mask.total_mask_grad(
-            sampling_mask=tensordict.get("causal_mask"),
-            sampling_loss=sampling_loss,
-            sparse_weight=self.sparse_weight,
-            context_sparse_weight=self.context_sparse_weight,
-            context_max_weight=self.context_max_weight
-        )
+            mask_grad = self.causal_mask.total_mask_grad(
+                sampling_mask=tensordict.get("causal_mask"),
+                sampling_loss=sampling_loss,
+                sparse_weight=self.sparse_weight,
+                context_sparse_weight=self.context_sparse_weight,
+                context_max_weight=self.context_max_weight
+            )
 
         if only_train is not None:
             not_train = torch.ones(mask_grad.shape[0]).to(bool)

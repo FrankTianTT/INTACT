@@ -14,13 +14,13 @@ init_frames_per_task: ${overrides.init_frames_per_task}
 save_model_frames_per_task: 1000
 
 # planning
-planning_horizon: 15
+planning_horizon: ${overrides.planning_horizon}
 optim_steps: 5
 num_candidates: 350
 top_k: 35
 
 # model learning
-model_type: causal
+model_type: plain
 reinforce: True
 batch_size: 256
 buffer_size: 10000
@@ -40,9 +40,9 @@ lambda_reward: 10.0
 lambda_terminated: 10.0
 lambda_mutual_info: 0.0
 
-sparse_weight: 0.05
-context_sparse_weight: 0.02
-context_max_weight: 0.1
+sparse_weight: ${overrides.sparse_weight}
+context_sparse_weight: ${overrides.context_sparse_weight}
+context_max_weight: ${overrides.context_max_weight}
 sampling_times: 30
 
 # log
@@ -64,4 +64,4 @@ oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 
 # other
-device: cuda:1
+device: cuda:0

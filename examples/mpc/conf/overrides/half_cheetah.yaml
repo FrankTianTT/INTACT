@@ -7,9 +7,15 @@ init_frames_per_task: 100
 eval_interval_frames_per_task: 500
 meta_test_interval_frames_per_task: 1000
 
+planning_horizon: 30
+
+sparse_weight: 0.01
+context_sparse_weight: 0.005
+context_max_weight: 0.0
+
 oracle_context:
-  torso_x_vel_bias: [ -0.5, 0.5 ]
-  torso_z_vel_bias: [ -0.5, 0.5 ]
-  torso_angle_vel_bias: [ -0.5, 0.5 ]
+#  torso_x_vel_bias: [ -0.5, 0.5 ]
+  torso_z_vel_bias: [ -2.0, 2.0 ]
+  torso_angle_vel_bias: [ -2.0, 2.0 ]
 new_oracle_context:
-  goal_velocity: [ 2.0, 10.0 ]
+  goal_velocity: [ 0.5, 2.0 ]
