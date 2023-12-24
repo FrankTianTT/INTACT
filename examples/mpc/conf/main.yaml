@@ -1,10 +1,13 @@
 defaults:
   - overrides: cartpole
+  - _self_
+
 
 # env cfg
 env_name: ${overrides.env_name}
 termination_fns: ${overrides.termination_fns}
 reward_fns: ${overrides.reward_fns}
+env_max_steps: ${overrides.env_max_steps}
 
 # learning
 train_frames_per_task: ${overrides.train_frames_per_task}
@@ -51,7 +54,7 @@ logger: tensorboard
 offline_logging: False
 eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
 eval_repeat_nums: 3
-env_max_steps: ${overrides.env_max_steps}
+eval_record_nums: 1
 
 # meta-RL
 meta: True
@@ -66,3 +69,10 @@ new_oracle_context: ${overrides.new_oracle_context}
 
 # other
 device: cuda:0
+collector_device: cpu
+
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: True

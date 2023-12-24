@@ -20,19 +20,17 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
 
-from causal_meta.helpers.models import make_mdp_model
+from causal_meta.helpers import make_mdp_model, build_logger
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 from utils import (
-    env_constructor,
-    get_dim_map,
+    build_make_env_list,
     evaluate_policy,
     meta_test,
     plot_context,
     MultiOptimizer,
-    MyLogger,
     train_model
 )
 
@@ -64,12 +62,12 @@ def main(path, load_frames, train_frames_per_task):
         device = torch.device("cpu")
     print(f"Using device {device}")
 
-    logger = MyLogger(cfg, log_dir=os.path.join(path, "load_model"))
+    logger = build_logger(cfg, log_dir=os.path.join(path, "load_model"))
 
     train_oracle_context = torch.load(os.path.join(path, "train_oracle_context.pt"), map_location=device)
     test_oracle_context = torch.load(os.path.join(path, "test_oracle_context.pt"), map_location=device)
-    train_make_env_list = restore_make_env_list(cfg, train_oracle_context)
-    test_make_env_list = restore_make_env_list(cfg, test_oracle_context)
+    train_make_env_list = build_make_env_list(cfg, train_oracle_context)
+    test_make_env_list = build_make_env_list(cfg, test_oracle_context)
 
     task_num = len(train_make_env_list)
 

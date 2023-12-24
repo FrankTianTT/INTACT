@@ -19,19 +19,18 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from matplotlib import pyplot as plt
 
-from causal_meta.helpers.models import make_mdp_model
+from causal_meta.helpers import make_mdp_model, build_logger
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 from utils import (
     env_constructor,
-    get_dim_map,
+    build_make_env_list,
     evaluate_policy,
     meta_test,
     plot_context,
     MultiOptimizer,
-    MyLogger,
     train_model
 )
 
@@ -44,7 +43,7 @@ def main(cfg):
         device = torch.device("cpu")
     print(f"Using device {device}")
 
-    logger = MyLogger(cfg)
+    logger = build_logger(cfg)
 
     train_make_env_list, train_oracle_context = env_constructor(cfg, mode="meta_train")
     test_make_env_list, test_oracle_context = env_constructor(cfg, mode="meta_test")
@@ -91,8 +90,8 @@ def main(cfg):
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=task_num,
         init_random_frames=cfg.init_frames_per_task * task_num,
-        device=device,
-        storing_device=device,
+        device=cfg.collector_device,
+        storing_device=cfg.collector_device,
     )
 
     buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
@@ -120,8 +119,8 @@ def main(cfg):
         if tensordict["next", "done"].any():
             episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
             episode_length = tensordict["next", "step_count"][tensordict["next", "done"]].float()
-            logger.log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
-            logger.log_scalar("meta_train/rollout_episode_length", episode_length.mean())
+            logger.add_scaler("meta_train/rollout_episode_reward", episode_reward.mean())
+            logger.add_scaler("meta_train/rollout_episode_length", episode_length.mean())
 
         replay_buffer.extend(tensordict.reshape(-1))
 
@@ -135,7 +134,7 @@ def main(cfg):
         )
 
         if (frames_per_task + 1) % cfg.eval_interval_frames_per_task == 0:
-            evaluate_policy(cfg, train_make_env_list, explore_policy, logger)
+            evaluate_policy(cfg, train_oracle_context, explore_policy, logger, frames_per_task)
 
         if cfg.meta and (frames_per_task + 1) % cfg.meta_test_interval_frames_per_task == 0:
             meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, frames_per_task)
@@ -145,7 +144,7 @@ def main(cfg):
         if cfg.model_type == "causal":
             print()
             print(world_model.causal_mask.printing_mask)
-        logger.update(frames_per_task)
+        logger.dump_scaler(frames_per_task)
 
         if (frames_per_task + 1) % cfg.save_model_frames_per_task == 0:
             os.makedirs("world_model", exist_ok=True)

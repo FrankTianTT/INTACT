@@ -16,7 +16,9 @@ from tensordict.nn.probabilistic import set_interaction_mode
 from torchrl.envs.utils import step_mdp
 from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose, StepCounter
 from torchrl.envs.libs import GymEnv
-from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.collectors.collectors import RandomPolicy
+from torchrl.record.loggers import generate_exp_name
+from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import ListStorage
@@ -40,78 +42,33 @@ class MultiOptimizer:
             opt.step()
 
 
-class MyLogger:
-    def __init__(self, cfg, name="mpc", log_dir=""):
-        exp_name = generate_exp_name(name.upper(), cfg.exp_name)
-        if log_dir == "":
-            log_dir = os.path.join(log_dir, name)
-
-        self.logger = get_logger(
-            logger_type=cfg.logger,
-            logger_name=log_dir,
-            experiment_name=exp_name,
-            wandb_kwargs={
-                "project": "causal_rl",
-                "group": f"MPC_{cfg.env_name}",
-                "config": dict(cfg),
-                "offline": cfg.offline_logging,
-            },
-        )
-        self._cache = defaultdict(list)
-
-    def log_scalar(self, key, value):
-        if isinstance(value, torch.Tensor):
-            value = value.detach().item()
-        self._cache[key].append(value)
-
-    def update(self, step):
-        for key, value in self._cache.items():
-            if len(value) == 0:
-                continue
-            if len(value) > 1:
-                value = torch.tensor(value).mean()
-            else:
-                value = value[0]
-
-            self.logger.log_scalar(key, value, step=step)
-
-        self._cache = defaultdict(list)
+def make_env(env_name, gym_kwargs=None, idx=None, task_num=None, record=False):
+    if gym_kwargs is None:
+        gym_kwargs = {}
+    if record:
+        gym_kwargs["from_pixels"] = True
+        gym_kwargs["pixels_only"] = False
+    env = GymEnv(env_name, **gym_kwargs)
+    transforms = [DoubleToFloat(), RewardSum(), StepCounter()]
+    if idx is not None:
+        transforms.append(MetaIdxTransform(idx, task_num))
+    return TransformedEnv(env, transform=Compose(*transforms))
 
 
-def get_dim_map(obs_dim, action_dim, context_dim):
-    def input_dim_map(dim):
-        assert dim < obs_dim + action_dim + context_dim
-        if dim < obs_dim:
-            return "obs_{}".format(dim)
-        elif dim < obs_dim + action_dim:
-            return "action_{}".format(dim - obs_dim)
-        else:
-            return "context_{}".format(dim - obs_dim - action_dim)
-
-    def output_dim_map(dim):
-        assert dim < obs_dim + 2
-        if dim < obs_dim:
-            return "obs_{}".format(dim)
-        elif dim < obs_dim + 1:
-            return "reward"
-        else:
-            return "terminated"
-
-    return input_dim_map, output_dim_map
+def build_make_env_list(env_name, oracle_context=None, record=False):
+    if oracle_context is None:
+        return [partial(make_env, env_name=env_name, record=record)]
+    else:
+        make_env_list = []
+        for idx in range(oracle_context.shape[0]):
+            gym_kwargs = dict([(key, value.item()) for key, value in oracle_context[idx].items()])
+            make_env_list.append(partial(make_env, env_name=env_name, gym_kwargs=gym_kwargs, idx=idx, record=record))
+        return make_env_list
 
 
-def env_constructor(cfg, mode="train"):
-    def make_env(gym_kwargs=None, idx=None, task_num=None):
-        if gym_kwargs is None:
-            gym_kwargs = {}
-        env = GymEnv(cfg.env_name, **gym_kwargs)
-        transforms = [DoubleToFloat(), RewardSum(), StepCounter()]
-        if idx is not None:
-            transforms.append(MetaIdxTransform(idx, task_num))
-        return TransformedEnv(env, transform=Compose(*transforms))
-
+def env_constructor(cfg, mode="train", record=False):
     if not cfg.meta:
-        return [make_env], None
+        return [partial(make_env, env_name=cfg.env_name, record=record)], None
     else:
         task_num = cfg.task_num if mode == "meta_train" else cfg.meta_test_task_num
         assert task_num >= 1
@@ -127,24 +84,31 @@ def env_constructor(cfg, mode="train"):
         make_env_list = []
         for idx in range(task_num):
             gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
-            make_env_list.append(partial(make_env, gym_kwargs=gym_kwargs, idx=idx))
+            make_env_list.append(
+                partial(make_env, env_name=cfg.env_name, gym_kwargs=gym_kwargs, idx=idx, record=record)
+            )
         return make_env_list, oracle_context
 
 
 def evaluate_policy(
         cfg,
-        make_env_list,
+        oracle_context,
         policy,
-        logger=None,
+        logger,
+        frames_per_task,
         log_prefix="meta_train",
 ):
-    eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
     device = next(policy.parameters()).device
 
     pbar = tqdm(total=cfg.eval_repeat_nums * cfg.env_max_steps, desc="{}_eval".format(log_prefix))
     repeat_rewards = []
     repeat_lengths = []
     for repeat in range(cfg.eval_repeat_nums):
+        make_env_list = build_make_env_list(cfg.env_name, oracle_context, record=repeat < cfg.eval_record_nums)
+        eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
+        if repeat < cfg.eval_record_nums:
+            eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
+
         rewards = torch.zeros(len(make_env_list), device=device)
         lengths = torch.zeros(len(make_env_list), device=device)
         tensordict = eval_env.reset().to(device)
@@ -170,9 +134,13 @@ def evaluate_policy(
         repeat_rewards.append(rewards)
         repeat_lengths.append(lengths)
 
+        if repeat < cfg.eval_record_nums:
+            eval_env.transform.dump(suffix=str(frames_per_task))
+
     if logger is not None:
-        logger.log_scalar("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
-        logger.log_scalar("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
+        logger.add_scaler("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
+        logger.add_scaler("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
+        logger.dump_scaler(frames_per_task)
 
     return torch.stack(repeat_rewards)
 
@@ -234,7 +202,7 @@ def train_model(
                     in_name = f"i{in_dim}"
                 else:
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.log_scalar(f"{log_prefix}/logits({out_name},{in_name})", logits[out_dim, in_dim])
+                logger.add_scaler(f"{log_prefix}/logits({out_name},{in_name})", logits[out_dim, in_dim])
         else:
             loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
             context_penalty = (world_model.context_model.context_hat ** 2).sum()
@@ -244,13 +212,13 @@ def train_model(
 
             if logger is not None:
                 for dim in range(loss_td["transition_loss"].shape[-1]):
-                    logger.log_scalar(f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
-                logger.log_scalar(f"{log_prefix}/reward", loss_td["reward_loss"].mean())
-                logger.log_scalar(f"{log_prefix}/terminated", loss_td["terminated_loss"].mean())
+                    logger.add_scaler(f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
+                logger.add_scaler(f"{log_prefix}/reward", loss_td["reward_loss"].mean())
+                logger.add_scaler(f"{log_prefix}/terminated", loss_td["terminated_loss"].mean())
                 if "mutual_info_loss" in loss_td.keys():
-                    logger.log_scalar(f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                    logger.add_scaler(f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
                 if "context_loss" in loss_td.keys():
-                    logger.log_scalar(f"{log_prefix}/context", loss_td["context_loss"].mean())
+                    logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
         iters += 1
         # if logits_opt is None:
@@ -267,7 +235,7 @@ def meta_test(
         frames_per_task,
         adapt_threshold=-3.
 ):
-    logger.update(frames_per_task)
+    logger.dump_scaler(frames_per_task)
 
     task_num = len(make_env_list)
 
@@ -314,7 +282,7 @@ def meta_test(
             iters=train_model_iters
         )
         plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{frames_per_task}")
-        logger.update(frame)
+        logger.dump_scaler(frame)
 
     if cfg.get("new_oracle_context", None):  # adapt to target domain, only for transition
         with torch.no_grad():
@@ -343,7 +311,7 @@ def meta_test(
             )
             plot_context(cfg, world_model, oracle_context, logger, frame,
                          log_prefix=f"meta_test_model_{frames_per_task}")
-            logger.update(frame)
+            logger.dump_scaler(frame)
             if cfg.model_type == "causal":
                 print("meta test causal mask:")
                 print(world_model.causal_mask.printing_mask)
@@ -409,14 +377,28 @@ def plot_context(
     plt.close()
 
     if logger is not None:
-        logger.log_scalar("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
-        logger.log_scalar("{}/mcc".format(log_prefix), mcc)
+        logger.add_scaler("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
+        logger.add_scaler("{}/mcc".format(log_prefix), mcc)
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.3", config_path="conf", config_name="main")
 def test_env_constructor(cfg):
-    train_make_env_list, train_oracle_context = env_constructor(cfg, mode="meta_train")
-    test_make_env_list, test_oracle_context = env_constructor(cfg, mode="meta_test")
+    from causal_meta.helpers import build_logger
+
+    make_env_list, oracle_context = env_constructor(cfg, mode="meta_train")
+    logger = build_logger(cfg)
+    # evaluate_policy(cfg, train_make_env_list)
+
+    eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
+    eval_env = TransformedEnv(eval_env, VideoRecorder(logger, "test"))
+    policy = RandomPolicy(eval_env.action_spec)
+
+    td = eval_env.reset()
+    for i in range(10):
+        td = eval_env.step(policy(td))
+        logger.log_scalar("test/episode_reward", 1, i)
+
+    eval_env.transform.dump()
 
 
 if __name__ == '__main__':
