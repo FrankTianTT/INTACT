@@ -2,21 +2,23 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.objectives.dreamer import DreamerModelLoss
-from causal_meta.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
+from causal_meta.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
 
 
 class CausalDreamerModelLoss(DreamerModelLoss):
 
     def __init__(
             self,
-            world_model: CausalDreamerWrapper,
+            world_model: DreamerWrapper,
             sparse_weight: float = 0.02,
             context_sparse_weight: float = 0.01,
             context_max_weight: float = 0.2,
             sampling_times: int = 30,
             **kwargs
     ):
+        self.model_type = world_model.model_type
         super().__init__(world_model, **kwargs)
+
         self.sparse_weight = sparse_weight
         self.context_sparse_weight = context_sparse_weight
         self.context_max_weight = context_max_weight
@@ -25,7 +27,8 @@ class CausalDreamerModelLoss(DreamerModelLoss):
         self.variable_num = self.world_model.variable_num
         self.state_dim_per_variable = self.world_model.state_dim_per_variable
 
-        self.causal_mask = self.world_model.causal_mask
+        if self.model_type == "causal":
+            self.causal_mask = self.world_model.causal_mask
 
     def reinforce(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)

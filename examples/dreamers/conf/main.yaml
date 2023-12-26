@@ -10,8 +10,8 @@ env_max_steps: ${overrides.env_max_steps}
 
 
 train_frames_per_task: 500000
-frames_per_batch: 800
-init_frames_per_task: 1000
+frames_per_batch: 1000
+init_frames_per_task: 5000
 
 batch_size: 50
 batch_length: 25
@@ -35,6 +35,7 @@ logger: tensorboard
 offline_logging: False
 
 # model learning
+model_type: plain
 variable_num: 10
 state_dim_per_variable: 3
 hidden_dim_per_variable: 20
@@ -53,13 +54,19 @@ max_context_dim: 10
 task_num: 50
 
 
-lambda_continue: 10.0
-
+lambda_kl: 1.0
+lambda_reco: 1.0
+lambda_reward: 1.0
+lambda_continue: 1.0
+imagination_horizon: 15
+discount_loss: False
 pred_continue: True
 
 train_causal_iters: 0
 train_model_iters: 50
 
+
+grad_clip: 100
 
 
 # other

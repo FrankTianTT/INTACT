@@ -2,17 +2,17 @@ from typing import Any
 from copy import deepcopy
 
 import torch
-from tensordict.nn import TensorDictSequential, TensorDictModule
+from tensordict.nn import TensorDictModule
 from tensordict import TensorDict, TensorDictBase
 
-from causal_meta.modules.models.mdp_world_model import BaseMDPWorldModel, PlainMDPWorldModel, CausalWorldModel, \
-    INNWorldModel
+from causal_meta.modules.models.base_world_model import BaseWorldModel
+from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
 
 
 class MDPWrapper(TensorDictModule):
     def __init__(
             self,
-            mdp_world_model: BaseMDPWorldModel,
+            mdp_world_model: BaseWorldModel,
     ):
         if isinstance(mdp_world_model, PlainMDPWorldModel):
             out_keys = ["obs_mean", "obs_log_var", "reward_mean", "reward_log_var", "terminated"]
@@ -32,12 +32,11 @@ class MDPWrapper(TensorDictModule):
             out_keys=out_keys,
         )
 
-        self.causal = isinstance(mdp_world_model, CausalWorldModel)
         self.learn_obs_var = mdp_world_model.learn_obs_var
 
     @property
-    def world_model(self) -> BaseMDPWorldModel:
-        assert isinstance(self.module, BaseMDPWorldModel)
+    def world_model(self) -> BaseWorldModel:
+        assert isinstance(self.module, BaseWorldModel)
         return self.module
 
     def get_parameter(self, key):
@@ -45,7 +44,7 @@ class MDPWrapper(TensorDictModule):
 
     @property
     def causal_mask(self):
-        assert self.causal, "causal_mask is only available for CausalWorldModel"
+        assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"
         return self.world_model.causal_mask
 
     @property

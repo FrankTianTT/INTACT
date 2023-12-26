@@ -25,18 +25,6 @@ from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 
 from utils import grad_norm, match_length
 
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        DreamerConfig,
-        TrainerConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
-
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg: "DictConfig"):  # noqa: F821
@@ -65,10 +53,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg=cfg,
         proof_environment=proof_env,
         device=device,
-
     )
 
-    # Losses
     world_model_loss = CausalDreamerModelLoss(
         world_model,
         lambda_kl=cfg.lambda_kl,
@@ -97,17 +83,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy,
         sigma_init=0.3,
         sigma_end=0.3,
-        # annealing_num_steps=cfg.total_frames,
     ).to(device)
 
     collector = SyncDataCollector(
         create_env_fn=ParallelEnv(task_num, train_make_env_list),
-        actor_model_explore=exploration_policy,
+        policy=exploration_policy,
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=cfg.frames_per_batch,
         init_random_frames=cfg.init_frames_per_task * task_num,
         device=cfg.collector_device,
         storing_device=cfg.collector_device,
+        split_trajs=True
     )
 
     # replay buffer
@@ -119,16 +105,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
-    mask_logits_opt = torch.optim.Adam(world_model.get_parameter("mask_logits"), lr=cfg.mask_logits_lr)
+    if cfg.model_type == "causal":
+        mask_logits_opt = torch.optim.Adam(world_model.get_parameter("causal_mask"), lr=cfg.mask_logits_lr)
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
     # Training loop
     collected_frames = 0
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
-    for frames_per_task, tensordict in enumerate(collector):
+    for i, tensordict in enumerate(collector):
         current_frames = tensordict.get(("collector", "mask")).sum().item()
         pbar.update(current_frames)
         collected_frames += current_frames
@@ -146,15 +133,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger.add_scaler("rollout/episode_reward_mean", mean_episode_reward)
         logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
         logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
+        logger.dump_scaler(collected_frames)
 
         if collected_frames < cfg.init_frames_per_task * task_num:
             continue
 
         for j in range(cfg.optim_steps_per_batch):
-            # sample from replay buffer
             sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-            # update world model
             if True:
                 model_loss_td, sampled_tensordict = world_model_loss(
                     sampled_tensordict
@@ -167,19 +153,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
 
                 loss_world_model.backward()
-                clip_grad_norm_(world_model.get_parameter("module"), cfg.grad_clip)
+                clip_grad_norm_(world_model.get_parameter("nets"), cfg.grad_clip)
                 world_model_opt.step()
                 context_opt.step()
 
-                if do_log:
-                    logger.add_scaler("world_model/total_loss", loss_world_model)
-                    logger.add_scaler("world_model/grad", grad_norm(world_model_opt))
-                    logger.add_scaler("world_model/kl_loss", model_loss_td["loss_model_kl"])
-                    logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
-                    logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
-                    logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
-                    logger.add_scaler("world_model/mean_continue",
-                                      (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+                logger.add_scaler("world_model/total_loss", loss_world_model)
+                logger.add_scaler("world_model/grad", grad_norm(world_model_opt))
+                logger.add_scaler("world_model/kl_loss", model_loss_td["loss_model_kl"])
+                logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
+                logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
+                logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
+                mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
+                logger.add_scaler("world_model/mean_continue", mean_continue)
                 world_model_opt.zero_grad()
             else:
                 grad = world_model_loss.reinforce(sampled_tensordict)
@@ -197,11 +182,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_loss_td["loss_actor"].backward()
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
                 actor_opt.step()
-                if do_log:
-                    logger.add_scaler("actor/loss", actor_loss_td["loss_actor"])
-                    logger.add_scaler("actor/grad", grad_norm(actor_opt))
-                    logger.add_scaler("actor/action_mean", sampled_tensordict["action"].mean())
-                    logger.add_scaler("actor/action_std", sampled_tensordict["action"].std())
+
+                logger.add_scaler("actor/loss", actor_loss_td["loss_actor"])
+                logger.add_scaler("actor/grad", grad_norm(actor_opt))
+                logger.add_scaler("actor/action_mean", sampled_tensordict["action"].mean())
+                logger.add_scaler("actor/action_std", sampled_tensordict["action"].std())
                 actor_opt.zero_grad()
 
                 # update value network
@@ -209,15 +194,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 value_loss_td["loss_value"].backward()
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
                 value_opt.step()
-                if do_log:
-                    logger.add_scaler("value/loss", value_loss_td["loss_value"])
-                    logger.add_scaler("value/grad", grad_norm(value_opt))
-                    logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
-                    logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
-                    logger.add_scaler("value/mean_continue",
-                                      (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+
+                logger.add_scaler("value/loss", value_loss_td["loss_value"])
+                logger.add_scaler("value/grad", grad_norm(value_opt))
+                logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
+                logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
+                logger.add_scaler("value/mean_continue",
+                                  (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
                 value_opt.zero_grad()
 
+        logger.dump_scaler(collected_frames)
         if cfg.exploration != "":
             exploration_policy.step(current_frames)
         collector.update_policy_weights_()

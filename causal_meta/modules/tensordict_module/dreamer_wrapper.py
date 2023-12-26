@@ -6,9 +6,9 @@ from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPoste
 from torchrl.modules.models.models import MLP
 
 from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
 
-
-class CausalDreamerWrapper(TensorDictSequential):
+class DreamerWrapper(TensorDictSequential):
     def __init__(
             self,
             obs_encoder: TensorDictModule,
@@ -32,18 +32,31 @@ class CausalDreamerWrapper(TensorDictSequential):
 
         super().__init__(*models)
 
+        if isinstance(self.rssm_prior, PlainRSSMPrior):
+            self.model_type = "plain"
+        elif isinstance(self.rssm_prior, CausalRSSMPrior):
+            self.model_type = "causal"
+        else:
+            raise NotImplementedError
+
+    @property
+    def rssm_rollout(self):
+        return self.module[1]
+
+    @property
+    def rssm_prior(self):
+        return self.rssm_rollout.rssm_prior.module
+
     @property
     def causal_mask(self):
-        _, rssm_rollout, *_ = self.module
-        return rssm_rollout.rssm_prior.causal_mask
+        return self.rssm_prior.causal_mask
 
     @property
     def context_model(self):
-        _, rssm_rollout, *_ = self.module
-        return rssm_rollout.rssm_prior.context_model
+        return self.rssm_prior.context_model
 
     def get_parameter(self, target: str):
-        if target == "module":
+        if target == "nets":
             for name, param in self.named_parameters(recurse=True):
                 if "context_hat" not in name and "mask_logits" not in name:
                     yield param
@@ -51,9 +64,9 @@ class CausalDreamerWrapper(TensorDictSequential):
             for name, param in self.named_parameters(recurse=True):
                 if "context_hat" in name:
                     yield param
-        elif target == "mask_logits":
+        elif target == "causal_mask":
             for name, param in self.named_parameters(recurse=True):
-                if "mask_logits" in name:
+                if "causal_mask" in name:
                     yield param
         else:
             raise NotImplementedError
@@ -159,7 +172,7 @@ def build_example_causal_dreamer_wrapper(meta=False):
     else:
         continue_model = None
 
-    world_model = CausalDreamerWrapper(
+    world_model = DreamerWrapper(
         obs_encoder=obs_encoder,
         rssm_rollout=rssm_rollout,
         obs_decoder=obs_decoder,
@@ -237,10 +250,13 @@ def test_optimize():
 
     continue_loss.backward()
 
-    for param in world_model.get_parameter("module"):
+    for param in world_model.get_parameter("nets"):
         if param.grad is not None:
             assert not torch.isnan(param.grad).any()
             assert not torch.isinf(param.grad).any()
+
+    for name, p in world_model.named_parameters():
+        print(name)
 
 
 if __name__ == '__main__':

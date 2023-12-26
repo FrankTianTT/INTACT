@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import partial
 
 import torch
 from torch import nn
@@ -13,8 +14,9 @@ from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_v
 from torchrl.modules.models.model_based import RSSMRollout
 
 from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
 from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
-from causal_meta.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
+from causal_meta.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
 from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 from causal_meta.envs.mdp_env import MDPEnv
 
@@ -28,35 +30,24 @@ def make_mdp_model(
     action_dim = proof_env.action_spec.shape[0]
 
     if cfg.model_type == "causal":
-        world_model = CausalWorldModel(
-            obs_dim=obs_dim,
-            action_dim=action_dim,
-            meta=cfg.meta,
+        wm_class = partial(
+            CausalWorldModel,
             reinforce=cfg.reinforce,
-            max_context_dim=cfg.max_context_dim,
-            task_num=cfg.task_num,
-            hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
         )
     elif cfg.model_type == "plain":
-        world_model = PlainMDPWorldModel(
-            obs_dim,
-            action_dim,
-            meta=cfg.meta,
-            max_context_dim=cfg.max_context_dim,
-            task_num=cfg.task_num,
-            hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
-        )
+        wm_class = PlainMDPWorldModel
     elif cfg.model_type == "inn":
-        world_model = INNWorldModel(
-            obs_dim,
-            action_dim,
-            meta=cfg.meta,
-            task_num=cfg.task_num,
-            hidden_size=cfg.hidden_size,
-            hidden_layers=cfg.hidden_layers
-        )
+        wm_class = INNWorldModel
     else:
         raise NotImplementedError
+    world_model = wm_class(
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        meta=cfg.meta,
+        max_context_dim=cfg.max_context_dim,
+        task_num=cfg.task_num,
+        hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
+    )
     world_model = MDPWrapper(world_model).to(device)
 
     model_env = MDPEnv(
@@ -76,12 +67,19 @@ def make_causal_dreamer(
         action_key: str = "action",
         value_key: str = "state_value",
         use_decoder_in_env: bool = False,
-) -> nn.ModuleList:
+):
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
 
-    rssm_prior = CausalRSSMPrior(
+    if cfg.model_type == "causal":
+        rssm_prior_class = CausalRSSMPrior
+    elif cfg.model_type == "plain":
+        rssm_prior_class = PlainRSSMPrior
+    else:
+        raise NotImplementedError
+
+    rssm_prior = rssm_prior_class(
         action_dim=proof_environment.action_space.shape[0],
         variable_num=cfg.variable_num,
         state_dim_per_variable=cfg.state_dim_per_variable,
@@ -91,6 +89,7 @@ def make_causal_dreamer(
         task_num=cfg.task_num,
         residual=cfg.residual,
     )
+
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.hidden_dim_per_variable * cfg.variable_num,
         state_dim=cfg.state_dim_per_variable * cfg.variable_num,
@@ -131,13 +130,13 @@ def make_causal_dreamer(
         obs_encoder,
         rssm_prior,
         rssm_posterior,
-        cfg.mlp_num_units,
+        cfg.hidden_size,
         action_key,
         proof_environment,
     )
     actor_simulator = actor_simulator.to(device)
 
-    value_model = _dreamer_make_value_model(cfg.mlp_num_units, value_key)
+    value_model = _dreamer_make_value_model(cfg.hidden_size, value_key)
     value_model = value_model.to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = model_based_env.fake_tensordict().unsqueeze(-1)
@@ -204,7 +203,7 @@ def _dreamer_make_world_model(
     else:
         continue_model = None
 
-    world_model = CausalDreamerWrapper(
+    world_model = DreamerWrapper(
         obs_encoder=obs_encoder,
         rssm_rollout=rssm_rollout,
         obs_decoder=obs_decoder,
