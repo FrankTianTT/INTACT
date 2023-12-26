@@ -25,23 +25,24 @@ def get_activate(name: str = "ReLU"):
 def build_mlp(
         input_dim: int,
         output_dim: int,
-        hidden_dims: List[int],
+        hidden_dims: Optional[List[int]] = None,
         extra_dims: Optional[List[int]] = None,
         bias: bool = True,
         activate_name: str = "ReLu",
         last_activate_name: Optional[str] = None,
 ) -> nn.Module:
-    layers = []
-    hidden_dims = [input_dim] + hidden_dims + [output_dim]
+    hidden_dims = hidden_dims or []
+    all_dims = [input_dim] + hidden_dims + [output_dim]
 
-    for i in range(len(hidden_dims) - 1):
+    layers = []
+    for i in range(len(all_dims) - 1):
         if extra_dims is None:
-            layers += [nn.Linear(in_features=hidden_dims[i], out_features=hidden_dims[i + 1], bias=bias)]
+            layers += [nn.Linear(in_features=all_dims[i], out_features=all_dims[i + 1], bias=bias)]
         else:
-            layers += [ParallelLinear(in_features=hidden_dims[i], out_features=hidden_dims[i + 1],
+            layers += [ParallelLinear(in_features=all_dims[i], out_features=all_dims[i + 1],
                                       extra_dims=extra_dims, bias=bias)]
 
-        if i < len(hidden_dims) - 2:
+        if i < len(all_dims) - 2:
             layers += [get_activate(activate_name)]
         else:
             if last_activate_name is not None:
@@ -62,7 +63,8 @@ def test_build_mlp_parallel():
     mlp = build_mlp(input_dim, output_dim, hidden_dims, extra_dims, bias, activate_name, last_activate_name)
     print(mlp)
 
-def test_build_mlp_normal():
+
+def test_build_mlp_plain():
     input_dim = 10
     output_dim = 5
     hidden_dims = [32, 32]
@@ -77,4 +79,4 @@ def test_build_mlp_normal():
 
 if __name__ == '__main__':
     test_build_mlp_parallel()
-    test_build_mlp_normal()
+    test_build_mlp_plain()

@@ -5,7 +5,8 @@ import torch
 from tensordict.nn import TensorDictSequential, TensorDictModule
 from tensordict import TensorDict, TensorDictBase
 
-from causal_meta.modules.models.mdp_world_model import BaseMDPWorldModel, PlainMDPWorldModel, CausalWorldModel, INNWorldModel
+from causal_meta.modules.models.mdp_world_model import BaseMDPWorldModel, PlainMDPWorldModel, CausalWorldModel, \
+    INNWorldModel
 
 
 class MDPWrapper(TensorDictModule):
@@ -14,14 +15,14 @@ class MDPWrapper(TensorDictModule):
             mdp_world_model: BaseMDPWorldModel,
     ):
         if isinstance(mdp_world_model, PlainMDPWorldModel):
-            out_keys = ["obs_mean", "obs_log_var", "reward", "terminated"]
+            out_keys = ["obs_mean", "obs_log_var", "reward_mean", "reward_log_var", "terminated"]
             self.model_type = "plain"
             if isinstance(mdp_world_model, CausalWorldModel):
                 out_keys.append("causal_mask")
                 self.model_type = "causal"
-        elif isinstance(mdp_world_model, INNWorldModel):
-            out_keys = ["obs_mean", "obs_log_var", "reward", "terminated", "log_jac_det"]
-            self.model_type = "inn"
+        # elif isinstance(mdp_world_model, INNWorldModel):
+        #     out_keys = ["obs_mean", "obs_log_var", "reward", "terminated", "log_jac_det"]
+        #     self.model_type = "inn"
         else:
             raise NotImplementedError
 
@@ -104,7 +105,8 @@ def test_plain_mdp_wrapper():
     td = mdp_wrapper(td)
     assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
     assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward" in td.keys() and td["reward"].shape == (batch_size, 1)
+    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
+    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
     assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
 
 
@@ -128,7 +130,8 @@ def test_causal_mdp_wrapper():
 
     assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
     assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward" in td.keys() and td["reward"].shape == (batch_size, 1)
+    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
+    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
     assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
     assert "causal_mask" in td.keys() and td["causal_mask"].shape == (batch_size, obs_dim + 2, obs_dim + action_dim)
 
@@ -171,6 +174,6 @@ def test_inn_mdp_wrapper():
 
 
 if __name__ == '__main__':
-    # test_plain_mdp_wrapper()
-    # test_causal_mdp_wrapper()
-    test_inn_mdp_wrapper()
+    test_plain_mdp_wrapper()
+    test_causal_mdp_wrapper()
+    # test_inn_mdp_wrapper()

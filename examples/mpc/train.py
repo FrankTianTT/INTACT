@@ -1,32 +1,20 @@
-from itertools import product
-from collections import defaultdict
-from functools import partial
 import os
-import time
-import math
+from functools import partial
 
 from tqdm import tqdm
 import hydra
 import torch
-from tensordict import TensorDict
-from torchrl.envs.utils import step_mdp
-from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
-from torchrl.envs.libs import GymEnv
-from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.envs import SerialEnv
 from torchrl.trainers.helpers.collectors import MultiaSyncDataCollector, SyncDataCollector
-from torchrl.data.replay_buffers.storages import ListStorage
-from torchrl.data.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
-from matplotlib import pyplot as plt
 
 from causal_meta.helpers import make_mdp_model, build_logger
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
-from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
+from causal_meta.helpers.envs import make_mdp_env, create_make_env_list
 
 from utils import (
-    env_constructor,
-    build_make_env_list,
     evaluate_policy,
     meta_test,
     plot_context,
@@ -38,15 +26,15 @@ from utils import (
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg):
     if torch.cuda.is_available():
-        device = torch.device(cfg.device)
+        device = torch.device(cfg.model_device)
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
 
     logger = build_logger(cfg)
 
-    train_make_env_list, train_oracle_context = env_constructor(cfg, mode="meta_train")
-    test_make_env_list, test_oracle_context = env_constructor(cfg, mode="meta_test")
+    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_mdp_env, mode="meta_train")
+    test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_mdp_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
@@ -94,15 +82,19 @@ def main(cfg):
         storing_device=cfg.collector_device,
     )
 
+    # replay buffer
     buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
-        storage=ListStorage(max_size=buffer_size),
+        storage=LazyMemmapStorage(max_size=buffer_size),
     )
+    final_seed = collector.set_seed(cfg.seed)
+    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
+    # optimizers
     context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
-    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr,
+    nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
                                   weight_decay=cfg.world_model_weight_decay)
-    model_opt = MultiOptimizer(module=module_opt, context=context_opt)
+    model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
     if cfg.model_type == "causal":
         logits_opt = MultiOptimizer(
             observed_logits=torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr),
@@ -111,6 +103,7 @@ def main(cfg):
     else:
         logits_opt = None
 
+    # Training loop
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
     train_model_iters = 0
     for frames_per_task, tensordict in enumerate(collector):
@@ -129,7 +122,7 @@ def main(cfg):
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            cfg.model_learning_per_frame * task_num, model_opt, logits_opt, logger,
+            cfg.optim_steps_per_frame * task_num, model_opt, logits_opt, logger,
             iters=train_model_iters
         )
 

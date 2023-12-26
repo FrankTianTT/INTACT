@@ -1,0 +1,21 @@
+env_name: MyCartPole-v0
+termination_fns: "cartpole"
+reward_fns: ""
+env_max_steps: 200
+
+train_frames_per_task: 2000
+init_frames_per_task: 50
+eval_interval_frames_per_task: 200
+meta_test_interval_frames_per_task: 400
+
+planning_horizon: 15
+
+sparse_weight: 0.05
+context_sparse_weight: 0.02
+context_max_weight: 0.1
+
+oracle_context:
+  cart_vel_bias: [ -0.5, 0.5 ]
+  pole_vel_bias: [ -0.5, 0.5 ]
+new_oracle_context:
+  gravity: [ 5.0, 20.0 ]

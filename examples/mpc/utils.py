@@ -1,23 +1,16 @@
 from itertools import product
-from collections import defaultdict
 from functools import partial
 from copy import deepcopy
 import os
 import math
 from warnings import catch_warnings, filterwarnings
 
-import numpy as np
 from tqdm import tqdm
-import hydra
 import torch
-from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.probabilistic import set_interaction_mode
 from torchrl.envs.utils import step_mdp
-from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose, StepCounter
-from torchrl.envs.libs import GymEnv
-from torchrl.collectors.collectors import RandomPolicy
-from torchrl.record.loggers import generate_exp_name
+from torchrl.envs import TransformedEnv, SerialEnv
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
@@ -26,11 +19,9 @@ from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
 
-from causal_meta.helpers.models import make_mdp_model
+from causal_meta.helpers.envs import build_make_env_list, make_mdp_env
 from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
-from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.envs.mdp_env import MDPEnv
-from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 
 class MultiOptimizer:
@@ -40,54 +31,6 @@ class MultiOptimizer:
     def step(self):
         for opt in self.optimizers.values():
             opt.step()
-
-
-def make_env(env_name, gym_kwargs=None, idx=None, task_num=None, record=False):
-    if gym_kwargs is None:
-        gym_kwargs = {}
-    if record:
-        gym_kwargs["from_pixels"] = True
-        gym_kwargs["pixels_only"] = False
-    env = GymEnv(env_name, **gym_kwargs)
-    transforms = [DoubleToFloat(), RewardSum(), StepCounter()]
-    if idx is not None:
-        transforms.append(MetaIdxTransform(idx, task_num))
-    return TransformedEnv(env, transform=Compose(*transforms))
-
-
-def build_make_env_list(env_name, oracle_context=None, record=False):
-    if oracle_context is None:
-        return [partial(make_env, env_name=env_name, record=record)]
-    else:
-        make_env_list = []
-        for idx in range(oracle_context.shape[0]):
-            gym_kwargs = dict([(key, value.item()) for key, value in oracle_context[idx].items()])
-            make_env_list.append(partial(make_env, env_name=env_name, gym_kwargs=gym_kwargs, idx=idx, record=record))
-        return make_env_list
-
-
-def env_constructor(cfg, mode="train", record=False):
-    if not cfg.meta:
-        return [partial(make_env, env_name=cfg.env_name, record=record)], None
-    else:
-        task_num = cfg.task_num if mode == "meta_train" else cfg.meta_test_task_num
-        assert task_num >= 1
-
-        oracle_context = dict(cfg.oracle_context)
-        if mode == "meta_test" and cfg.get("new_oracle_context", None):
-            oracle_context.update(dict(cfg.new_oracle_context))
-        context_dict = {}
-        for key, (low, high) in oracle_context.items():
-            context_dict[key] = torch.rand(task_num) * (high - low) + low
-        oracle_context = TensorDict(context_dict, batch_size=task_num)
-
-        make_env_list = []
-        for idx in range(task_num):
-            gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
-            make_env_list.append(
-                partial(make_env, env_name=cfg.env_name, gym_kwargs=gym_kwargs, idx=idx, record=record)
-            )
-        return make_env_list, oracle_context
 
 
 def evaluate_policy(
@@ -104,7 +47,8 @@ def evaluate_policy(
     repeat_rewards = []
     repeat_lengths = []
     for repeat in range(cfg.eval_repeat_nums):
-        make_env_list = build_make_env_list(cfg.env_name, oracle_context, record=repeat < cfg.eval_record_nums)
+        make_env_fn = partial(make_mdp_env, pixel=repeat < cfg.eval_record_nums)
+        make_env_list = build_make_env_list(cfg.env_name, make_env_fn, oracle_context)
         eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
         if repeat < cfg.eval_record_nums:
             eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
@@ -137,6 +81,7 @@ def evaluate_policy(
         repeat_lengths.append(lengths)
 
         if repeat < cfg.eval_record_nums:
+            print(repeat_rewards)
             eval_env.transform.dump(suffix=str(frames_per_task))
 
     if logger is not None:
@@ -164,9 +109,6 @@ def find_world_model(policy, task_num):
     new_world_model.reset(task_num=task_num)
 
     return new_policy, new_world_model
-
-
-from time import time
 
 
 def train_model(
@@ -297,8 +239,8 @@ def meta_test(
         world_model.causal_mask.reset(adapt_idx)
         world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
-        module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
-        model_opt = MultiOptimizer(module=module_opt, context=context_opt)
+        nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
+        model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
         logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
         for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
@@ -315,10 +257,10 @@ def meta_test(
                          log_prefix=f"meta_test_model_{frames_per_task}")
             logger.dump_scaler(frame)
             if cfg.model_type == "causal":
-                print("meta test causal mask:")
+                print("envs test causal mask:")
                 print(world_model.causal_mask.printing_mask)
 
-    evaluate_policy(cfg, make_env_list, policy, logger, log_prefix="meta_test")
+    evaluate_policy(cfg, make_env_list, policy, logger, frames_per_task, log_prefix="meta_test")
 
 
 def plot_context(
@@ -381,27 +323,3 @@ def plot_context(
     if logger is not None:
         logger.add_scaler("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
         logger.add_scaler("{}/mcc".format(log_prefix), mcc)
-
-
-@hydra.main(version_base="1.3", config_path="conf", config_name="main")
-def test_env_constructor(cfg):
-    from causal_meta.helpers import build_logger
-
-    make_env_list, oracle_context = env_constructor(cfg, mode="meta_train")
-    logger = build_logger(cfg)
-    # evaluate_policy(cfg, train_make_env_list)
-
-    eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
-    eval_env = TransformedEnv(eval_env, VideoRecorder(logger, "test"))
-    policy = RandomPolicy(eval_env.action_spec)
-
-    td = eval_env.reset()
-    for i in range(10):
-        td = eval_env.step(policy(td))
-        logger.log_scalar("test/episode_reward", 1, i)
-
-    eval_env.transform.dump()
-
-
-if __name__ == '__main__':
-    test_env_constructor()

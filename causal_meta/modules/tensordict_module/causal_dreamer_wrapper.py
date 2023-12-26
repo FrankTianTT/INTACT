@@ -1,12 +1,11 @@
 import torch
-from torch import nn
 from tensordict.nn import TensorDictSequential, TensorDictModule
 from torchrl.modules.models.model_based import RSSMRollout
-from torchrl.modules import SafeModule, SafeSequential
+from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
 from torchrl.modules.models.models import MLP
 
-from causal_meta.modules.models.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 
 
 class CausalDreamerWrapper(TensorDictSequential):

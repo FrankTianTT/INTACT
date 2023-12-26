@@ -1,16 +1,12 @@
-from functools import reduce
 from typing import Callable, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from FrEIA.framework import Node, InputNode, GraphINN, ConditionNode, OutputNode
-from FrEIA.modules import PermuteRandom, RNVPCouplingBlock
+from FrEIA.modules import PermuteRandom
 from FrEIA.modules.coupling_layers import _BaseCouplingBlock
 
-from causal_meta.modules.utils import build_mlp
-from causal_meta.modules.models.mdp_world_model.base_world_model import BaseMDPWorldModel
-from causal_meta.modules.models.causal_mask import CausalMask
+from causal_meta.modules.models.base_world_model import BaseWorldModel
 
 
 class GINCouplingBlock(_BaseCouplingBlock):
@@ -55,7 +51,7 @@ class GINCouplingBlock(_BaseCouplingBlock):
             return y2, 0.
 
 
-class INNWorldModel(BaseMDPWorldModel):
+class INNWorldModel(BaseWorldModel):
     def __init__(
             self,
             obs_dim,

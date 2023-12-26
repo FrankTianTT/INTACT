@@ -20,7 +20,7 @@ class CausalWorldModelLoss(LossModule):
             lambda_transition: float = 1.0,
             lambda_reward: float = 1.0,
             lambda_terminated: float = 1.0,
-            lambda_mutual_info: float = 1.0,  # use for meta identify
+            lambda_mutual_info: float = 1.0,  # use for envs identify
             sparse_weight: float = 0.05,
             context_sparse_weight: float = 0.01,
             context_max_weight: float = 0.1,
@@ -63,11 +63,19 @@ class CausalWorldModelLoss(LossModule):
                 reduction=reduction
             )
 
-        reward_loss = F.mse_loss(
-            tensordict.get("reward"),
-            tensordict.get(("next", "reward")),
-            reduction=reduction
-        )
+        if self.learn_obs_var:
+            reward_loss = F.gaussian_nll_loss(
+                tensordict.get("reward_mean"),
+                tensordict.get(("next", "reward")),
+                torch.exp(tensordict.get("reward_log_var")),
+                reduction=reduction
+            )
+        else:
+            reward_loss = F.mse_loss(
+                tensordict.get("reward"),
+                tensordict.get(("next", "reward")),
+                reduction=reduction
+            )
         terminated_loss = F.binary_cross_entropy_with_logits(
             tensordict.get("terminated"),
             tensordict.get(("next", "terminated")).float(),

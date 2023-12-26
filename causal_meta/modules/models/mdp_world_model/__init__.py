@@ -1,3 +1,3 @@
-from causal_meta.modules.models.mdp_world_model.base_world_model import BaseMDPWorldModel, PlainMDPWorldModel
-from causal_meta.modules.models.mdp_world_model.causal_world_model import CausalWorldModel
-from causal_meta.modules.models.mdp_world_model.inn_world_model import INNWorldModel
+from causal_meta.modules.models.mdp_world_model.causal_wm import CausalWorldModel
+from causal_meta.modules.models.mdp_world_model.inn_wm import INNWorldModel
+from causal_meta.modules.models.mdp_world_model.plain_wm import PlainMDPWorldModel

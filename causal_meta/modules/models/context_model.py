@@ -73,7 +73,7 @@ class ContextModel(nn.Module):
 
     def forward(self, idx=None):
         if idx is None:
-            assert not self.meta, "idx should not be None when meta is True"
+            assert not self.meta, "idx should not be None when envs is True"
             return torch.empty(0).to(self.device)
 
         assert idx.shape[-1] == 1, "last dim of idx should be 1, got {}".format(idx.shape)

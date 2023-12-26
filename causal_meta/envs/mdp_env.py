@@ -36,10 +36,12 @@ class MDPEnv(ModelBasedEnvBase):
 
         if self.world_model.learn_obs_var:
             obs_std = torch.exp(0.5 * tensordict_out["obs_log_var"])
+            reward_std = torch.exp(0.5 * tensordict_out["reward_log_var"])
         else:
             obs_std = torch.zeros_like(tensordict_out["observation"])
+            reward_std = torch.zeros_like(tensordict_out["reward"])
         tensordict_out["observation"] = tensordict_out["obs_mean"] + obs_std * torch.randn_like(obs_std)
-        # print(tensordict_out["observation"].reshape(-1, 4)[0])
+        tensordict_out["reward"] = tensordict_out["reward_mean"] + reward_std * torch.randn_like(reward_std)
 
         if self.termination_fns is None:
             tensordict_out["terminated"] = tensordict_out["terminated"] > 0  # terminated from world-model are logits

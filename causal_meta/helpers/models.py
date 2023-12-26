@@ -5,24 +5,23 @@ from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeModule, SafeSequential
+from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
 from torchrl.modules.models.models import MLP
 from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_value_model, \
     _dreamer_make_actors
 from torchrl.modules.models.model_based import RSSMRollout
 
-from causal_meta.modules.models.causal_rssm_prior import CausalRSSMPrior
+from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
 from causal_meta.modules.tensordict_module.causal_dreamer_wrapper import CausalDreamerWrapper
 from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 from causal_meta.envs.mdp_env import MDPEnv
-from causal_meta.helpers.envs import dreamer_env_constructor
 
 
 def make_mdp_model(
-        cfg,
-        proof_env: EnvBase = None,
+        cfg: "DictConfig",  # noqa: F821
+        proof_env: EnvBase,
         device: DEVICE_TYPING = "cpu",
 ):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
@@ -72,19 +71,12 @@ def make_mdp_model(
 
 def make_causal_dreamer(
         cfg: "DictConfig",  # noqa: F821
-        proof_environment: EnvBase = None,
+        proof_environment: EnvBase,
         device: DEVICE_TYPING = "cpu",
         action_key: str = "action",
         value_key: str = "state_value",
         use_decoder_in_env: bool = False,
-        obs_norm_state_dict=None,
 ) -> nn.ModuleList:
-    proof_env_is_none = proof_environment is None
-    if proof_env_is_none:
-        proof_environment = dreamer_env_constructor(
-            cfg=cfg, use_env_creator=False, obs_norm_state_dict=obs_norm_state_dict
-        )()
-
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
@@ -98,19 +90,18 @@ def make_causal_dreamer(
         max_context_dim=cfg.max_context_dim,
         task_num=cfg.task_num,
         residual=cfg.residual,
-        logits_clip=cfg.logits_clip,
     )
     rssm_posterior = RSSMPosterior(
         hidden_dim=cfg.hidden_dim_per_variable * cfg.variable_num,
         state_dim=cfg.state_dim_per_variable * cfg.variable_num,
     )
     reward_module = MLP(
-        out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
+        out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU
     )
 
     if cfg.pred_continue:
         continue_module = MLP(
-            out_features=1, depth=2, num_cells=cfg.mlp_num_units, activation_class=nn.ELU
+            out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU
         )
     else:
         continue_module = None
@@ -155,10 +146,6 @@ def make_causal_dreamer(
         value_model(tensordict)
 
     actor_realworld = actor_realworld.to(device)
-    if proof_env_is_none:
-        proof_environment.close()
-        torch.cuda.empty_cache()
-        del proof_environment
 
     del tensordict
     return world_model, model_based_env, actor_simulator, value_model, actor_realworld
