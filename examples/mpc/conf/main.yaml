@@ -74,6 +74,6 @@ seed: 42
 
 hydra:
   run:
-    dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: ./outputs/mpc/${now:%Y-%m-%d}/${now:%H-%M-%S}
   job:
     chdir: True

@@ -15,5 +15,5 @@ pip instiall -r requirements.txt
 ```
 
 ```shell
-xvfb-run --auto-servernum --server-num=1 python examples/dreamers/train.py 
+xvfb-run --auto-servernum --server-num=1 python examples/dreamer/train.py 
 ```

@@ -66,7 +66,7 @@ def make_causal_dreamer(
         device: DEVICE_TYPING = "cpu",
         action_key: str = "action",
         value_key: str = "state_value",
-        use_decoder_in_env: bool = False,
+        use_decoder_in_env: bool = True,
 ):
     # Modules
     obs_encoder = ObsEncoder()

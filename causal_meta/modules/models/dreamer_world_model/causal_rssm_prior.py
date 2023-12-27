@@ -46,7 +46,8 @@ class CausalRSSMPrior(PlainRSSMPrior):
             context_input_dim=self.max_context_dim,
             mask_output_dim=self.variable_num,
             logits_clip=self.logits_clip,
-            meta=self.meta
+            meta=self.meta,
+            observed_logits_init_bias=3.
         )
         mask_dim_list = []
         for i in range(self.variable_num):
@@ -83,15 +84,14 @@ class CausalRSSMPrior(PlainRSSMPrior):
             rnn2b=rnn_to_prior_projector,
         ))
 
-    def get_parameter(self, target: str):
-        if target == "nets":
-            return self.nets.parameters()
-        elif target == "mask_logits":
-            return self.causal_mask.parameters()
-        elif target == "context_hat":
-            return self.context_model.parameters()
-        else:
-            raise NotImplementedError
+    @property
+    def params_dict(self):
+        return dict(
+            nets=self.nets.parameters(),
+            context=self.context_model.parameters(),
+            observed_logits=self.causal_mask.get_parameter("observed_logits"),
+            context_logits=self.causal_mask.get_parameter("context_logits"),
+        )
 
     def forward(self, state, belief, action, idx=None, deterministic_mask=False):
         projector_inputs = torch.cat([state, action, self.context_model(idx)], dim=-1)

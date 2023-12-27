@@ -13,7 +13,8 @@ from torchrl.envs.transforms import (
     RewardSum,
     StepCounter,
     FlattenObservation,
-    TensorDictPrimer
+    TensorDictPrimer,
+    DoubleToFloat
 )
 from torchrl.envs import ParallelEnv, SerialEnv
 
@@ -48,8 +49,9 @@ def make_dreamer_env(
     transforms = [
         ToTensorImage(),
         Resize(image_size, image_size),
-        ObservationNorm(0.5, 1.0, in_keys=["pixels"], standard_normal=True),
         FlattenObservation(0, -3, allow_positive_dim=True),
+        ObservationNorm(0.5, 1.0, standard_normal=True),
+        DoubleToFloat(),
         RewardSum(),
         StepCounter(),
     ]

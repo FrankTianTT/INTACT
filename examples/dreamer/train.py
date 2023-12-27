@@ -1,25 +1,21 @@
-import dataclasses
-from pathlib import Path
-from collections import defaultdict
 from functools import partial
+import os
 
 import hydra
 import torch
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
-from hydra.core.config_store import ConfigStore
-
-from torchrl.envs import ParallelEnv
+from tensordict.nn.probabilistic import InteractionType
+from torchrl.envs import ParallelEnv, SerialEnv, TransformedEnv
+from torchrl.record import VideoRecorder
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from torchrl.objectives.dreamer import DreamerActorLoss, DreamerValueLoss
 from torchrl.trainers.helpers.collectors import SyncDataCollector
-from torchrl.trainers.helpers.envs import correct_for_frame_skip
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
+from torchrl.trainers.trainers import Recorder
 
 from causal_meta.helpers.envs import make_dreamer_env, create_make_env_list
-from causal_meta.helpers.models import make_causal_dreamer, DreamerConfig
+from causal_meta.helpers.models import make_causal_dreamer
 from causal_meta.helpers.logger import build_logger
 from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 
@@ -59,8 +55,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         world_model,
         lambda_kl=cfg.lambda_kl,
         lambda_reco=cfg.lambda_reco,
-        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
-        lambda_continue=cfg.lambda_continue if cfg.termination_fns == "" else 0.,
+        # lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
+        # lambda_continue=cfg.lambda_continue if cfg.termination_fns == "" else 0.,
+        lambda_reward=cfg.lambda_reward,
+        lambda_continue=cfg.lambda_continue,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -81,12 +79,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exploration_policy = AdditiveGaussianWrapper(
         policy,
-        sigma_init=0.3,
-        sigma_end=0.3,
+        # sigma_init=0.3,
+        # sigma_end=0.3,
+        annealing_num_steps=cfg.train_frames_per_task * task_num,
     ).to(device)
 
     collector = SyncDataCollector(
-        create_env_fn=ParallelEnv(task_num, train_make_env_list),
+        create_env_fn=SerialEnv(task_num, train_make_env_list),
         policy=exploration_policy,
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=cfg.frames_per_batch,
@@ -94,6 +93,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=cfg.collector_device,
         storing_device=cfg.collector_device,
         split_trajs=True
+    )
+
+    eval_env = SerialEnv(task_num, train_make_env_list)
+    # eval_env = TransformedEnv(eval_env, VideoRecorder(logger, "eval"))
+    eval_env = TransformedEnv(eval_env)
+    record = Recorder(
+        record_frames=cfg.record_frames,
+        policy_exploration=policy,
+        environment=eval_env,
+        record_interval=cfg.record_interval,
+        exploration_type=InteractionType.MODE
     )
 
     # replay buffer
@@ -108,7 +118,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
     context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
     if cfg.model_type == "causal":
-        mask_logits_opt = torch.optim.Adam(world_model.get_parameter("causal_mask"), lr=cfg.mask_logits_lr)
+        observed_logits = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+        context_logits = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
@@ -203,10 +214,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
                                   (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
                 value_opt.zero_grad()
 
+        record.suffix = f"_{i}"
+        td_record = record(None)
+        if td_record is not None:
+            if "r_evaluation" in td_record.keys():
+                logger.add_scaler("eval/reward", td_record["r_evaluation"])
+            if "total_r_evaluation" in td_record.keys():
+                logger.add_scaler("eval/episode", td_record["total_r_evaluation"])
+
         logger.dump_scaler(collected_frames)
-        if cfg.exploration != "":
-            exploration_policy.step(current_frames)
+        exploration_policy.step(current_frames)
         collector.update_policy_weights_()
+
+        if (i + 1) % 10 == 0:
+            os.makedirs(os.path.join("checkpoints", str(i)), exist_ok=True)
+            torch.save(world_model.state_dict(), os.path.join("checkpoints", str(i), f"world_model.pt"))
+            torch.save(actor_model.state_dict(), os.path.join("checkpoints", str(i), f"actor_model.pt"))
+            torch.save(value_model.state_dict(), os.path.join("checkpoints", str(i), f"value_model.pt"))
 
 
 if __name__ == "__main__":

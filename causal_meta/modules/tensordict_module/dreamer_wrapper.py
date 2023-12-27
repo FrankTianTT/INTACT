@@ -1,3 +1,5 @@
+from itertools import chain
+
 import torch
 from tensordict.nn import TensorDictSequential, TensorDictModule
 from torchrl.modules.models.model_based import RSSMRollout
@@ -7,6 +9,7 @@ from torchrl.modules.models.models import MLP
 
 from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 from causal_meta.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
+
 
 class DreamerWrapper(TensorDictSequential):
     def __init__(
@@ -40,8 +43,29 @@ class DreamerWrapper(TensorDictSequential):
             raise NotImplementedError
 
     @property
+    def obs_encoder(self):
+        return self.module[0]
+
+    @property
     def rssm_rollout(self):
         return self.module[1]
+
+    @property
+    def rssm_posterior(self):
+        return self.rssm_rollout.rssm_posterior.module
+
+    @property
+    def obs_decoder(self):
+        return self.module[2]
+
+    @property
+    def reward_model(self):
+        return self.module[3]
+
+    @property
+    def continue_model(self):
+        assert self.pred_continue
+        return self.module[4]
 
     @property
     def rssm_prior(self):
@@ -57,17 +81,20 @@ class DreamerWrapper(TensorDictSequential):
 
     def get_parameter(self, target: str):
         if target == "nets":
-            for name, param in self.named_parameters(recurse=True):
-                if "context_hat" not in name and "mask_logits" not in name:
-                    yield param
+            return chain(
+                self.obs_encoder.parameters(),
+                self.rssm_prior.get_parameter("nets"),
+                self.rssm_posterior.parameters(),
+                self.obs_decoder.parameters(),
+                self.reward_model.parameters(),
+                self.continue_model.parameters() if self.pred_continue else []
+            )
         elif target == "context":
-            for name, param in self.named_parameters(recurse=True):
-                if "context_hat" in name:
-                    yield param
-        elif target == "causal_mask":
-            for name, param in self.named_parameters(recurse=True):
-                if "causal_mask" in name:
-                    yield param
+            return self.rssm_prior.get_parameter("context")
+        elif target == "observed_logits":
+            return self.rssm_prior.get_parameter("observed_logits")
+        elif target == "context_logits":
+            return self.rssm_prior.get_parameter("context_logits")
         else:
             raise NotImplementedError
 
