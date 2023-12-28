@@ -1,5 +1,5 @@
 defaults:
-  - overrides: cartpole
+  - overrides: hopper
   - _self_
 
 # env cfg
@@ -37,10 +37,10 @@ offline_logging: False
 
 # model learning
 model_type: causal
-variable_num: 10
-state_dim_per_variable: 3
-hidden_dim_per_variable: 20
-rnn_input_dim_per_variable: 20
+variable_num: 5
+state_dim_per_variable: 10
+hidden_dim_per_variable: 50
+rnn_input_dim_per_variable: 50
 sparse_weight: 0.005
 context_sparse_weight: 0.01
 context_max_weight: 0.2
@@ -62,15 +62,15 @@ imagination_horizon: 15
 discount_loss: True
 pred_continue: True
 
-train_causal_iters: 0
-train_model_iters: 50
+train_mask_iters: 10
+train_model_iters: 40
 
 
 grad_clip: 100
 
 
 # other
-model_device: cuda:0
+model_device: cuda:1
 collector_device: cpu
 seed: 42
 

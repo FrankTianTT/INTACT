@@ -47,7 +47,6 @@ class CausalRSSMPrior(PlainRSSMPrior):
             mask_output_dim=self.variable_num,
             logits_clip=self.logits_clip,
             meta=self.meta,
-            observed_logits_init_bias=3.
         )
         mask_dim_list = []
         for i in range(self.variable_num):

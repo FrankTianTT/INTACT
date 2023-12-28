@@ -6,7 +6,8 @@ def grad_norm(optimizer: torch.optim.Optimizer):
     sum_of_sq = 0.0
     for pg in optimizer.param_groups:
         for p in pg["params"]:
-            sum_of_sq += p.grad.pow(2).sum()
+            if p.grad is not None:
+                sum_of_sq += p.grad.pow(2).sum()
     return sum_of_sq.sqrt().detach().item()
 
 

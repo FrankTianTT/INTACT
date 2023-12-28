@@ -36,9 +36,10 @@ class DreamerWrapper(TensorDictSequential):
         super().__init__(*models)
 
         if isinstance(self.rssm_prior, PlainRSSMPrior):
-            self.model_type = "plain"
-        elif isinstance(self.rssm_prior, CausalRSSMPrior):
-            self.model_type = "causal"
+            if isinstance(self.rssm_prior, CausalRSSMPrior):
+                self.model_type = "causal"
+            else:
+                self.model_type = "plain"
         else:
             raise NotImplementedError
 

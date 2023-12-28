@@ -79,9 +79,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exploration_policy = AdditiveGaussianWrapper(
         policy,
-        # sigma_init=0.3,
-        # sigma_end=0.3,
-        annealing_num_steps=cfg.train_frames_per_task * task_num,
+        sigma_init=0.3,
+        sigma_end=0.3,
+        # annealing_num_steps=cfg.train_frames_per_task * task_num,
     ).to(device)
 
     collector = SyncDataCollector(
@@ -116,10 +116,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # optimizers
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
-    context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
+    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
     if cfg.model_type == "causal":
-        observed_logits = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
-        context_logits = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+        logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
@@ -150,9 +150,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
             continue
 
         for j in range(cfg.optim_steps_per_batch):
+            world_model.zero_grad()
             sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+            if cfg.model_type == "causal" and j % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+                grad = world_model_loss.reinforce(sampled_tensordict)
+                causal_mask = world_model.causal_mask
+                logits = causal_mask.mask_logits
+                logits.backward(grad)
+                logits_opt.step()
 
-            if True:
+                logger.add_scaler("causal/sparsity", (logits < 0).float().mean())
+                logger.add_scaler("causal/mean_logits", logits.mean())
+            else:
                 model_loss_td, sampled_tensordict = world_model_loss(
                     sampled_tensordict
                 )
@@ -166,7 +175,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 loss_world_model.backward()
                 clip_grad_norm_(world_model.get_parameter("nets"), cfg.grad_clip)
                 world_model_opt.step()
-                context_opt.step()
 
                 logger.add_scaler("world_model/total_loss", loss_world_model)
                 logger.add_scaler("world_model/grad", grad_norm(world_model_opt))
@@ -176,43 +184,32 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
                 mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
                 logger.add_scaler("world_model/mean_continue", mean_continue)
-                world_model_opt.zero_grad()
-            else:
-                grad = world_model_loss.reinforce(sampled_tensordict)
-                logits = world_model.causal_mask.mask_logits
-                logits.backward(grad)
-                mask_logits_opt.step()
-                if do_log:
-                    logger.add_scaler("causal/sparsity", (logits < 0).float().mean())
-                    logger.add_scaler("causal/mean_logits", logits.mean())
-                mask_logits_opt.zero_grad()
 
-            if collected_frames >= cfg.train_agent_frames:
-                # update actor network
-                actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                actor_loss_td["loss_actor"].backward()
-                clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                actor_opt.step()
+            # update actor network
+            actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+            actor_loss_td["loss_actor"].backward()
+            clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
+            actor_opt.step()
 
-                logger.add_scaler("actor/loss", actor_loss_td["loss_actor"])
-                logger.add_scaler("actor/grad", grad_norm(actor_opt))
-                logger.add_scaler("actor/action_mean", sampled_tensordict["action"].mean())
-                logger.add_scaler("actor/action_std", sampled_tensordict["action"].std())
-                actor_opt.zero_grad()
+            logger.add_scaler("actor/loss", actor_loss_td["loss_actor"])
+            logger.add_scaler("actor/grad", grad_norm(actor_opt))
+            logger.add_scaler("actor/action_mean", sampled_tensordict["action"].mean())
+            logger.add_scaler("actor/action_std", sampled_tensordict["action"].std())
+            actor_opt.zero_grad()
 
-                # update value network
-                value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                value_loss_td["loss_value"].backward()
-                clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                value_opt.step()
+            # update value network
+            value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+            value_loss_td["loss_value"].backward()
+            clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
+            value_opt.step()
 
-                logger.add_scaler("value/loss", value_loss_td["loss_value"])
-                logger.add_scaler("value/grad", grad_norm(value_opt))
-                logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
-                logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
-                logger.add_scaler("value/mean_continue",
-                                  (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
-                value_opt.zero_grad()
+            logger.add_scaler("value/loss", value_loss_td["loss_value"])
+            logger.add_scaler("value/grad", grad_norm(value_opt))
+            logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
+            logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
+            logger.add_scaler("value/mean_continue",
+                              (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+            value_opt.zero_grad()
 
         record.suffix = f"_{i}"
         td_record = record(None)
