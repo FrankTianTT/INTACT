@@ -32,6 +32,7 @@ class CausalMask(nn.Module):
             observed_input_dim,
             mask_output_dim,
             reinforce=True,
+            latent=False,
             gumbel_softmax=False,
             meta=False,
             context_input_dim=10,
@@ -46,6 +47,7 @@ class CausalMask(nn.Module):
         self.observed_input_dim = observed_input_dim
         self.mask_output_dim = mask_output_dim
         self.reinforce = reinforce
+        self.latent = latent
         self.gumbel_softmax = gumbel_softmax
         self.meta = meta
         self.context_input_dim = context_input_dim if meta else 0
@@ -169,10 +171,12 @@ class CausalMask(nn.Module):
         sampling_grad = (pos_grads - neg_grads) * g
         reg_grad = torch.ones_like(self.mask_logits)
         reg_grad[:, :self.observed_input_dim] *= sparse_weight
+        # if self.latent:
+        #     max_idx = self.mask_logits[:, :self.observed_input_dim].argmax(dim=1)
+        #     reg_grad[torch.arange(self.mask_output_dim), max_idx] = 0
         reg_grad[:, self.observed_input_dim:] *= context_sparse_weight
         reg_grad[:, self.observed_input_dim:] += (context_max_weight *
                                                   max_sigmoid_grad(self.mask_logits[:, self.observed_input_dim:]))
-
         grad = is_valid * (sampling_grad + reg_grad)
         return grad.mean(dim=0)
 
@@ -237,9 +241,8 @@ def test_causal_mask_sigmoid():
 
 
 if __name__ == '__main__':
-    # test_causal_mask_reinforce()
-
     a = nn.Parameter(torch.randn((3, 4)))
 
-    a.data[0] = 0
     print(a)
+    print(a.argmax(dim=1))
+    print(a[torch.arange(3), a.argmax(dim=1)])

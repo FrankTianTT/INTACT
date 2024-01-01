@@ -17,8 +17,8 @@ class CausalRSSMPrior(PlainRSSMPrior):
             action_dim,
             variable_num=10,
             state_dim_per_variable=3,
-            hidden_dim_per_variable=20,
-            rnn_input_dim_per_variable=20,
+            belief_dim_per_variable=20,
+            disable_belief=False,
             meta=False,
             max_context_dim=10,
             task_num=50,
@@ -32,8 +32,8 @@ class CausalRSSMPrior(PlainRSSMPrior):
             action_dim=action_dim,
             variable_num=variable_num,
             state_dim_per_variable=state_dim_per_variable,
-            hidden_dim_per_variable=hidden_dim_per_variable,
-            rnn_input_dim_per_variable=rnn_input_dim_per_variable,
+            belief_dim_per_variable=belief_dim_per_variable,
+            disable_belief=disable_belief,
             meta=meta,
             max_context_dim=max_context_dim,
             task_num=task_num,
@@ -43,6 +43,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
 
         self.causal_mask = CausalMask(
             observed_input_dim=self.variable_num + self.action_dim,
+            latent=True,
             context_input_dim=self.max_context_dim,
             mask_output_dim=self.variable_num,
             logits_clip=self.logits_clip,
@@ -55,33 +56,38 @@ class CausalRSSMPrior(PlainRSSMPrior):
         self.mask_dim_map = torch.Tensor(mask_dim_list).long()
 
     def build_nets(self):
-        action_state_projector = build_mlp(
+        action_state_to_middle_projector = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
-            output_dim=self.rnn_input_dim_per_variable,
+            output_dim=self.belief_dim_per_variable,
             extra_dims=[self.variable_num],
+            hidden_dims=[self.belief_dim_per_variable] * 2,
+            activate_name="ELU",
             last_activate_name="ELU",
         )
-        rnn = ParallelGRUCell(
-            input_size=self.rnn_input_dim_per_variable,
-            hidden_size=self.hidden_dim_per_variable,
-            extra_dims=[self.variable_num],
-        )
-        rnn_to_prior_projector = NormalParamWrapper(
+        middle_to_prior_projector = NormalParamWrapper(
             build_mlp(
-                input_dim=self.hidden_dim_per_variable,
+                input_dim=self.belief_dim_per_variable,
                 output_dim=self.state_dim_per_variable * 2,
                 extra_dims=[self.variable_num],
-                hidden_dims=[self.hidden_dim_per_variable],
+                hidden_dims=[self.belief_dim_per_variable],
                 activate_name="ELU",
             ),
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        return nn.ModuleDict(dict(
-            as2rnn=action_state_projector,
-            rnn=rnn,
-            rnn2b=rnn_to_prior_projector,
+        module_dict = nn.ModuleDict(dict(
+            as2middle=action_state_to_middle_projector,
+            middle2s=middle_to_prior_projector,
         ))
+        if not self.disable_belief:
+            rnn = ParallelGRUCell(
+                input_size=self.belief_dim_per_variable,
+                hidden_size=self.belief_dim_per_variable,
+                extra_dims=[self.variable_num],
+            )
+            module_dict["rnn"] = rnn
+
+        return module_dict
 
     @property
     def params_dict(self):
@@ -102,15 +108,19 @@ class CausalRSSMPrior(PlainRSSMPrior):
             deterministic=deterministic_mask
         )  # (variable_num, prod(batch_size), input_dim)
 
-        rnn_inputs = self.nets["as2rnn"](masked_projector_inputs)
-        reshaped_belief = belief.reshape(prod(batch_shape), self.variable_num, self.hidden_dim_per_variable)
-        reshaped_belief = reshaped_belief.permute(1, 0, 2)
-        next_belief = self.nets["rnn"](rnn_inputs, reshaped_belief)
-        prior_mean, prior_std = self.nets["rnn2b"](next_belief)
+        middle = self.nets["as2middle"](masked_projector_inputs)
+        if self.disable_belief:
+            next_belief = belief.clone()
+            prior_mean, prior_std = self.nets["middle2s"](middle)
+        else:
+            reshaped_belief = belief.reshape(prod(batch_shape), self.variable_num, self.belief_dim_per_variable)
+            reshaped_belief = reshaped_belief.permute(1, 0, 2)
+            next_belief = self.nets["rnn"](middle, reshaped_belief)
+            prior_mean, prior_std = self.nets["middle2s"](next_belief)
+            next_belief = next_belief.permute(1, 0, 2).reshape(*batch_shape, -1)
 
         prior_mean = prior_mean.permute(1, 0, 2).reshape(*batch_shape, -1)
         prior_std = prior_std.permute(1, 0, 2).reshape(*batch_shape, -1)
-        next_belief = next_belief.permute(1, 0, 2).reshape(*batch_shape, -1)
 
         if self.residual:
             prior_mean = prior_mean + state
@@ -133,10 +143,10 @@ def test_causal_rssm_prior():
         action_dim=action_dim,
         variable_num=variable_num,
         state_dim_per_variable=state_dim_per_variable,
-        hidden_dim_per_variable=hidden_dim_per_variable,
+        belief_dim_per_variable=hidden_dim_per_variable,
         max_context_dim=max_context_dim,
         task_num=task_num,
-        meta=True
+        meta=True,
     )
 
     for batch_shape in [(), (batch_size,), (env_num, batch_size)]:

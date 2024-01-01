@@ -1,4 +1,5 @@
 from functools import partial
+from itertools import product
 import os
 
 import hydra
@@ -10,7 +11,7 @@ from torchrl.envs import ParallelEnv, SerialEnv, TransformedEnv
 from torchrl.record import VideoRecorder
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from torchrl.objectives.dreamer import DreamerActorLoss, DreamerValueLoss
-from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.trainers.helpers.collectors import SyncDataCollector, MultiaSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.trainers.trainers import Recorder
 
@@ -36,7 +37,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_dreamer_env,
         variable_num=cfg.variable_num,
         state_dim_per_variable=cfg.state_dim_per_variable,
-        hidden_dim_per_variable=cfg.hidden_dim_per_variable
+        hidden_dim_per_variable=cfg.belief_dim_per_variable
     )
     train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_train")
     test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_test")
@@ -59,6 +60,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # lambda_continue=cfg.lambda_continue if cfg.termination_fns == "" else 0.,
         lambda_reward=cfg.lambda_reward,
         lambda_continue=cfg.lambda_continue,
+        free_nats=cfg.free_nats,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -84,8 +86,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # annealing_num_steps=cfg.train_frames_per_task * task_num,
     ).to(device)
 
-    collector = SyncDataCollector(
-        create_env_fn=SerialEnv(task_num, train_make_env_list),
+    collector = MultiaSyncDataCollector(
+        # create_env_fn=SerialEnv(task_num, train_make_env_list),
+        create_env_fn=train_make_env_list,
         policy=exploration_policy,
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=cfg.frames_per_batch,
@@ -95,13 +98,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         split_trajs=True
     )
 
-    eval_env = SerialEnv(task_num, train_make_env_list)
+    # eval_env = SerialEnv(task_num, train_make_env_list)
     # eval_env = TransformedEnv(eval_env, VideoRecorder(logger, "eval"))
-    eval_env = TransformedEnv(eval_env)
     record = Recorder(
         record_frames=cfg.record_frames,
         policy_exploration=policy,
-        environment=eval_env,
+        environment=train_make_env_list[0](),
         record_interval=cfg.record_interval,
         exploration_type=InteractionType.MODE
     )
@@ -152,15 +154,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(cfg.optim_steps_per_batch):
             world_model.zero_grad()
             sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
-            if cfg.model_type == "causal" and j % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
-                grad = world_model_loss.reinforce(sampled_tensordict)
+            if cfg.model_type == "causal" and j % (
+                    cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+                grad, sampling_loss = world_model_loss.reinforce(sampled_tensordict)
                 causal_mask = world_model.causal_mask
                 logits = causal_mask.mask_logits
                 logits.backward(grad)
                 logits_opt.step()
 
-                logger.add_scaler("causal/sparsity", (logits < 0).float().mean())
-                logger.add_scaler("causal/mean_logits", logits.mean())
+                for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
+                    out_name = f"o{out_dim}"
+                    if in_dim < causal_mask.observed_input_dim:
+                        in_name = f"i{in_dim}"
+                    else:
+                        in_name = f"c{in_dim - causal_mask.observed_input_dim}"
+                    logger.add_scaler(f"causal/logits({out_name},{in_name})", logits[out_dim, in_dim])
+                for out_dim in range(logits.shape[0]):
+                    logger.add_scaler(f"causal/sampling_loss_{out_dim}", sampling_loss[..., out_dim].mean())
             else:
                 model_loss_td, sampled_tensordict = world_model_loss(
                     sampled_tensordict
@@ -182,8 +192,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
                 logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
                 logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
-                mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
-                logger.add_scaler("world_model/mean_continue", mean_continue)
+                collector_mask = sampled_tensordict.get(("collector", "mask"))
+                prior_mean = sampled_tensordict[("next", "prior_mean")][collector_mask]
+                prior_std = sampled_tensordict[("next", "prior_std")][collector_mask]
+                posterior_mean = sampled_tensordict[("next", "posterior_mean")][collector_mask]
+                posterior_std = sampled_tensordict[("next", "posterior_std")][collector_mask]
+                # print(prior_mean[0], prior_std[0], posterior_mean[0], posterior_std[0])
+                logger.add_scaler("world_model/mean_prior_mean", prior_mean.mean())
+                logger.add_scaler("world_model/mean_prior_std", prior_std.mean())
+                logger.add_scaler("world_model/mean_posterior_mean", posterior_mean.mean())
+                logger.add_scaler("world_model/mean_posterior_std", posterior_std.mean())
+                logger.add_scaler("world_model/mean_std_ratio", torch.log(prior_std / posterior_std).mean())
+                logger.add_scaler("world_model/mean_mean_diff", torch.pow(prior_mean - posterior_mean, 2).mean())
+
+                # mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
+                # logger.add_scaler("world_model/mean_continue", mean_continue)
 
             # update actor network
             actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
@@ -218,6 +241,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 logger.add_scaler("eval/reward", td_record["r_evaluation"])
             if "total_r_evaluation" in td_record.keys():
                 logger.add_scaler("eval/episode", td_record["total_r_evaluation"])
+        if cfg.model_type == "causal":
+            print()
+            print(world_model.causal_mask.printing_mask)
 
         logger.dump_scaler(collected_frames)
         exploration_policy.step(current_frames)

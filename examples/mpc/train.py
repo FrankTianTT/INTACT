@@ -93,7 +93,7 @@ def main(cfg):
     # optimizers
     context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
     nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                  weight_decay=cfg.world_model_weight_decay)
+                                weight_decay=cfg.world_model_weight_decay)
     model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
     if cfg.model_type == "causal":
         logits_opt = MultiOptimizer(

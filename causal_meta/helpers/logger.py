@@ -2,7 +2,7 @@ import os
 
 from torchrl.record.loggers import generate_exp_name
 
-from causal_meta.recode.logger import get_logger
+from causal_meta.record.logger import get_logger
 
 
 def build_logger(cfg, name="mpc", log_dir=""):

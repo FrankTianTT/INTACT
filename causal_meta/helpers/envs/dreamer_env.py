@@ -56,13 +56,14 @@ def make_dreamer_env(
         StepCounter(),
     ]
 
+    assert state_dim_per_variable > 0
     default_dict = {
         "state": UnboundedContinuousTensorSpec(
             shape=torch.Size((*env.batch_size, variable_num * state_dim_per_variable))
         ),
         "belief": UnboundedContinuousTensorSpec(
             shape=torch.Size((*env.batch_size, variable_num * hidden_dim_per_variable))
-        ),
+        )
     }
     transforms.append(TensorDictPrimer(random=False, default_value=0, **default_dict))
 

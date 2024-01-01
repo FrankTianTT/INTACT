@@ -1,5 +1,5 @@
 defaults:
-  - overrides: hopper
+  - overrides: cartpole
   - _self_
 
 # env cfg
@@ -24,28 +24,29 @@ buffer_size: 20000
 world_model_lr: 6e-4
 actor_value_lr: 8e-5
 context_lr: 1e-1
-observed_logits_lr: 0.002
+observed_logits_lr: 0.01
 context_logits_lr: 0.002
 
 # logger
 record_video: 0
-record_interval: 1
+record_interval: 10
 record_frames: 1000
 exp_name: default
-logger: tensorboard
+logger: wandb
 offline_logging: False
 
 # model learning
-model_type: causal
+model_type: plain
 variable_num: 5
-state_dim_per_variable: 10
-hidden_dim_per_variable: 50
-rnn_input_dim_per_variable: 50
-sparse_weight: 0.005
+state_dim_per_variable: 6
+belief_dim_per_variable: 40
+disable_belief: False
+free_nats: 3.0
+sparse_weight: 0.0001
 context_sparse_weight: 0.01
 context_max_weight: 0.2
 sampling_times: 30
-residual: True
+residual: False
 hidden_size: 400
 
 # meta
@@ -70,7 +71,7 @@ grad_clip: 100
 
 
 # other
-model_device: cuda:1
+model_device: cuda:0
 collector_device: cpu
 seed: 42
 

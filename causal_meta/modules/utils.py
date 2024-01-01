@@ -28,7 +28,7 @@ def build_mlp(
         hidden_dims: Optional[List[int]] = None,
         extra_dims: Optional[List[int]] = None,
         bias: bool = True,
-        activate_name: str = "ReLu",
+        activate_name: str = "ReLU",
         last_activate_name: Optional[str] = None,
 ) -> nn.Module:
     hidden_dims = hidden_dims or []

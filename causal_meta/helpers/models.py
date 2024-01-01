@@ -83,15 +83,15 @@ def make_causal_dreamer(
         action_dim=proof_environment.action_space.shape[0],
         variable_num=cfg.variable_num,
         state_dim_per_variable=cfg.state_dim_per_variable,
-        hidden_dim_per_variable=cfg.hidden_dim_per_variable,
-        rnn_input_dim_per_variable=cfg.rnn_input_dim_per_variable,
+        belief_dim_per_variable=cfg.belief_dim_per_variable,
+        disable_belief=cfg.disable_belief,
         max_context_dim=cfg.max_context_dim,
         task_num=cfg.task_num,
         residual=cfg.residual,
     )
 
     rssm_posterior = RSSMPosterior(
-        hidden_dim=cfg.hidden_dim_per_variable * cfg.variable_num,
+        hidden_dim=cfg.belief_dim_per_variable * cfg.variable_num,
         state_dim=cfg.state_dim_per_variable * cfg.variable_num,
     )
     reward_module = MLP(
@@ -122,7 +122,7 @@ def make_causal_dreamer(
         proof_environment,
         use_decoder_in_env,
         state_dim=cfg.state_dim_per_variable * cfg.variable_num,
-        rssm_hidden_dim=cfg.hidden_dim_per_variable * cfg.variable_num,
+        rssm_hidden_dim=cfg.belief_dim_per_variable * cfg.variable_num,
     )
     model_based_env = model_based_env.to(device)
 
