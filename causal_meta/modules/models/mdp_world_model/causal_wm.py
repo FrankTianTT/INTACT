@@ -83,7 +83,7 @@ class CausalWorldModel(PlainMDPWorldModel):
     @property
     def params_dict(self):
         return dict(
-            module=self.nets.parameters(),
+            nets=self.nets.parameters(),
             context=self.context_model.parameters(),
             observed_logits=self.causal_mask.get_parameter("observed_logits"),
             context_logits=self.causal_mask.get_parameter("context_logits"),

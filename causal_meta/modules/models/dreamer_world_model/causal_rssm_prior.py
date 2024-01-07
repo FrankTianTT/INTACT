@@ -18,7 +18,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
             variable_num=10,
             state_dim_per_variable=3,
             belief_dim_per_variable=20,
+            hidden_dim=64,
             disable_belief=False,
+            using_cross_belief=True,
             meta=False,
             max_context_dim=10,
             task_num=50,
@@ -27,6 +29,10 @@ class CausalRSSMPrior(PlainRSSMPrior):
             scale_lb=0.1,
     ):
         self.logits_clip = logits_clip
+        self.hidden_dim = hidden_dim
+        self.using_cross_belief = using_cross_belief
+        if disable_belief:
+            assert not using_cross_belief, "Cannot use cross belief when disable belief"
 
         super().__init__(
             action_dim=action_dim,
@@ -55,12 +61,20 @@ class CausalRSSMPrior(PlainRSSMPrior):
         mask_dim_list.extend(torch.arange(self.variable_num, self.causal_mask.mask_input_dim).tolist())
         self.mask_dim_map = torch.Tensor(mask_dim_list).long()
 
+        if using_cross_belief:
+            belief_mask_dim_list = []
+            for i in range(self.variable_num):
+                belief_mask_dim_list.extend([i] * self.belief_dim_per_variable)
+            self.belief_mask_dim_map = torch.Tensor(belief_mask_dim_list).long()
+        else:
+            self.belief_mask_dim_map = None
+
     def build_nets(self):
         action_state_to_middle_projector = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.belief_dim_per_variable,
             extra_dims=[self.variable_num],
-            hidden_dims=[self.belief_dim_per_variable] * 2,
+            hidden_dims=[self.hidden_dim] * 2,
             activate_name="ELU",
             last_activate_name="ELU",
         )
@@ -69,7 +83,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
                 input_dim=self.belief_dim_per_variable,
                 output_dim=self.state_dim_per_variable * 2,
                 extra_dims=[self.variable_num],
-                hidden_dims=[self.belief_dim_per_variable],
+                hidden_dims=[self.hidden_dim] * 2,
                 activate_name="ELU",
             ),
             scale_lb=self.scale_lb,
@@ -86,6 +100,16 @@ class CausalRSSMPrior(PlainRSSMPrior):
                 extra_dims=[self.variable_num],
             )
             module_dict["rnn"] = rnn
+            if self.using_cross_belief:
+                cross_belief_projector = build_mlp(
+                    input_dim=self.total_belief_dim,
+                    output_dim=self.belief_dim_per_variable,
+                    extra_dims=[self.variable_num],
+                    # hidden_dims=[self.hidden_dim] * 2,
+                    # activate_name="ELU",
+                    last_activate_name="ELU",
+                )
+                module_dict["b2b"] = cross_belief_projector
 
         return module_dict
 
@@ -113,9 +137,17 @@ class CausalRSSMPrior(PlainRSSMPrior):
             next_belief = belief.clone()
             prior_mean, prior_std = self.nets["middle2s"](middle)
         else:
-            reshaped_belief = belief.reshape(prod(batch_shape), self.variable_num, self.belief_dim_per_variable)
-            reshaped_belief = reshaped_belief.permute(1, 0, 2)
-            next_belief = self.nets["rnn"](middle, reshaped_belief)
+            if self.using_cross_belief:
+                masked_belief, _ = self.causal_mask(
+                    inputs=belief.reshape(prod(batch_shape), -1),
+                    dim_map=self.belief_mask_dim_map,
+                    deterministic=deterministic_mask,
+                )  # (variable_num, prod(batch_size), belief_dim_per_variable)
+                input_belief = self.nets["b2b"](masked_belief)
+            else:
+                reshaped_belief = belief.reshape(prod(batch_shape), self.variable_num, self.belief_dim_per_variable)
+                input_belief = reshaped_belief.permute(1, 0, 2)
+            next_belief = self.nets["rnn"](middle, input_belief)
             prior_mean, prior_std = self.nets["middle2s"](next_belief)
             next_belief = next_belief.permute(1, 0, 2).reshape(*batch_shape, -1)
 

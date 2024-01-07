@@ -30,6 +30,7 @@ def build_mlp(
         bias: bool = True,
         activate_name: str = "ReLU",
         last_activate_name: Optional[str] = None,
+        batch_norm: bool = False,
 ) -> nn.Module:
     hidden_dims = hidden_dims or []
     all_dims = [input_dim] + hidden_dims + [output_dim]
@@ -41,6 +42,8 @@ def build_mlp(
         else:
             layers += [ParallelLinear(in_features=all_dims[i], out_features=all_dims[i + 1],
                                       extra_dims=extra_dims, bias=bias)]
+        if batch_norm:
+            layers += [nn.BatchNorm1d(all_dims[i + 1])]
 
         if i < len(all_dims) - 2:
             layers += [get_activate(activate_name)]

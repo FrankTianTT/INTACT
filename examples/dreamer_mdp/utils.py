@@ -111,6 +111,39 @@ def find_world_model(policy, task_num):
     return new_policy, new_world_model
 
 
+def train_policy(
+        cfg,
+        replay_buffer,
+        actor_loss,
+        critic_loss,
+        training_steps,
+        actor_opt,
+        critic_opt,
+        logger
+):
+    device = next(actor_loss.parameters()).device
+
+    for _ in range(training_steps):
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+        actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+        actor_loss_td["loss_actor"].backward()
+        actor_opt.step()
+
+        logger.add_scaler("policy/loss", actor_loss_td["loss_actor"])
+        logger.add_scaler("policy/action_mean", sampled_tensordict["action"].mean())
+        logger.add_scaler("policy/action_std", sampled_tensordict["action"].std())
+        actor_opt.zero_grad()
+
+        value_loss_td, sampled_tensordict = critic_loss(sampled_tensordict)
+        value_loss_td["loss_value"].backward()
+        critic_opt.step()
+
+        logger.add_scaler("value/loss", value_loss_td["loss_value"])
+        logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
+        logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
+        critic_opt.zero_grad()
+
+
 def train_model(
         cfg,
         replay_buffer,

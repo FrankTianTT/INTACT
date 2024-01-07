@@ -20,7 +20,7 @@ class CausalWorldModelLoss(LossModule):
             lambda_transition: float = 1.0,
             lambda_reward: float = 1.0,
             lambda_terminated: float = 1.0,
-            lambda_mutual_info: float = 1.0,  # use for envs identify
+            lambda_mutual_info: float = 0.0,  # use for envs identify
             sparse_weight: float = 0.05,
             context_sparse_weight: float = 0.01,
             context_max_weight: float = 0.1,
@@ -54,6 +54,7 @@ class CausalWorldModelLoss(LossModule):
                 tensordict.get("obs_mean"),
                 tensordict.get(("next", "observation")),
                 torch.exp(tensordict.get("obs_log_var")),
+                # torch.ones_like(tensordict.get("obs_log_var")) * 0.01,
                 reduction=reduction
             )
         else:
@@ -62,6 +63,18 @@ class CausalWorldModelLoss(LossModule):
                 tensordict.get(("next", "observation")),
                 reduction=reduction
             )
+
+        # print()
+        # obs_diff = tensordict.get("obs_mean") - tensordict.get(("next", "observation"))
+        # print(obs_diff.mean(0))
+        # print(obs_diff.abs().max(0))
+        # idx = obs_diff.abs().max(0)[1][0]
+        # print(tensordict.get("obs_mean")[idx], tensordict.get(("next", "observation"))[idx],
+        #       tensordict.get("observation")[idx])
+        # # print(obs_diff.std(0))
+        # # print(tensordict.get(("next", "observation"))[0])
+        # # print(torch.exp(tensordict.get("obs_log_var") / 2).mean(0))
+        # print(transition_loss.mean(0))
 
         if self.learn_obs_var:
             reward_loss = F.gaussian_nll_loss(
@@ -72,7 +85,7 @@ class CausalWorldModelLoss(LossModule):
             )
         else:
             reward_loss = F.mse_loss(
-                tensordict.get("reward"),
+                tensordict.get("reward_mean"),
                 tensordict.get(("next", "reward")),
                 reduction=reduction
             )

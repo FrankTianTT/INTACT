@@ -16,24 +16,27 @@ init_frames_per_task: ${overrides.init_frames_per_task}
 # save
 save_model_frames_per_task: 10000
 
-# planning
-planning_horizon: ${overrides.planning_horizon}
-optim_steps: 10
-num_candidates: 350
-top_k: 35
+# policy
+discount_loss: True
+pred_continue: True
+imagination_horizon: ${overrides.imagination_horizon}
 
 # model learning
 model_type: plain
 reinforce: True
 batch_size: 256
 buffer_size: 10000
-optim_steps_per_frame: 10
+optim_steps_per_frame: ${overrides.optim_steps_per_frame}
 train_mask_iters: 10
 train_model_iters: 40
+
 world_model_lr: 0.001
+actor_lr: 1e-4
+critic_lr: 1e-4
 context_lr: 0.001
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
+
 world_model_weight_decay: 0.00001
 hidden_size: 400
 hidden_layers: 2
@@ -53,11 +56,11 @@ exp_name: default
 logger: tensorboard
 offline_logging: False
 eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
-eval_repeat_nums: 1
+eval_repeat_nums: 3
 eval_record_nums: 0
 
 # envs-RL
-meta: True
+meta: False
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
@@ -74,6 +77,6 @@ seed: 42
 
 hydra:
   run:
-    dir: ./outputs/mpc/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: ./outputs/dreamer_mdp/${now:%Y-%m-%d}/${now:%H-%M-%S}
   job:
     chdir: True

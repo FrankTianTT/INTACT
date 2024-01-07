@@ -139,7 +139,7 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
             "rgb_array",
             "depth_array",
         ],
-        "render_fps": 100,
+        "render_fps": 50,
     }
 
     def __init__(
@@ -152,6 +152,7 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
             torso_z_vel_bias: float = 0.0,
             torso_angle_vel_bias: float = 0.0,
             goal_velocity=10.0,
+            preprocess=True,
             **kwargs
     ):
         utils.EzPickle.__init__(
@@ -178,13 +179,15 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
         self._torso_angle_vel_bias = torso_angle_vel_bias
         self._goal_velocity = goal_velocity
 
+        self._preprocess = preprocess
+
         if exclude_current_positions_from_observation:
             observation_space = Box(
-                low=-np.inf, high=np.inf, shape=(17,), dtype=np.float64
+                low=-np.inf, high=np.inf, shape=(17 + int(self._preprocess),), dtype=np.float64
             )
         else:
             observation_space = Box(
-                low=-np.inf, high=np.inf, shape=(18,), dtype=np.float64
+                low=-np.inf, high=np.inf, shape=(18 + int(self._preprocess),), dtype=np.float64
             )
 
         MujocoEnv.__init__(
@@ -193,7 +196,7 @@ class HalfCheetahEnv(MujocoEnv, utils.EzPickle):
 
     def _initialize_simulation(self):
         super()._initialize_simulation()
-        self.model.opt.timestep = 0.01
+        self.model.opt.timestep = 0.02
 
     def control_cost(self, action):
         control_cost = self._ctrl_cost_weight * np.sum(np.square(action))

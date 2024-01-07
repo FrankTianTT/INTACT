@@ -208,16 +208,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
                 # logger.add_scaler("world_model/mean_continue", mean_continue)
 
-            # update actor network
+            # update policy network
             actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
             actor_loss_td["loss_actor"].backward()
             clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
             actor_opt.step()
 
-            logger.add_scaler("actor/loss", actor_loss_td["loss_actor"])
-            logger.add_scaler("actor/grad", grad_norm(actor_opt))
-            logger.add_scaler("actor/action_mean", sampled_tensordict["action"].mean())
-            logger.add_scaler("actor/action_std", sampled_tensordict["action"].std())
+            logger.add_scaler("policy/loss", actor_loss_td["loss_actor"])
+            logger.add_scaler("policy/grad", grad_norm(actor_opt))
+            logger.add_scaler("policy/action_mean", sampled_tensordict["action"].mean())
+            logger.add_scaler("policy/action_std", sampled_tensordict["action"].std())
             actor_opt.zero_grad()
 
             # update value network
@@ -254,6 +254,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             torch.save(world_model.state_dict(), os.path.join("checkpoints", str(i), f"world_model.pt"))
             torch.save(actor_model.state_dict(), os.path.join("checkpoints", str(i), f"actor_model.pt"))
             torch.save(value_model.state_dict(), os.path.join("checkpoints", str(i), f"value_model.pt"))
+
+    collector.shutdown()
 
 
 if __name__ == "__main__":

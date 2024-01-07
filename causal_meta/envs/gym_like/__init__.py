@@ -18,3 +18,9 @@ register(
     entry_point="causal_meta.envs.gym_like.hopper:HopperEnv",
     max_episode_steps=1000,
 )
+
+register(
+    id="Heating-v0",
+    entry_point="causal_meta.envs.gym_like.heating:HeatingEnv",
+    max_episode_steps=200,
+)

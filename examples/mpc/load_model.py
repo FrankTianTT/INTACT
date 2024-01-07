@@ -1,37 +1,27 @@
-from itertools import product
-from collections import defaultdict
 from functools import partial
 import os
-import math
 import argparse
 
 from tqdm import tqdm
-import hydra
 from omegaconf import OmegaConf
 import torch
-from tensordict import TensorDict
-from torchrl.envs.utils import step_mdp
 from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
 from torchrl.envs.libs import GymEnv
-from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
-from matplotlib import pyplot as plt
 
 from causal_meta.helpers import make_mdp_model, build_logger
-from causal_meta.objectives.causal_mdp import CausalWorldModelLoss
+from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 from utils import (
     build_make_env_list,
     evaluate_policy,
-    meta_test,
     plot_context,
-    MultiOptimizer,
-    train_model
+    MultiOptimizer
 )
 
 

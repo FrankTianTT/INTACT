@@ -15,6 +15,7 @@ class PlainRSSMPrior(BaseWorldModel):
             variable_num=10,
             state_dim_per_variable=3,
             belief_dim_per_variable=20,
+            hidden_dim=256,
             disable_belief=False,
             meta=False,
             max_context_dim=10,
@@ -25,6 +26,7 @@ class PlainRSSMPrior(BaseWorldModel):
         self.variable_num = variable_num
         self.state_dim_per_variable = state_dim_per_variable
         self.belief_dim_per_variable = belief_dim_per_variable
+        self.hidden_dim = hidden_dim
         self.disable_belief = disable_belief
         self.scale_lb = scale_lb
 
@@ -49,15 +51,15 @@ class PlainRSSMPrior(BaseWorldModel):
         action_state_to_middle_projector = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.total_belief_dim,
-            # hidden_dims=[self.total_belief_dim] * 2,
-            # activate_name="ELU",
+            hidden_dims=[self.hidden_dim] * 2,
+            activate_name="ELU",
             last_activate_name="ELU",
         )
         middle_to_prior_projector = NormalParamWrapper(
             build_mlp(
                 input_dim=self.total_belief_dim,
                 output_dim=self.total_state_dim * 2,
-                hidden_dims=[self.total_belief_dim],
+                hidden_dims=[self.total_belief_dim] * 2,
                 activate_name="ELU",
             ),
             scale_lb=self.scale_lb,

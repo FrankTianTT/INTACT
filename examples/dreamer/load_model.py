@@ -27,7 +27,7 @@ from utils import grad_norm, match_length
 
 
 def main(path, load_frame):
-    cfg_path = os.path.join(path, ".hydra", "config.yaml")
+    cfg_path = os.path.join(path, ".hydra", "main.yaml")
     cfg = OmegaConf.load(cfg_path)
 
     if torch.cuda.is_available():

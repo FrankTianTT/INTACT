@@ -22,7 +22,7 @@ class PlainMDPWorldModel(BaseWorldModel):
             residual=True,
             learn_obs_var=True,
             hidden_dims=None,
-            log_var_bounds=(-10.0, -2.0)
+            log_var_bounds=(-10.0, 0.5)
     ):
         """World-model class for environment learning with causal discovery.
 

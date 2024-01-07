@@ -1,13 +1,8 @@
-#env_name: MyHalfCheetah-v0
-env_name: HalfCheetah-v4
-termination_fns: "no_termination"
+env_name: Walker2d-v4
+termination_fns: "walker2d"
 reward_fns: ""
 max_steps: 1000
 
-#train_frames_per_task: 5000
-#init_frames_per_task: 100
-#eval_interval_frames_per_task: 500
-#meta_test_interval_frames_per_task: 1000
 train_frames_per_task: 125000
 init_frames_per_task: 5000
 eval_interval_frames_per_task: 10000

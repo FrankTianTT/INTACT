@@ -27,6 +27,10 @@ class ContextModel(nn.Module):
         self.fixed_idx = None
 
     @property
+    def context_dim(self):
+        return self.max_context_dim if self.meta else 0
+
+    @property
     def device(self):
         return self._context_hat.device
 
