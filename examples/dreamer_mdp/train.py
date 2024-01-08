@@ -4,6 +4,7 @@ from time import time
 from copy import deepcopy
 
 from tqdm import tqdm
+import numpy as np
 import hydra
 import torch
 from torchrl.envs import SerialEnv
@@ -34,6 +35,9 @@ def main(cfg):
         device = torch.device("cpu")
         collector_device = torch.device("cpu")
     print(f"Using device {device}")
+
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
     logger = build_logger(cfg, name="dreamer_mdp")
 
@@ -79,9 +83,10 @@ def main(cfg):
     )
     del proof_env
 
+    serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
+    serial_env.set_seed(cfg.seed)
     collector = SyncDataCollector(
-        # create_env_fn=[lambda: ParallelEnv(task_num, train_make_env_list, shared_memory=False)],
-        create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
+        create_env_fn=serial_env,
         policy=explore_policy,
         total_frames=cfg.train_frames_per_task * task_num,
         frames_per_batch=task_num,

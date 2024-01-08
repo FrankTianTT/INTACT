@@ -3,13 +3,15 @@ defaults:
   - _self_
 
 
+seed: 42
+
 env:
   name: ${overrides.env_name}
   task: ""
   exp_name: ${env.name}_SAC
   library: gym
   max_episode_steps: ${overrides.max_steps}
-  seed: 42
+  seed: ${seed}
 
 # collector
 collector:
@@ -51,7 +53,8 @@ network:
 logger: tensorboard
 exp_name: default
 env_name: ${overrides.env_name}
-eval_iter: 5000
+eval_iter: 1000
+eval_repeat_nums: 5
 
 hydra:
   run:

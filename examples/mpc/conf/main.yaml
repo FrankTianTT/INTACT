@@ -23,7 +23,7 @@ num_candidates: 350
 top_k: 35
 
 # model learning
-model_type: plain
+model_type: causal
 reinforce: True
 batch_size: 256
 buffer_size: 10000
@@ -57,7 +57,7 @@ eval_repeat_nums: 1
 eval_record_nums: 0
 
 # envs-RL
-meta: True
+meta: False
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20

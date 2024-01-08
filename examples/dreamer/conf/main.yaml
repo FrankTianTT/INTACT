@@ -36,12 +36,12 @@ logger: wandb
 offline_logging: False
 
 # model learning
-model_type: plain
+model_type: causal
 variable_num: 10
 state_dim_per_variable: 3
 belief_dim_per_variable: 20
 disable_belief: False
-free_nats: 0.0
+free_nats: 3.0
 sparse_weight: 0.0001
 context_sparse_weight: 0.01
 context_max_weight: 0.2

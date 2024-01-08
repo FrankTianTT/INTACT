@@ -74,8 +74,8 @@ class CausalRSSMPrior(PlainRSSMPrior):
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.belief_dim_per_variable,
             extra_dims=[self.variable_num],
-            hidden_dims=[self.hidden_dim] * 2,
-            activate_name="ELU",
+            # hidden_dims=[self.hidden_dim] * 2,
+            # activate_name="ELU",
             last_activate_name="ELU",
         )
         middle_to_prior_projector = NormalParamWrapper(
@@ -83,7 +83,8 @@ class CausalRSSMPrior(PlainRSSMPrior):
                 input_dim=self.belief_dim_per_variable,
                 output_dim=self.state_dim_per_variable * 2,
                 extra_dims=[self.variable_num],
-                hidden_dims=[self.hidden_dim] * 2,
+                hidden_dims=[self.hidden_dim],
+                # hidden_dims=[self.hidden_dim] * 2,
                 activate_name="ELU",
             ),
             scale_lb=self.scale_lb,
@@ -107,7 +108,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
                     extra_dims=[self.variable_num],
                     # hidden_dims=[self.hidden_dim] * 2,
                     # activate_name="ELU",
-                    last_activate_name="ELU",
+                    # last_activate_name="ELU",
                 )
                 module_dict["b2b"] = cross_belief_projector
 

@@ -12,7 +12,8 @@ def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.
 
 
 def heating(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
-    return - (next_obs - 20).abs().sum(dim=-1, keepdim=True)
+    temp = next_obs * 10 + 20
+    return - (temp - 20).abs().sum(dim=-1, keepdim=True)
 
 
 reward_fns_dict = {

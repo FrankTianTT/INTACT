@@ -1,5 +1,5 @@
 defaults:
-  - overrides: cartpole
+  - overrides: heating
   - _self_
 
 
@@ -22,7 +22,7 @@ pred_continue: True
 imagination_horizon: ${overrides.imagination_horizon}
 
 # model learning
-model_type: plain
+model_type: causal
 reinforce: True
 batch_size: 256
 buffer_size: 10000
@@ -56,7 +56,7 @@ exp_name: default
 logger: tensorboard
 offline_logging: False
 eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
-eval_repeat_nums: 3
+eval_repeat_nums: 5
 eval_record_nums: 0
 
 # envs-RL

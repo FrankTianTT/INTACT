@@ -43,8 +43,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
     logger = build_logger(cfg, "sac")
 
-    torch.manual_seed(cfg.env.seed)
-    np.random.seed(cfg.env.seed)
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
     # Create environments
     train_env, eval_env = make_environment(cfg)
@@ -179,22 +179,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch:
-            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
-                eval_start = time.time()
-                eval_rollout = eval_env.rollout(
-                    eval_rollout_steps,
-                    model[0],
-                    auto_cast_to_device=True,
-                    break_when_any_done=True,
-                )
-                eval_time = time.time() - eval_start
-                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                metrics_to_log["eval/reward"] = eval_reward
-                metrics_to_log["eval/time"] = eval_time
+            eval_start = time.time()
+            eval_reward = 0
+            for i in range(cfg.eval_repeat_nums):
+                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                    eval_rollout = eval_env.rollout(
+                        eval_rollout_steps,
+                        model[0],
+                        auto_cast_to_device=True,
+                        break_when_any_done=True,
+                    )
+                eval_reward += eval_rollout["next", "reward"].sum(-2).mean().item()
+            metrics_to_log["eval/reward"] = eval_reward / cfg.eval_repeat_nums
+            metrics_to_log["eval/time"] = time.time() - eval_start
 
-                eval_rollout = eval_rollout.reshape(-1)
-                for i in range(eval_rollout.numel()):
-                    print(eval_rollout["observation"][i])
         if logger is not None:
             log_metrics(logger, metrics_to_log, collected_frames)
         sampling_start = time.time()
