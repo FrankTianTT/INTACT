@@ -24,13 +24,13 @@ buffer_size: 20000
 world_model_lr: 6e-4
 actor_value_lr: 8e-5
 context_lr: 1e-1
-observed_logits_lr: 0.01
+observed_logits_lr: 0.05
 context_logits_lr: 0.002
 
 # logger
 record_video: 0
 record_interval: 10
-record_frames: 1000
+eval_repeat_times: 5
 exp_name: default
 logger: wandb
 offline_logging: False

@@ -13,12 +13,12 @@ from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrappe
 from torchrl.objectives.dreamer import DreamerActorLoss, DreamerValueLoss
 from torchrl.trainers.helpers.collectors import SyncDataCollector, MultiaSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
-from torchrl.trainers.trainers import Recorder
 
 from causal_meta.helpers.envs import make_dreamer_env, create_make_env_list
 from causal_meta.helpers.models import make_causal_dreamer
 from causal_meta.helpers.logger import build_logger
 from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
+from causal_meta.helpers.reocoder import Recorder
 
 from utils import grad_norm, match_length
 
@@ -101,7 +101,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # eval_env = SerialEnv(task_num, train_make_env_list)
     # eval_env = TransformedEnv(eval_env, VideoRecorder(logger, "eval"))
     record = Recorder(
-        record_frames=cfg.record_frames,
+        env_max_steps=cfg.env_max_steps,
+        eval_repeat_times=cfg.eval_repeat_times,
         policy_exploration=policy,
         environment=train_make_env_list[0](),
         record_interval=cfg.record_interval,
