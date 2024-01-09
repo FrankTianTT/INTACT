@@ -200,6 +200,7 @@ def make_causal_dreamer(
         cfg.hidden_size,
         action_key,
         proof_environment,
+        cfg.actor_dist_type
     )
     actor_simulator = actor_simulator.to(device)
 

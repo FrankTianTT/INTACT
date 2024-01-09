@@ -3,13 +3,13 @@ termination_fns: "no_termination"
 reward_fns: "heating"
 max_steps: 200
 
-train_frames_per_task: 200000
+train_frames_per_task: 50_000
 init_frames_per_task: 50
 eval_interval_frames_per_task: 500
 meta_test_interval_frames_per_task: 400
 
-imagination_horizon: 3
-optim_steps_per_frame: 10
+imagination_horizon: 1
+optim_steps_per_frame: 5
 
 sparse_weight: 0.02
 context_sparse_weight: 0.02

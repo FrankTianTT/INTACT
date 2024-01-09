@@ -77,16 +77,20 @@ class CausalDreamerModelLoss(DreamerModelLoss):
                 / (2 * prior_std ** 2)
                 - 0.5
         )
-        kl = kl.reshape(*kl.shape[:-1], self.variable_num, self.state_dim_per_variable)
-        kl = kl.sum(-1)
+        if self.model_type == "causal":
+            kl = kl.reshape(*kl.shape[:-1], self.variable_num, self.state_dim_per_variable)
+            kl = kl.sum(-1)
 
-        free_nats_every_variable = self.free_nats / self.variable_num
-        kl = kl.clamp_min(free_nats_every_variable)
+            free_nats_every_variable = self.free_nats / self.variable_num
+            kl = kl.clamp_min(free_nats_every_variable)
 
-        if keep_dim:
-            return kl
+            if keep_dim:
+                return kl
+            else:
+                return kl.sum(-1).mean()
         else:
-            return kl.sum(-1).mean()
+            kl = kl.sum(-1)
+            return kl.clamp_min(self.free_nats).mean()
 
 
 if __name__ == '__main__':

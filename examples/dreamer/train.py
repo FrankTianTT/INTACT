@@ -13,6 +13,7 @@ from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrappe
 from torchrl.objectives.dreamer import DreamerActorLoss, DreamerValueLoss
 from torchrl.trainers.helpers.collectors import SyncDataCollector, MultiaSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
+from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
 from causal_meta.helpers.envs import make_dreamer_env, create_make_env_list
 from causal_meta.helpers.models import make_causal_dreamer
@@ -52,12 +53,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
     )
 
+    if cfg.normalize_rewards_online:
+        reward_normalizer = RewardNormalizer()
+    else:
+        reward_normalizer = None
+
     world_model_loss = CausalDreamerModelLoss(
         world_model,
         lambda_kl=cfg.lambda_kl,
         lambda_reco=cfg.lambda_reco,
-        # lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
-        # lambda_continue=cfg.lambda_continue if cfg.termination_fns == "" else 0.,
         lambda_reward=cfg.lambda_reward,
         lambda_continue=cfg.lambda_continue,
         free_nats=cfg.free_nats,
@@ -67,6 +71,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sampling_times=cfg.sampling_times,
     )
     actor_loss = DreamerActorLoss(
+        # AdditiveGaussianWrapper(actor_model, sigma_init=0.3, sigma_end=0.3).to(device),
         actor_model,
         value_model,
         model_based_env,
@@ -106,7 +111,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy_exploration=policy,
         environment=train_make_env_list[0](),
         record_interval=cfg.record_interval,
-        exploration_type=InteractionType.MODE
+        # exploration_type=InteractionType.MODE
+        exploration_type=InteractionType.RANDOM
     )
 
     # replay buffer
@@ -130,6 +136,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collected_frames = 0
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)
     for i, tensordict in enumerate(collector):
+        if reward_normalizer is not None:
+            reward_normalizer.update_reward_stats(tensordict)
+
         current_frames = tensordict.get(("collector", "mask")).sum().item()
         pbar.update(current_frames)
         collected_frames += current_frames
@@ -155,6 +164,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for j in range(cfg.optim_steps_per_batch):
             world_model.zero_grad()
             sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+            if reward_normalizer is not None:
+                sampled_tensordict = reward_normalizer.normalize_reward(sampled_tensordict)
+
             if cfg.model_type == "causal" and j % (
                     cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
                 grad, sampling_loss = world_model_loss.reinforce(sampled_tensordict)
@@ -209,6 +221,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
                 # logger.add_scaler("world_model/mean_continue", mean_continue)
 
+            if collected_frames < cfg.policy_learning_frames_per_task * task_num:
+                continue
             # update policy network
             actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
             actor_loss_td["loss_actor"].backward()

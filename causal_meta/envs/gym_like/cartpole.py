@@ -93,7 +93,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             masspole: float = 0.1,
             length: float = 0.5,
             force_mag: float = 10.0,
-            tau: float = 0.05,
+            tau: float = 0.02,
             cart_vel_bias: float = 0.0,
             pole_vel_bias: float = 0.0,
             theta_threshold_degree: float = 12,
