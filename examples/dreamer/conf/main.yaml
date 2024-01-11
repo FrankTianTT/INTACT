@@ -24,7 +24,7 @@ buffer_size: 20000
 
 world_model_lr: 6e-4
 actor_value_lr: 8e-5
-context_lr: 1e-1
+context_lr: 0.1
 observed_logits_lr: 0.05
 context_logits_lr: 0.002
 
@@ -37,15 +37,20 @@ logger: wandb
 offline_logging: False
 
 # model learning
-model_type: plain
-variable_num: 10
+model_type: causal
+#variable_num: 10
+#state_dim_per_variable: 1
+#belief_dim_per_variable: 1
+variable_num: 4
 state_dim_per_variable: 3
 belief_dim_per_variable: 20
 disable_belief: False
+using_cross_belief: False
 free_nats: 3.0
-sparse_weight: 0.0001
-context_sparse_weight: 0.01
-context_max_weight: 0.2
+
+sparse_weight: ${overrides.sparse_weight}
+context_sparse_weight: ${overrides.context_sparse_weight}
+context_max_weight: ${overrides.context_max_weight}
 sampling_times: 30
 residual: True
 hidden_size: 400
@@ -68,6 +73,7 @@ discount_loss: True
 pred_continue: True
 
 train_mask_iters: 10
+#train_mask_iters: 0
 train_model_iters: 40
 
 

@@ -87,31 +87,31 @@ def make_mdp_dreamer(
     ).to(device)
     actor_module.set_context_model(world_model.context_model)
     actor = SafeProbabilisticTensorDictSequential(
-            SafeModule(
-                actor_module,
-                in_keys=["observation", "idx"],
-                out_keys=["loc", "scale"],
-                spec=CompositeSpec(
-                    **{
-                        "loc": UnboundedContinuousTensorSpec(
-                            proof_env.action_spec.shape,
-                        ),
-                        "scale": UnboundedContinuousTensorSpec(
-                            proof_env.action_spec.shape,
-                        ),
-                    }
-                ),
+        SafeModule(
+            actor_module,
+            in_keys=["observation", "idx"],
+            out_keys=["loc", "scale"],
+            spec=CompositeSpec(
+                **{
+                    "loc": UnboundedContinuousTensorSpec(
+                        proof_env.action_spec.shape,
+                    ),
+                    "scale": UnboundedContinuousTensorSpec(
+                        proof_env.action_spec.shape,
+                    ),
+                }
             ),
-            SafeProbabilisticModule(
-                in_keys=["loc", "scale"],
-                out_keys=["action"],
-                distribution_class=TanhNormal,
-                distribution_kwargs={"tanh_loc": True},
-                spec=CompositeSpec(
-                    **{"action": proof_env.action_spec.to("cpu")}
-                ),
+        ),
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
+            spec=CompositeSpec(
+                **{"action": proof_env.action_spec.to("cpu")}
             ),
-        ).to(device)
+        ),
+    ).to(device)
     critic_module = Critic(
         state_or_obs_dim=obs_dim,
         context_dim=world_model.context_model.context_dim,
@@ -140,7 +140,10 @@ def make_causal_dreamer(
     obs_decoder = ObsDecoder()
 
     if cfg.model_type == "causal":
-        rssm_prior_class = CausalRSSMPrior
+        rssm_prior_class = partial(
+            CausalRSSMPrior,
+            using_cross_belief=cfg.using_cross_belief
+        )
     elif cfg.model_type == "plain":
         rssm_prior_class = PlainRSSMPrior
     else:
