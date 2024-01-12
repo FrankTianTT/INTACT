@@ -8,18 +8,15 @@ env_max_steps: ${overrides.env_max_steps}
 
 
 train_frames_per_task: ${overrides.train_frames_per_task}
-frames_per_batch: 800
-init_frames_per_task: 5000
-#init_frames_per_task: 0
+frames_per_batch: 1250
+init_frames_per_task: ${overrides.init_frames_per_task}
 policy_learning_frames_per_task: 0
-#policy_learning_frames_per_task: 10_000
 
 batch_size: 50
 batch_length: 25
 train_agent_frames: 0
 
-optim_steps_per_batch: 80
-#optim_steps_per_batch: 200
+optim_steps_per_batch: 125
 buffer_size: 20000
 
 world_model_lr: 6e-4
@@ -34,10 +31,11 @@ record_interval: 1
 eval_repeat_times: 5
 exp_name: default
 logger: wandb
+#logger: tensorboard
 offline_logging: False
 
 # model learning
-model_type: causal
+model_type: plain
 #variable_num: 10
 #state_dim_per_variable: 1
 #belief_dim_per_variable: 1
@@ -59,9 +57,12 @@ hidden_size: 400
 actor_dist_type: tanh_normal
 
 # meta
-meta: False
-max_context_dim: 10
+meta: True
+max_context_dim: 5
 task_num: 50
+meta_test_task_num: 20
+oracle_context: ${overrides.oracle_context}
+new_oracle_context: ${overrides.new_oracle_context}
 
 
 lambda_kl: 1.0
@@ -73,13 +74,13 @@ discount_loss: True
 pred_continue: True
 
 train_mask_iters: 10
-#train_mask_iters: 0
 train_model_iters: 40
 
 
 grad_clip: 100
 
 normalize_rewards_online: False
+
 
 
 # other

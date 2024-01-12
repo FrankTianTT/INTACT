@@ -1,17 +1,18 @@
 env_name: MyCartPole-v0
 env_max_steps: 200
 
-train_frames_per_task: 1_000_000
-init_frames_per_task: 50
-eval_interval_frames_per_task: 200
+train_frames_per_task: 500_000
+init_frames_per_task: 5_000
 meta_test_interval_frames_per_task: 400
 
 sparse_weight: 0.0001
-context_sparse_weight: 0.02
-context_max_weight: 0.1
+context_sparse_weight: 0.00005
+context_max_weight: 0.0001
+#sparse_weight: 0.0
+#context_sparse_weight: 0.0
+#context_max_weight: 0.0
 
 oracle_context:
-  cart_vel_bias: [ -0.5, 0.5 ]
-  pole_vel_bias: [ -0.5, 0.5 ]
+  masscart: [ 0.5, 2.0 ]
 new_oracle_context:
   gravity: [ 5.0, 20.0 ]

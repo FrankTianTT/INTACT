@@ -3,9 +3,7 @@ from torch import nn
 from torchrl.modules.models.models import MLP
 from torchrl.modules.distributions import NormalParamWrapper
 
-
 from causal_meta.modules.models.context_model import ContextModel
-
 
 
 class Actor(nn.Module):

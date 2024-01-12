@@ -11,21 +11,23 @@ from torchrl.envs import ParallelEnv, SerialEnv, TransformedEnv
 from torchrl.record import VideoRecorder
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 from torchrl.objectives.dreamer import DreamerActorLoss, DreamerValueLoss
-from torchrl.trainers.helpers.collectors import SyncDataCollector, MultiaSyncDataCollector
+from torchrl.collectors.collectors import aSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
 from causal_meta.helpers.envs import make_dreamer_env, create_make_env_list
-from causal_meta.helpers.models import make_causal_dreamer
+from causal_meta.helpers.models import make_dreamer
 from causal_meta.helpers.logger import build_logger
 from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 from causal_meta.helpers.reocoder import Recorder
 
-from utils import grad_norm, match_length
+from utils import grad_norm, match_length, plot_context
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg: "DictConfig"):  # noqa: F821
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
     if torch.cuda.is_available():
         device = torch.device(cfg.model_device)
     else:
@@ -47,7 +49,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    world_model, model_based_env, actor_model, value_model, policy = make_causal_dreamer(
+    # print("state_spec", proof_env.state_spec)
+    # print("observation_spec", proof_env.observation_spec)
+    world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
         cfg=cfg,
         proof_environment=proof_env,
         device=device,
@@ -91,13 +95,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # annealing_num_steps=cfg.train_frames_per_task * task_num,
     ).to(device)
 
-    collector = MultiaSyncDataCollector(
-        # create_env_fn=SerialEnv(task_num, train_make_env_list),
-        create_env_fn=train_make_env_list,
+    collector = aSyncDataCollector(
+        create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
         policy=exploration_policy,
-        total_frames=cfg.train_frames_per_task * task_num,
+        total_frames=cfg.train_frames_per_task,
         frames_per_batch=cfg.frames_per_batch,
-        init_random_frames=cfg.init_frames_per_task * task_num,
+        init_random_frames=cfg.init_frames_per_task,
         device=cfg.collector_device,
         storing_device=cfg.collector_device,
         split_trajs=True
@@ -116,7 +119,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # replay buffer
-    buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
+    buffer_size = cfg.train_frames_per_task if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -134,7 +137,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Training loop
     collected_frames = 0
-    pbar = tqdm(total=cfg.train_frames_per_task * task_num)
+    pbar = tqdm(total=cfg.train_frames_per_task)
     for i, tensordict in enumerate(collector):
         if reward_normalizer is not None:
             reward_normalizer.update_reward_stats(tensordict)
@@ -145,6 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         tensordict = match_length(tensordict, cfg.batch_length)
         tensordict = tensordict.reshape(-1, cfg.batch_length)
+
         replay_buffer.extend(tensordict.cpu())
 
         mask = tensordict.get(("collector", "mask"))
@@ -158,7 +162,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
         logger.dump_scaler(collected_frames)
 
-        if collected_frames < cfg.init_frames_per_task * task_num:
+        if collected_frames < cfg.init_frames_per_task:
             continue
 
         for j in range(cfg.optim_steps_per_batch):
@@ -221,7 +225,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # mean_continue = (sampled_tensordict[("next", "pred_continue")] > 0).float().mean()
                 # logger.add_scaler("world_model/mean_continue", mean_continue)
 
-            if collected_frames < cfg.policy_learning_frames_per_task * task_num:
+            if collected_frames < cfg.policy_learning_frames_per_task:
                 continue
             # update policy network
             actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
@@ -259,6 +263,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if cfg.model_type == "causal":
             print()
             print(world_model.causal_mask.printing_mask)
+        if cfg.meta:
+            plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)
+
+
 
         logger.dump_scaler(collected_frames)
         exploration_policy.step(current_frames)
