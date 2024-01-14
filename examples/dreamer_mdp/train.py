@@ -12,9 +12,9 @@ from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.helpers import make_mdp_dreamer, build_logger
+from causal_meta.utils import make_mdp_dreamer, build_logger
 from causal_meta.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
-from causal_meta.helpers.envs import make_mdp_env, create_make_env_list
+from causal_meta.utils.envs import make_mdp_env, create_make_env_list
 
 from utils import (
     evaluate_policy,

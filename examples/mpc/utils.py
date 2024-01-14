@@ -19,80 +19,13 @@ from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
 
-from causal_meta.helpers.envs import build_make_env_list, make_mdp_env
+from causal_meta.utils.envs import build_make_env_list, make_mdp_env
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
+from causal_meta.utils.eval import evaluate_policy
 
 
-class MultiOptimizer:
-    def __init__(self, **optimizers):
-        self.optimizers = optimizers
-
-    def step(self):
-        for opt in self.optimizers.values():
-            opt.step()
-
-
-def evaluate_policy(
-        cfg,
-        oracle_context,
-        policy,
-        logger,
-        frames_per_task,
-        log_prefix="meta_train",
-):
-    device = next(policy.parameters()).device
-
-    pbar = tqdm(total=cfg.eval_repeat_nums * cfg.max_steps, desc="{}_eval".format(log_prefix))
-    repeat_rewards = []
-    repeat_lengths = []
-    for repeat in range(cfg.eval_repeat_nums):
-        make_env_fn = partial(make_mdp_env, pixel=repeat < cfg.eval_record_nums)
-        make_env_list = build_make_env_list(cfg.env_name, make_env_fn, oracle_context)
-        eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
-        if repeat < cfg.eval_record_nums:
-            eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
-
-        rewards = torch.zeros(len(make_env_list))
-        lengths = torch.zeros(len(make_env_list))
-        tensordict = eval_env.reset().to(device)
-        ever_done = torch.zeros(*tensordict.batch_size, 1).to(bool)
-
-        for _ in range(cfg.max_steps):
-            pbar.update()
-            with set_interaction_mode("mode"):
-                if "pixels" in tensordict.keys():
-                    del tensordict["pixels"]
-                action = policy(tensordict.to(device)).cpu()
-                with catch_warnings():
-                    filterwarnings("ignore", category=UserWarning)
-                    tensordict = eval_env.step(action)
-
-            reward = tensordict.get(("next", "reward"))
-            reward[ever_done] = 0
-            rewards += reward.reshape(-1)
-            ever_done |= tensordict.get(("next", "done"))
-            lengths += (~ever_done).float().reshape(-1)
-            if ever_done.all():
-                break
-            else:
-                tensordict = step_mdp(tensordict, exclude_action=False)
-        repeat_rewards.append(rewards)
-        repeat_lengths.append(lengths)
-
-        if repeat < cfg.eval_record_nums:
-            print(repeat_rewards)
-            eval_env.transform.dump(suffix=str(frames_per_task))
-
-    if logger is not None:
-        logger.add_scaler("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
-        logger.add_scaler("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
-        logger.dump_scaler(frames_per_task)
-
-    return torch.stack(repeat_rewards)
-
-
-def find_world_model(policy, task_num):
+def reset_module(policy, task_num):
     new_policy = deepcopy(policy).to(next(policy.parameters()).device)
 
     sub_module = new_policy
@@ -194,7 +127,7 @@ def meta_test(
 
     task_num = len(make_env_list)
 
-    policy, world_model = find_world_model(policy, task_num=task_num)
+    policy, world_model = reset_module(policy, task_num=task_num)
     device = next(world_model.parameters()).device
 
     world_model_loss = CausalWorldModelLoss(
@@ -220,7 +153,7 @@ def meta_test(
     replay_buffer = TensorDictReplayBuffer(
         storage=ListStorage(max_size=cfg.meta_task_adjust_frames_per_task * task_num),
     )
-    context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
+    world_model_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
 
     pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
     train_model_iters = 0
@@ -231,7 +164,7 @@ def meta_test(
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
             training_steps=cfg.meta_test_model_learning_per_frame * task_num,
-            model_opt=context_opt,
+            model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{frames_per_task}",
             iters=train_model_iters
@@ -251,15 +184,15 @@ def meta_test(
             world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
-        nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
-        model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
+        world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr,
+                                             weight_decay=cfg.world_model_weight_decay))
         logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
         for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
                 training_steps=cfg.meta_test_model_learning_per_frame * task_num,
-                model_opt=model_opt, logits_opt=logits_opt,
+                model_opt=world_model_opt, logits_opt=logits_opt,
                 logger=logger,
                 log_prefix=f"meta_test_model_{frames_per_task}",
                 iters=train_model_iters,

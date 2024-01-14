@@ -98,15 +98,6 @@ class PlainMDPWorldModel(BaseWorldModel):
         mean, log_var = self.nets["mlp"](inputs.reshape(-1, dim)).chunk(2, dim=-1)
         return self.get_outputs(mean, log_var, observation, batch_shape)
 
-    def reset(self, task_num=None):
-        self.context_model.reset(task_num)
-
-        # last_module = self.module[0]
-        # nn.init.kaiming_uniform_(
-        #     last_module.weight[self.obs_dim + self.action_dim:, :],
-        #     a=math.sqrt(5)
-        # )
-
 
 def test_plain_world_model():
     obs_dim = 4

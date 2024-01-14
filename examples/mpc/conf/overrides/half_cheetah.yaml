@@ -2,7 +2,7 @@
 env_name: HalfCheetah-v4
 termination_fns: "no_termination"
 reward_fns: ""
-max_steps: 1000
+env_max_steps: 1000
 
 #train_frames_per_task: 5000
 #init_frames_per_task: 100

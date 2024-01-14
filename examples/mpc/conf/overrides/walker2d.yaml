@@ -1,7 +1,7 @@
 env_name: Walker2d-v4
 termination_fns: "walker2d"
 reward_fns: ""
-max_steps: 1000
+env_max_steps: 1000
 
 train_frames_per_task: 125000
 init_frames_per_task: 5000

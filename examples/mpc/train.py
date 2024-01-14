@@ -10,16 +10,15 @@ from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.helpers import make_mdp_model, build_logger
+from causal_meta.utils import make_mdp_model, build_logger
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
-from causal_meta.helpers.envs import make_mdp_env, create_make_env_list
+from causal_meta.utils.envs import make_mdp_env, create_make_env_list
+from causal_meta.utils.eval import evaluate_policy
 
 from utils import (
-    evaluate_policy,
     meta_test,
     plot_context,
-    MultiOptimizer,
     train_model
 )
 
@@ -96,15 +95,12 @@ def main(cfg):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
-    nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                weight_decay=cfg.world_model_weight_decay)
-    model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
+                                       weight_decay=cfg.world_model_weight_decay)
+    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
     if cfg.model_type == "causal":
-        logits_opt = MultiOptimizer(
-            observed_logits=torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr),
-            context_logits=torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
-        )
+        logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+        logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     else:
         logits_opt = None
 
@@ -129,7 +125,7 @@ def main(cfg):
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_frame * task_num, model_opt, logits_opt, logger,
+            cfg.optim_steps_per_frame * task_num, world_model_opt, logits_opt, logger,
             iters=train_model_iters
         )
         t2 = time()

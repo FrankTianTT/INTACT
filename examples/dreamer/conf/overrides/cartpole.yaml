@@ -3,11 +3,13 @@ env_max_steps: 200
 
 train_frames_per_task: 500_000
 init_frames_per_task: 5_000
-meta_test_interval_frames_per_task: 400
+#init_frames_per_task: 0
+meta_test_interval: 40
+#meta_test_interval: 1
 
-sparse_weight: 0.0001
-context_sparse_weight: 0.00005
-context_max_weight: 0.0001
+sparse_weight: 0.0005
+context_sparse_weight: 0.0005
+context_max_weight: 0.0005
 #sparse_weight: 0.0
 #context_sparse_weight: 0.0
 #context_max_weight: 0.0
@@ -15,4 +17,4 @@ context_max_weight: 0.0001
 oracle_context:
   masscart: [ 0.5, 2.0 ]
 new_oracle_context:
-  gravity: [ 5.0, 20.0 ]
+#  gravity: [ 5.0, 20.0 ]

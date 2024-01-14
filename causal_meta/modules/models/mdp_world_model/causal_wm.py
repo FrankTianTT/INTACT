@@ -104,15 +104,6 @@ class CausalWorldModel(PlainMDPWorldModel):
         mask = mask.reshape(*batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
         return *self.get_outputs(mean, log_var, observation, batch_shape), mask
 
-    def reset(self, task_num=None):
-        self.context_model.reset(task_num)
-
-        # last_module = self.module[0]
-        # nn.init.kaiming_uniform_(
-        #     last_module.weight[:, :, self.obs_dim + self.action_dim:],
-        #     a=math.sqrt(5)
-        # )
-
 
 def test_causal_world_model_without_meta():
     obs_dim = 4

@@ -33,7 +33,7 @@ from utils import (
     make_sac_optimizer,
 )
 
-from causal_meta.helpers import build_logger
+from causal_meta.utils import build_logger
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")

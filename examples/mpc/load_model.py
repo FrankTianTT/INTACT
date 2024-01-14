@@ -12,7 +12,7 @@ from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.helpers import make_mdp_model, build_logger
+from causal_meta.utils import make_mdp_model, build_logger
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner

@@ -7,7 +7,7 @@ defaults:
 env_name: ${overrides.env_name}
 termination_fns: ${overrides.termination_fns}
 reward_fns: ${overrides.reward_fns}
-max_steps: ${overrides.max_steps}
+env_max_steps: ${overrides.env_max_steps}
 
 # learning
 train_frames_per_task: ${overrides.train_frames_per_task}
@@ -56,14 +56,13 @@ eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
 eval_repeat_nums: 1
 eval_record_nums: 0
 
-# envs-RL
+# meta-RL
 meta: False
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
-meta_test_interval_frames_per_task: ${overrides.meta_test_interval_frames_per_task}
+meta_test_interval: ${overrides.meta_test_interval_frames_per_task}
 meta_task_adjust_frames_per_task: 50
-meta_test_model_learning_per_frame: 5
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 

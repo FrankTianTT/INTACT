@@ -19,7 +19,7 @@ from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
 
-from causal_meta.helpers.envs import build_make_env_list, make_mdp_env
+from causal_meta.utils.envs import build_make_env_list, make_mdp_env
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
 
