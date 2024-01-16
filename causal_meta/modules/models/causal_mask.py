@@ -62,19 +62,24 @@ class CausalMask(nn.Module):
             bias=observed_logits_init_bias,
             scale=observed_logits_init_scale
         ))
-        # # gt_observed_logits = torch.Tensor([
-        # #     [-1, 1, -1, -1, -1],
-        # #     [-1, -1, 1, 1, 1],
-        # #     [-1, -1, -1, 1, -1],
-        # #     [-1, -1, 1, 1, 1],
-        # # ]).float() * logits_clip
-        # gt_observed_logits = torch.ones(4, 5).float() * logits_clip
+
+        # # # gt_observed_logits = torch.Tensor([
+        # # #     [-1, 1, -1, -1, -1],
+        # # #     [-1, -1, 1, 1, 1],
+        # # #     [-1, -1, -1, 1, -1],
+        # # #     [-1, -1, 1, 1, 1],
+        # # # ]).float() * logits_clip
+        # gt_observed_logits = torch.ones(self.mask_output_dim, self.observed_input_dim).float() * logits_clip
         # self._observed_logits = nn.Parameter(gt_observed_logits)
+
         self._context_logits = nn.Parameter(get_init(
             shape=(self.mask_output_dim, self.context_input_dim),
             bias=context_logits_init_bias,
             scale=context_logits_init_scale
         ))
+
+        # gt_context_logits = torch.ones(self.mask_output_dim, self.context_input_dim).float() * logits_clip
+        # self._context_logits = nn.Parameter(gt_context_logits)
 
     def extra_repr(self):
         return 'observed_input_dim={}, mask_output_dim={}, context_input_dim={}'.format(

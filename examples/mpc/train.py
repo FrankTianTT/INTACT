@@ -35,7 +35,7 @@ def main(cfg):
 
     logger = build_logger(cfg)
 
-    make_env = partial(make_mdp_env, max_steps=cfg.max_steps)
+    make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
     train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
     test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")

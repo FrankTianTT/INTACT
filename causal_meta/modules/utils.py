@@ -1,5 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
+import torch
 from torch import nn
 
 from causal_meta.modules.models.layers import ParallelLinear
@@ -22,16 +23,30 @@ def get_activate(name: str = "ReLU"):
         raise NotImplementedError("{} is not supported as an activate function".format(name))
 
 
+def check_dims(dims: Union[int, List[int]], name: str = "dims"):
+    if not isinstance(dims, list):
+        if dims is None:
+            dims = []
+        elif isinstance(dims, int):
+            dims = [dims]
+        else:
+            raise NotImplementedError("{} should be None or int or list[int]".format(name))
+    return dims
+
+
 def build_mlp(
         input_dim: int,
         output_dim: int,
-        hidden_dims: Optional[List[int]] = None,
-        extra_dims: Optional[List[int]] = None,
+        hidden_dims: Union[int, Optional[List[int]]] = None,
+        extra_dims: Union[int, Optional[List[int]]] = None,
         bias: bool = True,
         activate_name: str = "ReLU",
         last_activate_name: Optional[str] = None,
         batch_norm: bool = False,
 ) -> nn.Module:
+    hidden_dims = check_dims(hidden_dims, "hidden_dims")
+    extra_dims = check_dims(extra_dims, "extra_dims")
+
     hidden_dims = hidden_dims or []
     all_dims = [input_dim] + hidden_dims + [output_dim]
 
@@ -80,6 +95,29 @@ def test_build_mlp_plain():
     print(mlp)
 
 
+def test_parallel_data():
+    from causal_meta.modules.models.causal_mask import CausalMask
+    input_dim = 10
+    output_dim = 5
+    hidden_dims = [32, 32]
+    batch_size = 256
+    bias = True
+    activate_name = "ReLU"
+    last_activate_name = "Sigmoid"
+
+    plain_mlp = build_mlp(input_dim, output_dim, hidden_dims, None, bias, activate_name, last_activate_name)
+    parallel_mlp = build_mlp(input_dim, 1, hidden_dims, output_dim, bias, activate_name, last_activate_name)
+    causal_mask = CausalMask(input_dim, output_dim, context_input_dim=0, observed_logits_init_bias=.0)
+    inputs = torch.randn(batch_size, input_dim)
+
+    print(causal_mask.printing_mask)
+    masked_inputs, mask = causal_mask(inputs)
+    print("masked_inputs", masked_inputs.shape)
+    o1 = plain_mlp(masked_inputs)
+    o2 = parallel_mlp(masked_inputs)
+    print(o1.shape)
+    print(o2.shape)
+
+
 if __name__ == '__main__':
-    test_build_mlp_parallel()
-    test_build_mlp_plain()
+    test_parallel_data()

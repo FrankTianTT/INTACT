@@ -8,8 +8,8 @@ meta_test_interval: 40
 #meta_test_interval: 1
 
 sparse_weight: 0.0005
-context_sparse_weight: 0.0005
-context_max_weight: 0.0005
+context_sparse_weight: 0.0001
+context_max_weight: 0.0002
 #sparse_weight: 0.0
 #context_sparse_weight: 0.0
 #context_max_weight: 0.0

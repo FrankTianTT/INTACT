@@ -103,7 +103,7 @@ class DreamerWrapper(TensorDictSequential):
         batch_size, batch_len = tensordict.batch_size
 
         tensordict = self._run_module(self.obs_encoder, tensordict)
-        tensordict = tensordict.select(*self.rssm_rollout.in_keys)
+        tensordict = tensordict.select(*self.rssm_rollout.in_keys, strict=False)
 
         repeat_tensordict = tensordict.expand(sampling_times, *tensordict.batch_size).reshape(-1, batch_len)
         out_tensordict = self._run_module(self.rssm_rollout, repeat_tensordict)

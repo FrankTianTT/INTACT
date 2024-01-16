@@ -35,11 +35,12 @@ logger: wandb
 offline_logging: False
 
 # model learning
-model_type: causal
+model_type: plain
 variable_num: 10
 state_dim_per_variable: 3
 belief_dim_per_variable: 20
 disable_belief: False
+#disable_belief: True
 using_cross_belief: False
 free_nats: 3.0
 
@@ -54,7 +55,7 @@ hidden_size: 400
 actor_dist_type: tanh_normal
 
 # meta
-meta: True
+meta: False
 meta_test_interval: ${overrides.meta_test_interval}
 max_context_dim: 5
 task_num: 50
@@ -68,11 +69,12 @@ lambda_kl: 1.0
 lambda_reco: 1.0
 lambda_reward: 10.0
 lambda_continue: 10.0
-imagination_horizon: 15
+imagination_horizon: 5
 discount_loss: True
 pred_continue: True
 
 train_mask_iters: 10
+#train_mask_iters: 0
 train_model_iters: 40
 
 
