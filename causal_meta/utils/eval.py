@@ -62,7 +62,6 @@ def evaluate_policy(
         repeat_lengths.append(lengths)
 
         if repeat < cfg.eval_record_nums:
-            print(repeat_rewards)
             eval_env.transform.dump(suffix=str(frames_per_task))
 
     if logger is not None:

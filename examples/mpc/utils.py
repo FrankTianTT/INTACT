@@ -1,17 +1,12 @@
 from itertools import product
-from functools import partial
 from copy import deepcopy
 import os
 import math
-from warnings import catch_warnings, filterwarnings
 
 from tqdm import tqdm
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
-from tensordict.nn.probabilistic import set_interaction_mode
-from torchrl.envs.utils import step_mdp
-from torchrl.envs import TransformedEnv, SerialEnv
-from torchrl.record import VideoRecorder
+from torchrl.envs import SerialEnv
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import ListStorage
@@ -19,7 +14,6 @@ from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
 
-from causal_meta.utils.envs import build_make_env_list, make_mdp_env
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
 from causal_meta.utils.eval import evaluate_policy
@@ -59,37 +53,29 @@ def train_model(
         only_train=None
 ):
     device = next(world_model.parameters()).device
-    train_logits = cfg.model_type == "causal" and cfg.reinforce and logits_opt is not None
-    from time import time
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
+    if train_logits_by_reinforce:
+        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
 
-    sample_time = 0
-    train_time = 0
+    if cfg.model_type == "causal":
+        causal_mask = world_model.causal_mask
+    else:
+        causal_mask = None
+
     for step in range(training_steps):
         world_model.zero_grad()
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-        sampled_tensordict = replay_buffer.sample(cfg.batch_size)
-        t1 = time()
-        sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
-        t2 = time()
-
-        if train_logits and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+        if (train_logits_by_reinforce and
+                iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
             grad = world_model_loss.reinforce(sampled_tensordict, only_train)
-            causal_mask = world_model.causal_mask
-            logits = causal_mask.mask_logits
-            logits.backward(grad)
+            causal_mask.mask_logits.backward(grad)
             logits_opt.step()
-            for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                out_name = f"o{out_dim}"
-                if in_dim < causal_mask.observed_input_dim:
-                    in_name = f"i{in_dim}"
-                else:
-                    in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.add_scaler(f"{log_prefix}/logits({out_name},{in_name})", logits[out_dim, in_dim])
         else:
-            loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
+            loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
             context_penalty = (world_model.context_model.context_hat ** 2).sum()
-            all_loss += context_penalty * 0.1
-            all_loss.backward()
+            total_loss += context_penalty * 0.1
+            total_loss.backward()
             model_opt.step()
 
             if logger is not None:
@@ -103,14 +89,17 @@ def train_model(
                 if "context_loss" in loss_td.keys():
                     logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
-        t3 = time()
+        if cfg.model_type == "causal":
+            mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
+            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
+                out_name = f"o{out_dim}"
+                if in_dim < causal_mask.observed_input_dim:
+                    in_name = f"i{in_dim}"
+                else:
+                    in_name = f"c{in_dim - causal_mask.observed_input_dim}"
+                logger.add_scaler(f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim])
 
-        sample_time += t2 - t1
-        train_time += t3 - t2
         iters += 1
-        # if logits_opt is None:
-        #     print(world_model.context_model.context_hat.data.std(dim=0))
-    # print(sample_time, train_time)
     return iters
 
 

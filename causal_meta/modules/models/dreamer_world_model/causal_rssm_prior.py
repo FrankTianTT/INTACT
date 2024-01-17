@@ -15,6 +15,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
     def __init__(
             self,
             action_dim,
+            reinforce=True,
             variable_num=10,
             state_dim_per_variable=3,
             belief_dim_per_variable=20,
@@ -31,6 +32,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
         self.logits_clip = logits_clip
         self.hidden_dim = hidden_dim
         self.using_cross_belief = using_cross_belief
+        self.reinforce = reinforce
         if disable_belief:
             assert not using_cross_belief, "Cannot use cross belief when disable belief"
 
@@ -54,6 +56,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
             mask_output_dim=self.variable_num,
             logits_clip=self.logits_clip,
             meta=self.meta,
+            reinforce=self.reinforce,
         )
         mask_dim_list = []
         for i in range(self.variable_num):

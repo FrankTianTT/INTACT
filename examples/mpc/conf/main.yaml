@@ -1,5 +1,5 @@
 defaults:
-  - overrides: heating
+  - overrides: cartpole
   - _self_
 
 
@@ -24,7 +24,8 @@ top_k: 35
 
 # model learning
 model_type: causal
-reinforce: True
+reinforce: False
+alpha: 1.
 batch_size: 256
 buffer_size: 10000
 optim_steps_per_frame: 1
@@ -50,14 +51,14 @@ sampling_times: 30
 
 # log
 exp_name: default
-logger: wandb
+logger: tensorboard
 offline_logging: False
 eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
 eval_repeat_nums: 1
 eval_record_nums: 0
 
 # meta-RL
-meta: True
+meta: False
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20

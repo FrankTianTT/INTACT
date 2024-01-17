@@ -138,49 +138,50 @@ def train_model(
         only_train=None
 ):
     device = next(world_model.parameters()).device
-    train_logits = cfg.model_type == "causal" and logits_opt is not None
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
+    if train_logits_by_reinforce:
+        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
+
+    if cfg.model_type == "causal":
+        causal_mask = world_model.causal_mask
+    else:
+        causal_mask = None
 
     for step in range(training_steps):
         world_model.zero_grad()
-
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-        if train_logits and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+        if (train_logits_by_reinforce and
+                iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
             grad, sampling_loss = world_model_loss.reinforce(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
             logits.backward(grad)
             logits_opt.step()
+        else:
+            model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
+            total_loss = sum([loss for loss in model_loss_td.values()])
 
-            for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
+            total_loss.backward()
+            clip_grad_norm_(world_model.get_parameter("nets"), cfg.grad_clip)
+            model_opt.step()
+
+            logger.add_scaler("world_model/total_loss", total_loss)
+            logger.add_scaler("world_model/kl_loss", model_loss_td["loss_model_kl"])
+            logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
+            logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
+            logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
+
+        if cfg.model_type == "causal":
+            mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
+            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
                 out_name = f"o{out_dim}"
                 if in_dim < causal_mask.observed_input_dim:
                     in_name = f"i{in_dim}"
                 else:
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.add_scaler(f"{log_prefix}/logits({out_name},{in_name})", logits[out_dim, in_dim])
-            for out_dim in range(logits.shape[0]):
-                logger.add_scaler(f"causal/sampling_loss_{out_dim}", sampling_loss[..., out_dim].mean())
-        else:
-            model_loss_td, sampled_tensordict = world_model_loss(
-                sampled_tensordict
-            )
-            loss_world_model = (
-                    model_loss_td["loss_model_kl"]
-                    + model_loss_td["loss_model_reco"]
-                    + model_loss_td["loss_model_reward"]
-                    + model_loss_td["loss_model_continue"]
-            )
+                logger.add_scaler(f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim])
 
-            loss_world_model.backward()
-            clip_grad_norm_(world_model.get_parameter("nets"), cfg.grad_clip)
-            model_opt.step()
-
-            logger.add_scaler("world_model/total_loss", loss_world_model)
-            logger.add_scaler("world_model/kl_loss", model_loss_td["loss_model_kl"])
-            logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
-            logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
-            logger.add_scaler("world_model/continue_loss", model_loss_td["loss_model_continue"])
         iters += 1
     return iters
 

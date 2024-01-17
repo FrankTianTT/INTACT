@@ -6,7 +6,7 @@ from tqdm import tqdm
 import hydra
 import torch
 from torchrl.envs import SerialEnv
-from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.collectors.collectors import aSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
@@ -75,8 +75,7 @@ def main(cfg):
     )
     del proof_env
 
-    collector = SyncDataCollector(
-        # create_env_fn=[lambda: ParallelEnv(task_num, train_make_env_list, shared_memory=False)],
+    collector = aSyncDataCollector(
         create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
         policy=explore_policy,
         total_frames=cfg.train_frames_per_task * task_num,
@@ -98,11 +97,16 @@ def main(cfg):
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
                                        weight_decay=cfg.world_model_weight_decay)
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal":
+    if cfg.model_type == "causal" and cfg.reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
         logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     else:
         logits_opt = None
+        if cfg.model_type == "causal":
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("observed_logits"),
+                                                 lr=cfg.observed_logits_lr))
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"),
+                                                 lr=cfg.context_logits_lr))
 
     # Training loop
     pbar = tqdm(total=cfg.train_frames_per_task * task_num)

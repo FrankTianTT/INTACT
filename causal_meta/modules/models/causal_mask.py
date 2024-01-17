@@ -41,6 +41,7 @@ class CausalMask(nn.Module):
             context_logits_init_bias=0.5,
             observed_logits_init_scale=0.05,
             context_logits_init_scale=0.5,
+            alpha=10.,
     ):
         super().__init__()
 
@@ -56,30 +57,20 @@ class CausalMask(nn.Module):
         self.context_logits_init_bias = context_logits_init_bias
         self.observed_logits_init_scale = observed_logits_init_scale
         self.context_logits_init_scale = context_logits_init_scale
+        self.alpha = alpha
 
         self._observed_logits = nn.Parameter(get_init(
             shape=(self.mask_output_dim, self.observed_input_dim),
             bias=observed_logits_init_bias,
             scale=observed_logits_init_scale
         ))
-
-        # # # gt_observed_logits = torch.Tensor([
-        # # #     [-1, 1, -1, -1, -1],
-        # # #     [-1, -1, 1, 1, 1],
-        # # #     [-1, -1, -1, 1, -1],
-        # # #     [-1, -1, 1, 1, 1],
-        # # # ]).float() * logits_clip
-        # gt_observed_logits = torch.ones(self.mask_output_dim, self.observed_input_dim).float() * logits_clip
-        # self._observed_logits = nn.Parameter(gt_observed_logits)
+        # self._observed_logits = nn.Parameter(torch.ones((self.mask_output_dim, self.observed_input_dim)) * logits_clip)
 
         self._context_logits = nn.Parameter(get_init(
             shape=(self.mask_output_dim, self.context_input_dim),
             bias=context_logits_init_bias,
             scale=context_logits_init_scale
         ))
-
-        # gt_context_logits = torch.ones(self.mask_output_dim, self.context_input_dim).float() * logits_clip
-        # self._context_logits = nn.Parameter(gt_context_logits)
 
     def extra_repr(self):
         return 'observed_input_dim={}, mask_output_dim={}, context_input_dim={}'.format(
@@ -106,8 +97,15 @@ class CausalMask(nn.Module):
 
     @property
     def mask_logits(self):
-        mask_logits = torch.cat([self._observed_logits, self._context_logits], dim=-1)
-        return torch.clamp(mask_logits, -self.logits_clip, self.logits_clip)
+        return torch.cat([self.observed_logits, self.context_logits], dim=-1)
+
+    @property
+    def observed_logits(self):
+        return torch.clamp(self._observed_logits, -self.logits_clip, self.logits_clip)
+
+    @property
+    def context_logits(self):
+        return torch.clamp(self._context_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def valid_context_idx(self):
@@ -155,7 +153,7 @@ class CausalMask(nn.Module):
                     dim=0
                 )[0]
             else:
-                original_mask = self.mask_logits.sigmoid()
+                original_mask = torch.sigmoid(self.alpha * self.mask_logits)
             original_mask = original_mask.expand(batch_size, -1, -1)
         mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)

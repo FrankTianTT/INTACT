@@ -44,7 +44,8 @@ def make_dreamer(
     if cfg.model_type == "causal":
         rssm_prior_class = partial(
             CausalRSSMPrior,
-            using_cross_belief=cfg.using_cross_belief
+            using_cross_belief=cfg.using_cross_belief,
+            reinforce=cfg.reinforce,
         )
     elif cfg.model_type == "plain":
         rssm_prior_class = PlainRSSMPrior

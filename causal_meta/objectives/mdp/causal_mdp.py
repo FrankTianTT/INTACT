@@ -32,8 +32,9 @@ class CausalWorldModelLoss(LossModule):
 
         if self.model_type == "causal":
             self.causal_mask = world_model.causal_mask
+            self.reinforce = self.causal_mask.reinforce
         else:
-            self.causal_mask = None
+            self.causal_mask, self.reinforce = None, None
         self.context_model = world_model.context_model
         self.learn_obs_var = world_model.learn_obs_var
 
@@ -148,7 +149,14 @@ class CausalWorldModelLoss(LossModule):
             not_train = torch.ones(loss_tensor.shape[-1]).to(bool)
             not_train[only_train] = False
             loss_tensor[..., not_train] = 0
-        return loss_td, loss_tensor.mean()
+
+        total_loss = loss_tensor.mean()
+        if not self.reinforce:
+            total_loss += torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight
+            if self.causal_mask.context_input_dim > 0:
+                total_loss += torch.sigmoid(self.causal_mask.context_logits).sum() * self.context_sparse_weight
+                total_loss += torch.sigmoid(self.causal_mask.context_logits).max(dim=1).sum() * self.context_max_weight
+        return loss_td, total_loss
 
     def reinforce(self, tensordict: TensorDict, only_train=None):
         assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"

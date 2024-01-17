@@ -5,7 +5,7 @@ import gym
 from tensordict import TensorDict
 from omegaconf import DictConfig
 from torchrl.envs.transforms import TransformedEnv, Compose, RewardSum, DoubleToFloat, StepCounter
-from torchrl.envs.libs import GymWrapper, DMControlWrapper
+from torchrl.envs.libs import GymWrapper, DMControlWrapper, GymEnv
 
 from causal_meta.envs.meta_transform import MetaIdxTransform
 
@@ -20,9 +20,8 @@ def make_mdp_env(env_name, env_kwargs=None, idx=None, task_num=None, pixel=False
         # env = DMControlEnv(env_name, **env_kwargs)
         raise NotImplementedError
     elif env_library == "gym":
-        gym_env = gym.make(env_name, **env_kwargs, max_episode_steps=max_steps)
+        env = GymEnv(env_name, **env_kwargs, max_episode_steps=max_steps)
         max_steps = None
-        env = GymWrapper(gym_env)
     else:
         raise ValueError(f"Unknown env library: {env_library}")
 

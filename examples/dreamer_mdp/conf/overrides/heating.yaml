@@ -1,7 +1,7 @@
 env_name: Heating53-v0
 termination_fns: "no_termination"
 reward_fns: "heating"
-max_steps: 200
+env_max_steps: 200
 
 train_frames_per_task: 50_000
 init_frames_per_task: 50

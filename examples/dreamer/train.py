@@ -55,13 +55,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
     )
 
-    # meta_test(cfg, test_make_env_list, test_oracle_context, policy, world_model, logger, 1)
-    # exit(1)
-
-    # evaluate_policy(cfg, train_oracle_context, policy, logger, 1,
-    #                 make_env_fn=make_env_fn, disable_pixel_if_possible=False)
-    # exit(1)
-
     if cfg.normalize_rewards_online:
         reward_normalizer = RewardNormalizer()
     else:

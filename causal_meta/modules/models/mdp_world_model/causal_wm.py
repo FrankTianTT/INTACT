@@ -13,6 +13,7 @@ class CausalWorldModel(PlainMDPWorldModel):
             action_dim,
             meta=False,
             reinforce=True,
+            alpha=10.,
             max_context_dim=10,
             task_num=100,
             residual=True,
@@ -65,6 +66,7 @@ class CausalWorldModel(PlainMDPWorldModel):
             meta=self.meta,
             context_input_dim=self.max_context_dim,
             logits_clip=self.logits_clip,
+            alpha=alpha
             # observed_logits_init_bias=observed_logits_init_bias,
             # context_logits_init_bias=context_logits_init_bias,
             # logits_init_scale=logits_init_scale,

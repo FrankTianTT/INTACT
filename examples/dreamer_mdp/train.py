@@ -15,9 +15,9 @@ from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrappe
 from causal_meta.utils import make_mdp_dreamer, build_logger
 from causal_meta.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
 from causal_meta.utils.envs import make_mdp_env, create_make_env_list
+from causal_meta.utils.eval import evaluate_policy
 
 from utils import (
-    evaluate_policy,
     meta_test,
     plot_context,
     MultiOptimizer,
@@ -41,7 +41,7 @@ def main(cfg):
 
     logger = build_logger(cfg, name="dreamer_mdp")
 
-    make_env = partial(make_mdp_env, max_steps=cfg.max_steps)
+    make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
     train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
     test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")

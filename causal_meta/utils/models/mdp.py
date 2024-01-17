@@ -42,6 +42,7 @@ def make_mdp_model(
         wm_class = partial(
             CausalWorldModel,
             reinforce=cfg.reinforce,
+            alpha=cfg.alpha
         )
     elif cfg.model_type == "plain":
         wm_class = PlainMDPWorldModel

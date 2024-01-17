@@ -1,5 +1,5 @@
 defaults:
-  - overrides: half_cheetah
+  - overrides: hopper
   - _self_
 
 
@@ -7,7 +7,7 @@ defaults:
 env_name: ${overrides.env_name}
 termination_fns: ${overrides.termination_fns}
 reward_fns: ${overrides.reward_fns}
-max_steps: ${overrides.max_steps}
+env_max_steps: ${overrides.env_max_steps}
 
 # learning
 train_frames_per_task: ${overrides.train_frames_per_task}

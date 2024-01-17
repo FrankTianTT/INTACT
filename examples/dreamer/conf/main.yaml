@@ -35,12 +35,13 @@ logger: wandb
 offline_logging: False
 
 # model learning
-model_type: plain
+model_type: causal
+reinforce: False
+alpha: 1.
 variable_num: 10
 state_dim_per_variable: 3
 belief_dim_per_variable: 20
 disable_belief: False
-#disable_belief: True
 using_cross_belief: False
 free_nats: 3.0
 
