@@ -56,6 +56,7 @@ def make_mdp_model(
         max_context_dim=cfg.max_context_dim,
         task_num=cfg.task_num,
         hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
+
     )
     world_model = MDPWrapper(world_model).to(device)
 

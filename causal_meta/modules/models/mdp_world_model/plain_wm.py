@@ -59,7 +59,7 @@ class PlainMDPWorldModel(BaseWorldModel):
             output_dim=self.output_dim * 2,
             hidden_dims=self.hidden_dims,
             extra_dims=None,
-            activate_name="ReLU",
+            activate_name="SiLU",
         )
 
         return nn.ModuleDict(dict(mlp=mlp))

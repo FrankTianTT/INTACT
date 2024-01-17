@@ -1,6 +1,5 @@
-#env_name: MyHalfCheetah-v0
-env_name: HalfCheetah-v4
-termination_fns: "no_termination"
+env_name: Hopper-v4
+termination_fns: "hopper"
 reward_fns: ""
 max_steps: 1000
 
@@ -9,7 +8,7 @@ init_frames_per_task: 5000
 eval_interval_frames_per_task: 10000
 meta_test_interval_frames_per_task: 10000
 
-imagination_horizon: 10
+imagination_horizon: 1
 optim_steps_per_frame: 5
 
 sparse_weight: 0.01
@@ -17,7 +16,7 @@ context_sparse_weight: 0.005
 context_max_weight: 0.0
 
 oracle_context:
-  #torso_x_vel_bias: [ -0.5, 0.5 ]
+  #  torso_x_vel_bias: [ -0.5, 0.5 ]
   torso_z_vel_bias: [ -2.0, 2.0 ]
   torso_angle_vel_bias: [ -2.0, 2.0 ]
 new_oracle_context:

@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from causal_meta.stats.mcc import mean_corr_coef
-from examples.identifiability.data_ganeration import gen_linear_data
+from examples.toy_example.data_ganeration import gen_linear_data
 
 
 def identify_theta(x, y, theta_size):

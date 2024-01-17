@@ -9,7 +9,7 @@ init_frames_per_task: 5000
 eval_interval_frames_per_task: 10000
 meta_test_interval_frames_per_task: 10000
 
-imagination_horizon: 10
+imagination_horizon: 5
 optim_steps_per_frame: 5
 
 sparse_weight: 0.01

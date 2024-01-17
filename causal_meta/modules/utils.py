@@ -19,6 +19,8 @@ def get_activate(name: str = "ReLU"):
         return nn.LeakyReLU()
     elif name == "Softplus":
         return nn.Softplus()
+    elif name == "SiLU":
+        return nn.SiLU()
     else:
         raise NotImplementedError("{} is not supported as an activate function".format(name))
 

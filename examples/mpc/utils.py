@@ -163,7 +163,7 @@ def meta_test(
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            training_steps=cfg.meta_test_model_learning_per_frame * task_num,
+            training_steps=cfg.optim_steps_per_frame * task_num,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{frames_per_task}",
@@ -191,7 +191,7 @@ def meta_test(
         for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
-                training_steps=cfg.meta_test_model_learning_per_frame * task_num,
+                training_steps=cfg.optim_steps_per_frame * task_num,
                 model_opt=world_model_opt, logits_opt=logits_opt,
                 logger=logger,
                 log_prefix=f"meta_test_model_{frames_per_task}",
@@ -205,7 +205,7 @@ def meta_test(
                 print("envs test causal mask:")
                 print(world_model.causal_mask.printing_mask)
 
-    evaluate_policy(cfg, make_env_list, policy, logger, frames_per_task, log_prefix="meta_test")
+    evaluate_policy(cfg, oracle_context, policy, logger, frames_per_task, log_prefix="meta_test")
 
 
 def plot_context(

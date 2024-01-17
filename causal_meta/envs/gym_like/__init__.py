@@ -20,7 +20,15 @@ register(
 )
 
 register(
-    id="Heating-v0",
+    id="Heating53-v0",
     entry_point="causal_meta.envs.gym_like.heating:HeatingEnv",
     max_episode_steps=200,
+    kwargs=dict(num_rooms=5, context_dim=3, sparsity=0.5),
+)
+
+register(
+    id="Heating53L-v0",
+    entry_point="causal_meta.envs.gym_like.heating:HeatingEnv",
+    max_episode_steps=200,
+    kwargs=dict(num_rooms=5, context_dim=3, sparsity=0.5, context_influence_type="linear"),
 )
