@@ -109,6 +109,7 @@ def make_mdp_dreamer(
             out_keys=["action"],
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
+            default_interaction_type=InteractionType.RANDOM,
             spec=CompositeSpec(
                 **{"action": proof_env.action_spec.to("cpu")}
             ),

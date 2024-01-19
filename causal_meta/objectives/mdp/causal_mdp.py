@@ -1,4 +1,4 @@
-from functools import reduce
+from functools import reduce, partial
 
 import torch
 import torch.nn as nn
@@ -48,51 +48,38 @@ class CausalWorldModelLoss(LossModule):
         self.sampling_times = sampling_times
 
     def loss(self, tensordict, reduction="none"):
-        assert len(tensordict.batch_size) == 1
+        mask = tensordict.get(("collector", "mask")).clone()
 
         if self.learn_obs_var:
             transition_loss = F.gaussian_nll_loss(
-                tensordict.get("obs_mean"),
-                tensordict.get(("next", "observation")),
-                torch.exp(tensordict.get("obs_log_var")),
-                # torch.ones_like(tensordict.get("obs_log_var")) * 0.01,
+                tensordict.get("obs_mean")[mask],
+                tensordict.get(("next", "observation"))[mask],
+                torch.exp(tensordict.get("obs_log_var"))[mask],
                 reduction=reduction
             )
         else:
             transition_loss = F.mse_loss(
-                tensordict.get("obs_mean"),
-                tensordict.get(("next", "observation")),
+                tensordict.get("obs_mean")[mask],
+                tensordict.get(("next", "observation"))[mask],
                 reduction=reduction
             )
 
-        # print()
-        # obs_diff = tensordict.get("obs_mean") - tensordict.get(("next", "observation"))
-        # print(obs_diff.mean(0))
-        # print(obs_diff.abs().max(0))
-        # idx = obs_diff.abs().max(0)[1][0]
-        # print(tensordict.get("obs_mean")[idx], tensordict.get(("next", "observation"))[idx],
-        #       tensordict.get("observation")[idx])
-        # # print(obs_diff.std(0))
-        # # print(tensordict.get(("next", "observation"))[0])
-        # # print(torch.exp(tensordict.get("obs_log_var") / 2).mean(0))
-        # print(transition_loss.mean(0))
-
         if self.learn_obs_var:
             reward_loss = F.gaussian_nll_loss(
-                tensordict.get("reward_mean"),
-                tensordict.get(("next", "reward")),
-                torch.exp(tensordict.get("reward_log_var")),
+                tensordict.get("reward_mean")[mask],
+                tensordict.get(("next", "reward"))[mask],
+                torch.exp(tensordict.get("reward_log_var"))[mask],
                 reduction=reduction
             )
         else:
             reward_loss = F.mse_loss(
-                tensordict.get("reward_mean"),
-                tensordict.get(("next", "reward")),
+                tensordict.get("reward_mean")[mask],
+                tensordict.get(("next", "reward"))[mask],
                 reduction=reduction
             )
         terminated_loss = F.binary_cross_entropy_with_logits(
-            tensordict.get("terminated"),
-            tensordict.get(("next", "terminated")).float(),
+            tensordict.get("terminated")[mask],
+            tensordict.get(("next", "terminated"))[mask].float(),
             reduction=reduction
         )
 
@@ -112,13 +99,28 @@ class CausalWorldModelLoss(LossModule):
 
         return loss_td, loss_tensor
 
-    def forward(self, tensordict: TensorDict, deterministic_mask=False, only_train=None):
+    def rollout_forward(self, tensordict: TensorDict, deterministic_mask=False):
         tensordict = tensordict.clone(recurse=False)
+        assert len(tensordict.shape) == 2
 
-        if self.model_type == "causal":
-            tensordict = self.world_model(tensordict, deterministic_mask=deterministic_mask)
-        else:
-            tensordict = self.world_model(tensordict)
+        tensordict_out = []
+        *batch, time_steps = tensordict.shape
+
+        for t in range(time_steps):
+            _tensordict = tensordict[..., t]
+            if t > 0:
+                _tensordict["observation"] = tensordict_out[-1]["obs_mean"].clone()
+
+            if self.model_type == "causal":
+                _tensordict = self.world_model(_tensordict, deterministic_mask=deterministic_mask)
+            else:
+                _tensordict = self.world_model(_tensordict)
+
+            tensordict_out.append(_tensordict)
+        return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
+
+    def forward(self, tensordict: TensorDict, deterministic_mask=False, only_train=None):
+        tensordict = self.rollout_forward(tensordict)
 
         loss_td, loss_tensor = self.loss(tensordict)
         if self.lambda_mutual_info > 0:
@@ -151,7 +153,7 @@ class CausalWorldModelLoss(LossModule):
             loss_tensor[..., not_train] = 0
 
         total_loss = loss_tensor.mean()
-        if not self.reinforce:
+        if self.model_type == "causal" and not self.reinforce:
             total_loss += torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight
             if self.causal_mask.context_input_dim > 0:
                 total_loss += torch.sigmoid(self.causal_mask.context_logits).sum() * self.context_sparse_weight

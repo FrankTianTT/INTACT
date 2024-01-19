@@ -57,7 +57,8 @@ class PlainRSSMPrior(BaseWorldModel):
             build_mlp(
                 input_dim=self.total_belief_dim,
                 output_dim=self.total_state_dim * 2,
-                hidden_dims=[self.hidden_dim] if not self.disable_belief else [self.hidden_dim] * 2,
+                # hidden_dims=[self.hidden_dim] if not self.disable_belief else [self.hidden_dim] * 2,
+                hidden_dims=[self.total_belief_dim],
                 activate_name="ELU",
             ),
             scale_lb=self.scale_lb,

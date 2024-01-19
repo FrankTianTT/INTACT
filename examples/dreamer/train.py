@@ -2,6 +2,7 @@ from functools import partial
 from itertools import product
 import os
 
+import numpy as np
 import hydra
 import torch
 from torch.nn.utils import clip_grad_norm_
@@ -21,7 +22,7 @@ from causal_meta.utils.logger import build_logger
 from causal_meta.utils.eval import evaluate_policy
 from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 
-from utils import grad_norm, match_length, plot_context, meta_test, train_model, train_agent
+from utils import match_length, plot_context, meta_test, train_model, train_agent
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -33,6 +34,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
+
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
     logger = build_logger(cfg, "dreamer")
 
@@ -115,11 +119,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # optimizers
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal":
+    if cfg.model_type == "causal" and cfg.reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
         logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     else:
         logits_opt = None
+        if cfg.model_type == "causal":
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("observed_logits"),
+                                                 lr=cfg.observed_logits_lr))
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"),
+                                                 lr=cfg.context_logits_lr))
+
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 

@@ -3,13 +3,12 @@ termination_fns: "hopper"
 reward_fns: ""
 env_max_steps: 1000
 
-train_frames_per_task: 125000
-init_frames_per_task: 5000
-eval_interval_frames_per_task: 1000
-meta_test_interval_frames_per_task: 10000
+train_frames_per_task: 500_000
+init_frames_per_task: 5_000
+frames_per_batch: 200
 
-imagination_horizon: 1
-optim_steps_per_frame: 5
+imagination_horizon: 5
+optim_steps_per_frame: 200
 
 sparse_weight: 0.01
 context_sparse_weight: 0.005

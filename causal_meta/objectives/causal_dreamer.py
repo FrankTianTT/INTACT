@@ -42,7 +42,7 @@ class CausalDreamerModelLoss(DreamerModelLoss):
 
     def forward(self, tensordict: TensorDict):
         model_loss_td, sampled_tensordict = super().forward(tensordict)
-        if not self.reinforce:
+        if self.model_type == "causal" and not self.reinforce:
             model_loss_td.set("sparse_loss", torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight)
             if self.causal_mask.context_input_dim > 0:
                 model_loss_td.set(

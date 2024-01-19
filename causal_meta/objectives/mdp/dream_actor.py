@@ -5,6 +5,7 @@
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import math
 
 import torch
 from torch.nn.functional import binary_cross_entropy_with_logits
@@ -50,6 +51,7 @@ class DreamActorLoss(LossModule):
             pred_continue: bool = True,
             gamma: int = None,
             lmbda: int = None,
+            lambda_entropy: float = 3e-4,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -58,6 +60,7 @@ class DreamActorLoss(LossModule):
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
         self.pred_continue = pred_continue
+        self.lambda_entropy = lambda_entropy
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
@@ -79,7 +82,8 @@ class DreamActorLoss(LossModule):
             tensordict = self.model_based_env.step(tensordict)
             next_tensordict = step_mdp(tensordict, exclude_action=False)
 
-            # tensordict.get(("next", "reward"))[ever_done] = 0
+            entropy = 0.5 * torch.log(2 * math.pi * math.e * tensordict["scale"] ** 2)
+            tensordict.set("entropy", entropy)
             tensordicts.append(tensordict)
 
             ever_done |= tensordict.get(("next", "done"))
@@ -94,6 +98,10 @@ class DreamActorLoss(LossModule):
         return out_td
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+        with torch.no_grad():
+            mask = tensordict.get(("collector", "mask")).clone()
+            tensordict = tensordict[mask]
+
         with hold_out_net(self.model_based_env), set_exploration_type(
                 ExplorationType.RANDOM
         ):
@@ -112,6 +120,8 @@ class DreamActorLoss(LossModule):
         lambda_target = self.lambda_target(reward, next_value, terminated)
         fake_data.set("lambda_target", lambda_target)
 
+        actor_target = lambda_target - self.lambda_entropy * fake_data.get("entropy")
+
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
             discount = (1. - terminated.float()) * gamma
@@ -122,9 +132,9 @@ class DreamActorLoss(LossModule):
             ], dim=-2)
             discount = discount.cumprod(dim=-2)
             fake_data.set("discount", discount)
-            actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
+            actor_loss = -(actor_target * discount).sum((-2, -1)).mean()
         else:
-            actor_loss = -lambda_target.sum((-2, -1)).mean()
+            actor_loss = -actor_target.sum((-2, -1)).mean()
 
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()

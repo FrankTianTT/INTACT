@@ -7,10 +7,9 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import SafeModule
-from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
+from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
 from torchrl.modules.models.models import MLP
 from torchrl.trainers.helpers.models import _dreamer_make_mbenv
-from torchrl.modules.models.model_based import RSSMRollout
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,

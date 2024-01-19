@@ -5,6 +5,7 @@ import os
 import math
 from warnings import catch_warnings, filterwarnings
 
+import tensordict
 from tqdm import tqdm
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
@@ -22,15 +23,21 @@ from matplotlib import cm
 from causal_meta.utils.envs import build_make_env_list, make_mdp_env
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
+from causal_meta.utils.eval import evaluate_policy
 
 
-class MultiOptimizer:
-    def __init__(self, **optimizers):
-        self.optimizers = optimizers
+def match_length(batch_td: tensordict.TensorDict, length):
+    assert len(batch_td.shape) == 2, "batch_td must be 2D"
 
-    def step(self):
-        for opt in self.optimizers.values():
-            opt.step()
+    batch_size, seq_len = batch_td.shape
+    # min multiple of length that larger than or equal to seq_len
+    new_seq_len = (seq_len + length - 1) // length * length
+
+    # pad with zeros
+    matched_td = torch.stack(
+        [tensordict.pad(td, [0, new_seq_len - seq_len]) for td in batch_td], 0
+    ).contiguous()
+    return matched_td
 
 
 def find_world_model(policy, task_num):
@@ -73,6 +80,7 @@ def train_policy(
         logger.add_scaler("policy/loss", actor_loss_td["loss_actor"])
         logger.add_scaler("policy/action_mean", sampled_tensordict["action"].mean())
         logger.add_scaler("policy/action_std", sampled_tensordict["action"].std())
+        logger.add_scaler("policy/entropy_mean", sampled_tensordict["entropy"].mean())
         actor_opt.zero_grad()
 
         value_loss_td, sampled_tensordict = critic_loss(sampled_tensordict)
@@ -194,7 +202,7 @@ def meta_test(
     replay_buffer = TensorDictReplayBuffer(
         storage=ListStorage(max_size=cfg.meta_task_adjust_frames_per_task * task_num),
     )
-    context_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
     pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
     train_model_iters = 0
@@ -205,7 +213,7 @@ def meta_test(
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
             training_steps=cfg.meta_test_model_learning_per_frame * task_num,
-            model_opt=context_opt,
+            model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{frames_per_task}",
             iters=train_model_iters
@@ -225,15 +233,15 @@ def meta_test(
             world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
-        nets_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
-        model_opt = MultiOptimizer(nets=nets_opt, context=context_opt)
+        world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr,
+                                             weight_decay=cfg.world_model_weight_decay))
         logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
 
         for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
                 training_steps=cfg.meta_test_model_learning_per_frame * task_num,
-                model_opt=model_opt, logits_opt=logits_opt,
+                model_opt=world_model_opt, logits_opt=logits_opt,
                 logger=logger,
                 log_prefix=f"meta_test_model_{frames_per_task}",
                 iters=train_model_iters,
