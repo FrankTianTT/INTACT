@@ -16,28 +16,10 @@ from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import ListStorage
-from matplotlib import pyplot as plt
-from matplotlib import colors as mcolors
-from matplotlib import cm
 
-from causal_meta.utils.envs import build_make_env_list, make_mdp_env
+from causal_meta.utils import evaluate_policy, plot_context, match_length
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
-from causal_meta.utils.eval import evaluate_policy
-
-
-def match_length(batch_td: tensordict.TensorDict, length):
-    assert len(batch_td.shape) == 2, "batch_td must be 2D"
-
-    batch_size, seq_len = batch_td.shape
-    # min multiple of length that larger than or equal to seq_len
-    new_seq_len = (seq_len + length - 1) // length * length
-
-    # pad with zeros
-    matched_td = torch.stack(
-        [tensordict.pad(td, [0, new_seq_len - seq_len]) for td in batch_td], 0
-    ).contiguous()
-    return matched_td
 
 
 def find_world_model(policy, task_num):
@@ -67,12 +49,16 @@ def train_policy(
         training_steps,
         actor_opt,
         critic_opt,
-        logger
+        logger,
+        reward_normalizer=None
 ):
     device = next(actor_loss.parameters()).device
 
     for _ in range(training_steps):
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device)
+        if reward_normalizer:
+            reward_normalizer.normalize_reward(sampled_tensordict)
+
         actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
         actor_loss_td["loss_actor"].backward()
         actor_opt.step()
@@ -105,39 +91,35 @@ def train_model(
         deterministic_mask=False,
         log_prefix="model",
         iters=0,
-        only_train=None
+        only_train=None,
+        reward_normalizer=None
 ):
     device = next(world_model.parameters()).device
-    train_logits = cfg.model_type == "causal" and cfg.reinforce and logits_opt is not None
-    from time import time
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
+    if train_logits_by_reinforce:
+        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
 
-    sample_time = 0
-    train_time = 0
+    if cfg.model_type == "causal":
+        causal_mask = world_model.causal_mask
+    else:
+        causal_mask = None
+
     for step in range(training_steps):
         world_model.zero_grad()
 
-        sampled_tensordict = replay_buffer.sample(cfg.batch_size)
-        t1 = time()
-        sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
-        t2 = time()
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
+        if reward_normalizer:
+            reward_normalizer.normalize_reward(sampled_tensordict)
 
-        if train_logits and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
-            grad = world_model_loss.reinforce(sampled_tensordict, only_train)
-            causal_mask = world_model.causal_mask
-            logits = causal_mask.mask_logits
-            logits.backward(grad)
+        if train_logits_by_reinforce and iters % (
+                cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+            grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
+            causal_mask.mask_logits.backward(grad)
             logits_opt.step()
-            for out_dim, in_dim in product(range(logits.shape[0]), range(logits.shape[1])):
-                out_name = f"o{out_dim}"
-                if in_dim < causal_mask.observed_input_dim:
-                    in_name = f"i{in_dim}"
-                else:
-                    in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.add_scaler(f"{log_prefix}/logits({out_name},{in_name})", logits[out_dim, in_dim])
         else:
             loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
             context_penalty = (world_model.context_model.context_hat ** 2).sum()
-            all_loss += context_penalty * 0.1
+            all_loss += context_penalty * 0.01
             all_loss.backward()
             model_opt.step()
 
@@ -152,15 +134,31 @@ def train_model(
                 if "context_loss" in loss_td.keys():
                     logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
-        t3 = time()
+        if cfg.model_type == "causal":
+            mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
+            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
+                out_name = f"o{out_dim}"
+                if in_dim < causal_mask.observed_input_dim:
+                    in_name = f"i{in_dim}"
+                else:
+                    in_name = f"c{in_dim - causal_mask.observed_input_dim}"
+                logger.add_scaler(f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim])
 
-        sample_time += t2 - t1
-        train_time += t3 - t2
         iters += 1
-        # if logits_opt is None:
-        #     print(world_model.context_model.context_hat.data.std(dim=0))
-    # print(sample_time, train_time)
     return iters
+
+
+def reset_module(policy, world_model, new_domain_task_num):
+    device = next(policy.parameters()).device
+    new_policy = deepcopy(policy).to(device)
+    new_world_model = deepcopy(world_model).to(device)
+
+    new_context_model = new_world_model.context_model
+    new_context_model.reset(new_domain_task_num)
+    new_actor = new_policy.td_module[0]
+    new_actor.set_context_model(new_context_model)
+
+    return new_policy, new_world_model
 
 
 def meta_test(
@@ -168,6 +166,7 @@ def meta_test(
         make_env_list,
         oracle_context,
         policy,
+        world_model,
         logger,
         frames_per_task,
         adapt_threshold=-3.
@@ -176,7 +175,7 @@ def meta_test(
 
     task_num = len(make_env_list)
 
-    policy, world_model = find_world_model(policy, task_num=task_num)
+    policy, world_model = reset_module(policy, world_model, task_num)
     device = next(world_model.parameters()).device
 
     world_model_loss = CausalWorldModelLoss(
@@ -194,32 +193,39 @@ def meta_test(
     collector = SyncDataCollector(
         create_env_fn=SerialEnv(len(make_env_list), make_env_list, shared_memory=False),
         policy=policy,
-        total_frames=cfg.meta_task_adjust_frames_per_task * task_num,
-        frames_per_batch=task_num,
+        total_frames=cfg.meta_test_frames,
+        frames_per_batch=cfg.frames_per_batch,
         init_random_frames=0,
+        split_trajs=True
     )
 
     replay_buffer = TensorDictReplayBuffer(
-        storage=ListStorage(max_size=cfg.meta_task_adjust_frames_per_task * task_num),
+        storage=ListStorage(max_size=cfg.meta_test_frames),
     )
     world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
-    pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
+    pbar = tqdm(total=cfg.meta_test_frames, desc="meta_test_adjust")
+    collected_frames = 0
     train_model_iters = 0
-    for frame, tensordict in enumerate(collector):
-        pbar.update(task_num)
-        replay_buffer.extend(tensordict.reshape(-1))
+    for i, tensordict in enumerate(collector):
+        current_frames = tensordict.get(("collector", "mask")).sum().item()
+        pbar.update(current_frames)
+        collected_frames += current_frames
+        tensordict = match_length(tensordict, cfg.batch_length)
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
+        replay_buffer.extend(tensordict)
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            training_steps=cfg.meta_test_model_learning_per_frame * task_num,
+            training_steps=cfg.optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{frames_per_task}",
             iters=train_model_iters
         )
-        plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{frames_per_task}")
-        logger.dump_scaler(frame)
+        plot_context(cfg, world_model, oracle_context, logger, collected_frames,
+                     log_prefix=f"meta_test_model_{frames_per_task}")
+        logger.dump_scaler(collected_frames)
 
     if cfg.get("new_oracle_context", None):  # adapt to target domain, only for transition
         with torch.no_grad():
@@ -255,69 +261,3 @@ def meta_test(
                 print(world_model.causal_mask.printing_mask)
 
     evaluate_policy(cfg, make_env_list, policy, logger, frames_per_task, log_prefix="meta_test")
-
-
-def plot_context(
-        cfg,
-        world_model,
-        oracle_context,
-        logger=None,
-        frames_per_task=0,
-        log_prefix="model",
-        plot_path="",
-        color_values=None
-):
-    context_model = world_model.context_model
-    context_gt = torch.stack([v for v in oracle_context.values()], dim=-1).cpu()
-
-    if cfg.model_type == "causal":
-        valid_context_idx = world_model.causal_mask.valid_context_idx
-    else:
-        valid_context_idx = torch.arange(context_model.max_context_dim)
-
-    mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
-    idxes_hat, idxes_gt = permutation
-
-    os.makedirs(log_prefix, exist_ok=True)
-
-    if color_values is None:
-        cmap = None
-    else:
-        norm = mcolors.Normalize(vmin=min(color_values), vmax=max(color_values))
-        cmap = cm.ScalarMappable(norm, plt.get_cmap('Blues')).cmap
-
-    if len(idxes_gt) == 0:
-        pass
-    elif len(idxes_gt) == 1:
-        plt.scatter(context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]], c=color_values, cmap=cmap)
-    else:
-        num_rows = math.ceil(math.sqrt(len(idxes_gt)))
-        num_cols = math.ceil(len(idxes_gt) / num_rows)
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
-
-        context_names = list(oracle_context.keys())
-        scatters = []
-        for j, (idx_gt, idx_hat) in enumerate(zip(idxes_gt, idxes_hat)):
-            ax = axs.flatten()[j]
-            ax.set(xlabel=context_names[idx_gt], ylabel="{}th context".format(valid_context_idx[idx_hat]))
-            scatter = ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat], c=color_values, cmap=cmap)
-            scatters.append(scatter)
-
-        for j in range(len(idxes_gt), len(axs.flat)):
-            axs.flat[j].set_visible(False)
-
-        if color_values is not None and len(scatters) > 0:
-            plt.colorbar(scatters[0], ax=axs)
-
-    if plot_path == "":
-        plot_path = os.path.join(log_prefix, f"{frames_per_task}.png")
-    plt.savefig(plot_path)
-    plt.close()
-
-    if logger is not None:
-        logger.add_scaler("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
-        logger.add_scaler("{}/mcc".format(log_prefix), mcc)
-
-
-if __name__ == '__main__':
-    print(13.32 / 2)

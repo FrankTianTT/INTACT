@@ -1,5 +1,5 @@
 defaults:
-  - overrides: cartpole
+  - overrides: cartpole_meta
   - _self_
 
 
@@ -10,35 +10,36 @@ reward_fns: ${overrides.reward_fns}
 env_max_steps: ${overrides.env_max_steps}
 
 # learning
-train_frames_per_task: ${overrides.train_frames_per_task}
-init_frames_per_task: ${overrides.init_frames_per_task}
-
-# save
-save_model_frames_per_task: 10000
+meta_train_frames: ${overrides.meta_train_frames}
+meta_train_init_frames: ${overrides.meta_train_init_frames}
+frames_per_batch: ${overrides.frames_per_batch}
 
 # planning
 planning_horizon: ${overrides.planning_horizon}
-optim_steps: 10
+optim_steps: 5
 num_candidates: 350
 top_k: 35
 
 # model learning
 model_type: causal
-reinforce: False
+reinforce: True
 alpha: 1.
-batch_size: 256
 buffer_size: 10000
-optim_steps_per_frame: 1
+optim_steps_per_batch: ${overrides.optim_steps_per_batch}
 train_mask_iters: 10
 train_model_iters: 40
+
+batch_size: ${overrides.batch_size}
+batch_length: ${overrides.batch_length}
+
 world_model_lr: 0.001
 context_lr: 0.001
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
-world_model_weight_decay: 0.00001
-hidden_size: 400
-hidden_layers: 2
 
+world_model_weight_decay: 0.00001
+hidden_size: 200
+hidden_layers: 4
 lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
@@ -53,17 +54,22 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-eval_interval_frames_per_task: ${overrides.eval_interval_frames_per_task}
-eval_repeat_nums: 1
+eval_interval: 20
+eval_repeat_nums: 3
 eval_record_nums: 0
+save_model_interval: 10
 
 # meta-RL
-meta: False
+meta: ${overrides.meta}
 max_context_dim: 10
 task_num: 50
-meta_test_task_num: 20
-meta_test_interval_frames_per_task: ${overrides.meta_test_interval_frames_per_task}
-meta_task_adjust_frames_per_task: 50
+meta_test_task_num: 10
+meta_test_interval: 50
+meta_test_frames: ${overrides.meta_test_frames}
+#task_num: 2
+#meta_test_task_num: 2
+#meta_test_interval: 1
+#meta_test_frames: 200
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 

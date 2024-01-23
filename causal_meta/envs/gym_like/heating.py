@@ -55,6 +55,8 @@ class HeatingEnv(gym.Env):
             dt=0.1,
             seed=42,
             context_influence_type="neural",
+            frameskip=1,
+            render_mode='rgb_array',
             **context_kwargs,
     ):
         assert context_dim <= num_rooms, "source variables should be less than observed variables"
@@ -72,7 +74,7 @@ class HeatingEnv(gym.Env):
             if f"c{i + 1}" in context_kwargs:
                 self.contexts[i] = context_kwargs[f"c{i + 1}"]
                 del context_kwargs[f"c{i + 1}"]
-        assert len(context_kwargs) == 0, f"Unknown context variables: {context_kwargs}"
+        # assert len(context_kwargs) == 0, f"Unknown context variables: {context_kwargs}"
 
         torch.manual_seed(self.seed)
         self.room_graph = generate_graph_cross_rooms(self.num_rooms, self.sparsity)
@@ -86,6 +88,7 @@ class HeatingEnv(gym.Env):
             num_rooms=self.num_rooms,
             context_dim=self.context_dim if self.context_influence_type == "neural" else 0
         )
+        self.influence = None
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(num_rooms,), dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(num_rooms,), dtype=np.float32)
@@ -96,10 +99,10 @@ class HeatingEnv(gym.Env):
         action_graph = torch.eye(self.num_rooms).int()
         return torch.cat([self.room_graph, action_graph, self.context_graph], dim=-1)
 
-    def get_influence(self, action):
+    def calculate_influence(self, action):
         control = torch.from_numpy(action).float().reshape(self.num_rooms, 1)
         temp = torch.from_numpy(self.temperature).float().reshape(1, self.num_rooms)
-        temp = (temp - 20) / 10
+        temp = (temp - 20) / 20
         temp = self.room_graph * temp.expand(self.num_rooms, -1)
         if self.context_influence_type == "neural":
             inputs = torch.cat([temp, control, self.masked_context], dim=-1)
@@ -108,25 +111,24 @@ class HeatingEnv(gym.Env):
 
         with torch.no_grad():
             influence = self.inf_func(inputs.reshape(self.num_rooms, 1, -1))
-        influence = influence.squeeze().numpy()
+        self.influence = influence.squeeze().numpy()
 
         if self.context_influence_type == "linear":
-            influence += self.masked_context.mean(dim=-1).numpy()
+            self.influence += self.masked_context.mean(dim=-1).numpy() * 5.
         elif self.context_influence_type == "tanh":
-            influence += torch.tanh(self.masked_context.mean(dim=-1)).numpy()
+            self.influence += torch.tanh(self.masked_context.mean(dim=-1)).numpy()
         elif self.context_influence_type == "neural":
             pass
         else:
             raise NotImplementedError
-        return influence
 
     def get_obs(self):
         obs_temp = self.temperature.copy()  # + np.random.normal(0, 0.05, size=(self.num_rooms,))
-        return (obs_temp - 20) / 10  # normalize
+        return (obs_temp - 20) / 20  # normalize
 
     def step(self, action):
-        influence = self.get_influence(action)
-        self.temperature += influence * self.dt
+        self.calculate_influence(action)
+        self.temperature += self.influence * self.dt
         # self.temperature = np.clip(self.temperature, 0, 40)
 
         reward = - np.abs(self.temperature - 20).mean()
@@ -153,30 +155,27 @@ class HeatingEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    # env = HeatingEnv()
-    # 0 0 0 1 0
-    # 1 0 0 1 0
-    # 0 1 0 0 0
-    # 0 0 0 0 1
-    # 0 0 1 0 0
+    # 0 0 0 1 0 1 0 0 0 0 1 1 0
+    # 1 0 0 1 0 0 1 0 0 0 1 0 0
+    # 0 1 0 0 0 0 0 1 0 0 0 1 1
+    # 0 0 0 0 1 0 0 0 1 0 0 0 0
+    # 0 0 1 0 0 0 0 0 0 1 0 0 1
 
-    # obs, _ = env.reset()
-    # for i in range(100):
-    #     action = np.random.uniform(-1, 1, size=(env.num_rooms,))
-    #     obs, reward, _, _, _ = env.step(action)
-    #     print(obs)
+    inf = []
+    for c1 in np.linspace(-1, 1, 100):
+        env = HeatingEnv(c1=c1)
 
-    # t1, t2 = [], []
-    # for a1 in np.linspace(-1, 1, 100):
-    #     action = np.array([a1, 0])
-    #     temp = np.random.uniform(0, 40, size=(env.num_rooms,))
-    #
-    #     env.temperature = temp.copy()
-    #     new_temp, reward, _, _, _ = env.step(action)
-    #     temp_diff = new_temp - temp
-    #     t1.append(temp_diff[0])
-    # plt.plot(np.linspace(-1, 1, 100), t1)
-    # plt.show()
+        action = np.zeros(env.num_rooms)
+        # action[0] = a1
+        temp = np.zeros(env.num_rooms)
+        # temp[3] = a1 * 20 + 20
+
+        env.temperature = temp.copy()
+        env.step(action)
+
+        inf.append(env.influence[0])
+    plt.plot(np.linspace(-1, 1, 100), inf)
+    plt.show()
     #
     # t2 = []
     # for a2 in np.linspace(-1, 1, 100):
@@ -190,8 +189,8 @@ if __name__ == '__main__':
     # plt.plot(np.linspace(-1, 1, 100), t2)
     # plt.show()
 
-    env = HeatingEnv()
-    print(env.printing_total_graph)
+    # env = HeatingEnv(c1=2, c2=-1)
+    # print(env.printing_total_graph)
     # 0 0 0 1 0 1 0 0 0 0 1 1 0
     # 1 0 0 1 0 0 1 0 0 0 1 0 0
     # 0 1 0 0 0 0 0 1 0 0 0 1 1

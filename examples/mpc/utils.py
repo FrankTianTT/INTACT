@@ -16,7 +16,7 @@ from matplotlib import cm
 
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
-from causal_meta.utils.eval import evaluate_policy
+from causal_meta.utils import evaluate_policy, plot_context, match_length
 
 
 def reset_module(policy, task_num):
@@ -53,9 +53,7 @@ def train_model(
         only_train=None
 ):
     device = next(world_model.parameters()).device
-    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
-    if train_logits_by_reinforce:
-        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce and logits_opt
 
     if cfg.model_type == "causal":
         causal_mask = world_model.causal_mask
@@ -64,11 +62,12 @@ def train_model(
 
     for step in range(training_steps):
         world_model.zero_grad()
+
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
         if (train_logits_by_reinforce and
                 iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
-            grad = world_model_loss.reinforce(sampled_tensordict, only_train)
+            grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
             logits_opt.step()
         else:
@@ -109,10 +108,10 @@ def meta_test(
         oracle_context,
         policy,
         logger,
-        frames_per_task,
+        log_idx,
         adapt_threshold=-3.
 ):
-    logger.dump_scaler(frames_per_task)
+    logger.dump_scaler(log_idx)
 
     task_num = len(make_env_list)
 
@@ -134,32 +133,43 @@ def meta_test(
     collector = SyncDataCollector(
         create_env_fn=SerialEnv(len(make_env_list), make_env_list, shared_memory=False),
         policy=policy,
-        total_frames=cfg.meta_task_adjust_frames_per_task * task_num,
-        frames_per_batch=task_num,
+        total_frames=cfg.meta_test_frames,
+        frames_per_batch=cfg.frames_per_batch,
         init_random_frames=0,
+        split_trajs=True
     )
 
     replay_buffer = TensorDictReplayBuffer(
-        storage=ListStorage(max_size=cfg.meta_task_adjust_frames_per_task * task_num),
+        storage=ListStorage(max_size=cfg.meta_test_frames),
     )
-    world_model_opt = torch.optim.SGD(world_model.get_parameter("context"), lr=cfg.context_lr)
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
-    pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task * task_num, desc="meta_test_adjust")
+    pbar = tqdm(total=cfg.meta_test_frames, desc="meta_test_adjust")
     train_model_iters = 0
-    for frame, tensordict in enumerate(collector):
-        pbar.update(task_num)
-        replay_buffer.extend(tensordict.reshape(-1))
+    collected_frames = 0
+    for i, tensordict in enumerate(collector):
+        current_frames = tensordict.get(("collector", "mask")).sum().item()
+        pbar.update(current_frames)
+        collected_frames += current_frames
+
+        tensordict = match_length(tensordict, cfg.batch_length)
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
+
+        replay_buffer.extend(tensordict)
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            training_steps=cfg.optim_steps_per_frame * task_num,
+            training_steps=cfg.optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
-            log_prefix=f"meta_test_model_{frames_per_task}",
+            log_prefix=f"meta_test_model_{log_idx}",
             iters=train_model_iters
         )
-        plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{frames_per_task}")
-        logger.dump_scaler(frame)
+        plot_context(cfg, world_model, oracle_context, logger, collected_frames,
+                     log_prefix=f"meta_test_model_{log_idx}")
+        logger.dump_scaler(collected_frames)
+    pbar.close()
+    collector.shutdown()
 
     if cfg.get("new_oracle_context", None):  # adapt to target domain, only for transition
         with torch.no_grad():
@@ -173,91 +183,29 @@ def meta_test(
             world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
-        world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                             weight_decay=cfg.world_model_weight_decay))
-        logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
+        new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr,
+                                                 weight_decay=cfg.world_model_weight_decay))
+        if world_model.model_type == "causal" and cfg.reinforce:
+            logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        else:
+            logits_opt = None
 
-        for frame in range(cfg.meta_task_adjust_frames_per_task, 5 * cfg.meta_task_adjust_frames_per_task):
+        for frame in tqdm(range(cfg.meta_test_frames, 2 * cfg.meta_test_frames, cfg.frames_per_batch)):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
-                training_steps=cfg.optim_steps_per_frame * task_num,
-                model_opt=world_model_opt, logits_opt=logits_opt,
+                training_steps=cfg.optim_steps_per_batch,
+                model_opt=new_world_model_opt, logits_opt=logits_opt,
                 logger=logger,
-                log_prefix=f"meta_test_model_{frames_per_task}",
+                log_prefix=f"meta_test_model_{log_idx}",
                 iters=train_model_iters,
                 only_train=adapt_idx
             )
-            plot_context(cfg, world_model, oracle_context, logger, frame,
-                         log_prefix=f"meta_test_model_{frames_per_task}")
-            logger.dump_scaler(frame)
+            plot_context(cfg, world_model, oracle_context, logger, frame + cfg.frames_per_batch,
+                         log_prefix=f"meta_test_model_{log_idx}")
+            logger.dump_scaler(frame + cfg.frames_per_batch)
             if cfg.model_type == "causal":
-                print("envs test causal mask:")
+                print("meta test causal mask:")
                 print(world_model.causal_mask.printing_mask)
 
-    evaluate_policy(cfg, oracle_context, policy, logger, frames_per_task, log_prefix="meta_test")
-
-
-def plot_context(
-        cfg,
-        world_model,
-        oracle_context,
-        logger=None,
-        frames_per_task=0,
-        log_prefix="model",
-        plot_path="",
-        color_values=None
-):
-    context_model = world_model.context_model
-    context_gt = torch.stack([v for v in oracle_context.values()], dim=-1).cpu()
-
-    if cfg.model_type == "causal":
-        valid_context_idx = world_model.causal_mask.valid_context_idx
-    else:
-        valid_context_idx = torch.arange(context_model.max_context_dim)
-
-    mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
-    idxes_hat, idxes_gt = permutation
-
-    os.makedirs(log_prefix, exist_ok=True)
-
-    if color_values is None:
-        cmap = None
-    else:
-        norm = mcolors.Normalize(vmin=min(color_values), vmax=max(color_values))
-        cmap = cm.ScalarMappable(norm, plt.get_cmap('Blues')).cmap
-
-    if len(idxes_gt) == 0:
-        pass
-    elif len(idxes_gt) == 1:
-        plt.scatter(context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]], c=color_values, cmap=cmap)
-    else:
-        num_rows = math.ceil(math.sqrt(len(idxes_gt)))
-        num_cols = math.ceil(len(idxes_gt) / num_rows)
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
-
-        context_names = list(oracle_context.keys())
-        scatters = []
-        for j, (idx_gt, idx_hat) in enumerate(zip(idxes_gt, idxes_hat)):
-            ax = axs.flatten()[j]
-            ax.set(xlabel=context_names[idx_gt], ylabel="{}th context".format(valid_context_idx[idx_hat]))
-            scatter = ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat], c=color_values, cmap=cmap)
-            scatters.append(scatter)
-
-        for j in range(len(idxes_gt), len(axs.flat)):
-            axs.flat[j].set_visible(False)
-
-        if color_values is not None and len(scatters) > 0:
-            plt.colorbar(scatters[0], ax=axs)
-
-    if plot_path == "":
-        plot_path = os.path.join(log_prefix, f"{frames_per_task}.png")
-    plt.savefig(plot_path)
-    plt.close()
-
-    if logger is not None:
-        logger.add_scaler("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
-        logger.add_scaler("{}/mcc".format(log_prefix), mcc)
-
-
-if __name__ == '__main__':
-    print(13.32 / 2)
+    evaluate_policy(cfg, oracle_context, policy, logger, log_idx, log_prefix="meta_test")

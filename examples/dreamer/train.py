@@ -16,13 +16,11 @@ from torchrl.collectors.collectors import aSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
+from causal_meta.utils import make_dreamer, build_logger, evaluate_policy, plot_context, match_length
 from causal_meta.utils.envs import make_dreamer_env, create_make_env_list
-from causal_meta.utils.models import make_dreamer
-from causal_meta.utils.logger import build_logger
-from causal_meta.utils.eval import evaluate_policy
 from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 
-from utils import match_length, plot_context, meta_test, train_model, train_agent
+from utils import meta_test, train_model, train_agent
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -171,7 +169,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss, world_model_opt,
             cfg.optim_steps_per_batch, logits_opt, logger,
-            iters=train_model_iters
+            iters=train_model_iters, reward_normalizer=reward_normalizer
         )
 
         if collected_frames < cfg.policy_learning_frames_per_task:
@@ -185,7 +183,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                             make_env_fn=make_env_fn, disable_pixel_if_possible=False)
 
         if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, policy, world_model, logger, collected_frames)
+            meta_test(cfg, test_make_env_list, test_oracle_context, exploration_policy, world_model, logger,
+                      collected_frames)
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)

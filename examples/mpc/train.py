@@ -3,24 +3,25 @@ from functools import partial
 from time import time
 
 from tqdm import tqdm
+import numpy as np
 import hydra
 import torch
 from torchrl.envs import SerialEnv
-from torchrl.collectors.collectors import aSyncDataCollector
+from torchrl.collectors.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.utils import make_mdp_model, build_logger
+from causal_meta.utils import make_mdp_model, build_logger, evaluate_policy, plot_context, match_length
+from causal_meta.utils.envs import make_mdp_env, create_make_env_list
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
-from causal_meta.utils.envs import make_mdp_env, create_make_env_list
-from causal_meta.utils.eval import evaluate_policy
 
 from utils import (
     meta_test,
-    plot_context,
     train_model
 )
+
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -32,6 +33,9 @@ def main(cfg):
         device = torch.device("cpu")
         collector_device = torch.device("cpu")
     print(f"Using device {device}")
+
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
     logger = build_logger(cfg)
 
@@ -51,7 +55,6 @@ def main(cfg):
         lambda_transition=cfg.lambda_transition,
         lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
         lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.,
-        lambda_mutual_info=cfg.lambda_mutual_info,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -68,25 +71,28 @@ def main(cfg):
 
     explore_policy = AdditiveGaussianWrapper(
         planner,
-        # sigma_init=0.3,
-        # sigma_end=0.3,
-        annealing_num_steps=cfg.train_frames_per_task,
+        sigma_init=0.3,
+        sigma_end=0.3,
+        # annealing_num_steps=cfg.train_frames_per_task,
         spec=proof_env.action_spec,
     )
     del proof_env
 
+    serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
+    serial_env.set_seed(cfg.seed)
     collector = aSyncDataCollector(
-        create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
+    # collector = SyncDataCollector(
+        create_env_fn=serial_env,
         policy=explore_policy,
-        total_frames=cfg.train_frames_per_task * task_num,
-        frames_per_batch=task_num,
-        init_random_frames=cfg.init_frames_per_task * task_num,
+        total_frames=cfg.meta_train_frames,
+        frames_per_batch=cfg.frames_per_batch,
+        init_random_frames=cfg.meta_train_init_frames,
         device=collector_device,
         storing_device=collector_device,
+        split_trajs=True
     )
-
     # replay buffer
-    buffer_size = cfg.train_frames_per_task * task_num if cfg.buffer_size == -1 else cfg.buffer_size
+    buffer_size = cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -109,50 +115,58 @@ def main(cfg):
                                                  lr=cfg.context_logits_lr))
 
     # Training loop
-    pbar = tqdm(total=cfg.train_frames_per_task * task_num)
+    collected_frames = 0
     train_model_iters = 0
-    t0 = time()
-    for frames_per_task, tensordict in enumerate(collector):
-        t1 = time()
-        pbar.update(task_num)
+    pbar = tqdm(total=cfg.meta_train_frames)
+    for i, tensordict in enumerate(collector):
+        current_frames = tensordict.get(("collector", "mask")).sum().item()
+        pbar.update(current_frames)
+        collected_frames += current_frames
 
-        if tensordict["next", "done"].any():
-            episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
-            episode_length = tensordict["next", "step_count"][tensordict["next", "done"]].float()
-            logger.add_scaler("meta_train/rollout_episode_reward", episode_reward.mean())
-            logger.add_scaler("meta_train/rollout_episode_length", episode_length.mean())
+        tensordict = match_length(tensordict, cfg.batch_length)
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
 
-        replay_buffer.extend(tensordict.reshape(-1))
+        replay_buffer.extend(tensordict)
 
-        if frames_per_task < cfg.init_frames_per_task:
+        mask = tensordict.get(("collector", "mask"))
+        episode_reward = tensordict.get(("next", "episode_reward"))[mask]
+        episode_length = tensordict["next", "step_count"][mask].float()
+        done = tensordict.get(("next", "done"))[mask]
+        logger.add_scaler("rollout/reward_mean", tensordict[("next", "reward")][mask].mean())
+        logger.add_scaler("rollout/reward_std", tensordict[("next", "reward")][mask].std())
+        if done.any():
+            logger.add_scaler("rollout/episode_reward", episode_reward[done].mean())
+            logger.add_scaler("rollout/episode_length", episode_length[done].mean())
+        logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
+        logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
+
+        if collected_frames < cfg.meta_train_init_frames:
             continue
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_frame * task_num, world_model_opt, logits_opt, logger,
+            cfg.optim_steps_per_batch, world_model_opt, logits_opt, logger,
             iters=train_model_iters
         )
-        t2 = time()
 
-        if (frames_per_task + 1) % cfg.eval_interval_frames_per_task == 0:
-            evaluate_policy(cfg, train_oracle_context, explore_policy, logger, frames_per_task)
+        if (i + 1) % cfg.eval_interval == 0:
+            evaluate_policy(cfg, train_oracle_context, explore_policy, logger, collected_frames)
 
-        if cfg.meta and (frames_per_task + 1) % cfg.meta_test_interval_frames_per_task == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, frames_per_task)
+        if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
+            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, collected_frames)
 
         if cfg.meta:
-            plot_context(cfg, world_model, train_oracle_context, logger, frames_per_task)
+            plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)
         if cfg.model_type == "causal":
             print()
             print(world_model.causal_mask.printing_mask)
-        logger.dump_scaler(frames_per_task)
 
-        if (frames_per_task + 1) % cfg.save_model_frames_per_task == 0:
+        if (i + 1) % cfg.save_model_interval == 0:
             os.makedirs("world_model", exist_ok=True)
-            torch.save(world_model.state_dict(), os.path.join(f"world_model/{frames_per_task}.pt"))
+            torch.save(world_model.state_dict(), os.path.join(f"world_model/{collected_frames}.pt"))
 
-        # print(f"collect: {t1 - t0:.2f}, train: {t2 - t1:.2f}")
-        t0 = time()
+        logger.dump_scaler(collected_frames)
+
     collector.shutdown()
 
 

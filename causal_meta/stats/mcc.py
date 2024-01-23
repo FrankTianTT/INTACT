@@ -75,7 +75,7 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     if len(permutation[0]) == 0:
         score = 0
     else:
-        score = cc[permutation].mean()
+        score = cc[permutation].sum() / max(x.shape[1], y.shape[1])
 
     if return_permutation:
         return score, permutation
@@ -102,11 +102,12 @@ def test_non_linear():
 def test_mcc():
     sample_num = 100
 
-    x = np.random.random([sample_num, 1])
-    y = np.random.random([sample_num, 0])
+    x = np.random.random([sample_num, 3])
+    y = np.random.random([sample_num, 3])
 
-    mcc = mean_corr_coef(x, y, "kernel")
+    mcc = mean_corr_coef(x, y)
+    print(mcc)
 
 
 if __name__ == '__main__':
-    test_non_linear()
+    test_mcc()

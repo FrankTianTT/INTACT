@@ -1,31 +1,27 @@
 import os
 from functools import partial
-from time import time
-from copy import deepcopy
 
 from tqdm import tqdm
 import numpy as np
 import hydra
 import torch
 from torchrl.envs import SerialEnv
-from torchrl.trainers.helpers.collectors import SyncDataCollector
+from torchrl.collectors.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
-from torchrl.collectors.collectors import aSyncDataCollector
+from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
-from causal_meta.utils import make_mdp_dreamer, build_logger
+from causal_meta.utils import make_mdp_dreamer, build_logger, evaluate_policy, plot_context, match_length
 from causal_meta.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
 from causal_meta.utils.envs import make_mdp_env, create_make_env_list
-from causal_meta.utils.eval import evaluate_policy
 
 from utils import (
     meta_test,
-    plot_context,
-    match_length,
     train_model,
     train_policy
 )
 
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg):
@@ -52,6 +48,11 @@ def main(cfg):
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
     world_model, model_based_env, actor, critic = make_mdp_dreamer(cfg, proof_env, device=device)
+
+    if cfg.normalize_rewards_online:
+        reward_normalizer = RewardNormalizer()
+    else:
+        reward_normalizer = None
 
     world_model_loss = CausalWorldModelLoss(
         world_model,
@@ -81,7 +82,7 @@ def main(cfg):
         actor,
         sigma_init=0.3,
         sigma_end=0.3,
-        # annealing_num_steps=cfg.train_frames_per_task,
+        # annealing_num_steps=cfg.meta_train_frames,
         spec=proof_env.action_spec,
     )
     del proof_env
@@ -91,16 +92,16 @@ def main(cfg):
     collector = aSyncDataCollector(
         create_env_fn=serial_env,
         policy=explore_policy,
-        total_frames=cfg.train_frames_per_task,
+        total_frames=cfg.meta_train_frames,
         frames_per_batch=cfg.frames_per_batch,
-        init_random_frames=cfg.init_frames_per_task,
+        init_random_frames=cfg.meta_train_init_frames,
         device=collector_device,
         storing_device=collector_device,
         split_trajs=True
     )
 
     # replay buffer
-    buffer_size = cfg.train_frames_per_task if cfg.buffer_size == -1 else cfg.buffer_size
+    buffer_size = cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -127,8 +128,11 @@ def main(cfg):
     # Training loop
     collected_frames = 0
     train_model_iters = 0
-    pbar = tqdm(total=cfg.train_frames_per_task)
+    pbar = tqdm(total=cfg.meta_train_frames)
     for i, tensordict in enumerate(collector):
+        if reward_normalizer is not None:
+            reward_normalizer.update_reward_stats(tensordict)
+
         current_frames = tensordict.get(("collector", "mask")).sum().item()
         pbar.update(current_frames)
         collected_frames += current_frames
@@ -149,36 +153,42 @@ def main(cfg):
             logger.add_scaler("rollout/episode_length", episode_length[done].mean())
         logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
         logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
-        logger.dump_scaler(collected_frames)
 
-        if collected_frames < cfg.init_frames_per_task:
+        if collected_frames < cfg.meta_train_init_frames:
             continue
 
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_frame, world_model_opt, logits_opt, logger,
-            iters=train_model_iters
+            cfg.optim_steps_per_batch, world_model_opt, logits_opt, logger,
+            iters=train_model_iters, reward_normalizer=reward_normalizer
         )
+        print(world_model.context_model.context_hat[0])
 
-        train_policy(cfg, replay_buffer, actor_loss, critic_loss, cfg.optim_steps_per_frame,
-                     actor_opt, critic_opt, logger)
+        train_policy(cfg, replay_buffer, actor_loss, critic_loss, cfg.optim_steps_per_batch,
+                     actor_opt, critic_opt, logger, reward_normalizer=reward_normalizer)
 
         if (i + 1) % cfg.eval_interval == 0:
             evaluate_policy(cfg, train_oracle_context, explore_policy, logger, collected_frames)
 
-        # if cfg.meta and (i + 1) % cfg.meta_test_interval_frames_per_task == 0:
-        #     meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, logger, collected_frames)
+        if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
+            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, world_model, logger,
+                      collected_frames)
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)
         if cfg.model_type == "causal":
             print()
             print(world_model.causal_mask.printing_mask)
-        logger.dump_scaler(collected_frames)
 
         if (i + 1) % cfg.save_model_interval == 0:
             os.makedirs("world_model", exist_ok=True)
+            os.makedirs("actor", exist_ok=True)
+            os.makedirs("critic", exist_ok=True)
             torch.save(world_model.state_dict(), os.path.join(f"world_model/{collected_frames}.pt"))
+            torch.save(actor.state_dict(), os.path.join(f"actor/{collected_frames}.pt"))
+            torch.save(critic.state_dict(), os.path.join(f"critic/{collected_frames}.pt"))
+
+        logger.dump_scaler(collected_frames)
 
     collector.shutdown()
 

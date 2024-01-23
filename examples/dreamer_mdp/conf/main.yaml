@@ -10,12 +10,10 @@ reward_fns: ${overrides.reward_fns}
 env_max_steps: ${overrides.env_max_steps}
 
 # learning
-train_frames_per_task: ${overrides.train_frames_per_task}
-init_frames_per_task: ${overrides.init_frames_per_task}
+meta_train_frames: ${overrides.meta_train_frames}
+meta_train_init_frames: ${overrides.meta_train_init_frames}
 frames_per_batch: ${overrides.frames_per_batch}
-
-# save
-save_model_frames_per_task: 10000
+normalize_rewards_online: ${overrides.normalize_rewards_online}
 
 # policy
 discount_loss: True
@@ -26,12 +24,12 @@ imagination_horizon: ${overrides.imagination_horizon}
 model_type: plain
 reinforce: True
 buffer_size: 10000
-optim_steps_per_frame: ${overrides.optim_steps_per_frame}
+optim_steps_per_batch: ${overrides.optim_steps_per_batch}
 train_mask_iters: 10
 train_model_iters: 40
 
 batch_size: 100
-batch_length: 5
+batch_length: ${overrides.batch_length}
 
 world_model_lr: 0.001
 actor_lr: 1e-4
@@ -47,30 +45,29 @@ lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
 lambda_mutual_info: 0.0
-lambda_entropy: 1e-4
+lambda_entropy:   0.001
 
 sparse_weight: ${overrides.sparse_weight}
 context_sparse_weight: ${overrides.context_sparse_weight}
 context_max_weight: ${overrides.context_max_weight}
 sampling_times: 30
 
-
 # log
 exp_name: default
 logger: tensorboard
 offline_logging: False
-eval_interval: 4
+eval_interval: 10
 eval_repeat_nums: 3
-eval_record_nums: 1
+eval_record_nums: 0
 save_model_interval: 10
 
 # envs-RL
-meta: False
+meta: True
 max_context_dim: 10
 task_num: 50
-meta_test_task_num: 20
-meta_task_adjust_frames_per_task: 50
-meta_test_model_learning_per_frame: 5
+meta_test_task_num: 10
+meta_test_interval: 200
+meta_test_frames: ${overrides.meta_test_frames}
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 

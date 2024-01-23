@@ -147,7 +147,7 @@ class CausalWorldModelLoss(LossModule):
             loss_td.set("context_loss", context_loss)
             # TODO: cat loss_tensor
 
-        if only_train is not None:
+        if only_train is not None and self.model_type == "causal":
             not_train = torch.ones(loss_tensor.shape[-1]).to(bool)
             not_train[only_train] = False
             loss_tensor[..., not_train] = 0
@@ -160,11 +160,14 @@ class CausalWorldModelLoss(LossModule):
                 total_loss += torch.sigmoid(self.causal_mask.context_logits).max(dim=1).sum() * self.context_max_weight
         return loss_td, total_loss
 
-    def reinforce(self, tensordict: TensorDict, only_train=None):
+    def reinforce_forward(self, tensordict: TensorDict, only_train=None):
         assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"
         assert self.causal_mask.reinforce, "causal_mask should be learned by reinforce"
 
         tensordict = tensordict.clone()
+        mask = tensordict.get(("collector", "mask")).clone()
+        tensordict = tensordict[mask]
+
         with torch.no_grad():
             tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
             _, loss_tensor = self.loss(tensordict.reshape(-1), reduction="none")

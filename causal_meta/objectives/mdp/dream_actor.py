@@ -61,6 +61,7 @@ class DreamActorLoss(LossModule):
         self.discount_loss = discount_loss
         self.pred_continue = pred_continue
         self.lambda_entropy = lambda_entropy
+
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
@@ -120,7 +121,7 @@ class DreamActorLoss(LossModule):
         lambda_target = self.lambda_target(reward, next_value, terminated)
         fake_data.set("lambda_target", lambda_target)
 
-        actor_target = lambda_target - self.lambda_entropy * fake_data.get("entropy")
+        actor_target = lambda_target + self.lambda_entropy * fake_data.get("entropy")
 
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
