@@ -1,5 +1,5 @@
-env_name: MyCartPole-v0
-termination_fns: "cartpole"
+env_name: Heating53-v0
+termination_fns: "no_termination"
 reward_fns: ""
 env_max_steps: 200
 
@@ -21,6 +21,7 @@ context_sparse_weight: 0.01
 context_max_weight: 0.02
 
 oracle_context:
-  cart_vel_bias: [ -1., 1. ]
-  pole_vel_bias: [ -1., 1. ]
+  c1: [ -1., 1. ]
+  c2: [ -1., 1. ]
 new_oracle_context:
+  c3: [ -1., 1. ]

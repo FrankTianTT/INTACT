@@ -16,7 +16,7 @@ def evaluate_policy(
         oracle_context,
         policy,
         logger,
-        frames_per_task,
+        log_idx,
         make_env_fn=make_mdp_env,
         log_prefix="meta_train",
         disable_pixel_if_possible=True,
@@ -62,11 +62,11 @@ def evaluate_policy(
         repeat_lengths.append(lengths)
 
         if repeat < cfg.eval_record_nums:
-            eval_env.transform.dump(suffix=str(frames_per_task))
+            eval_env.transform.dump(suffix=str(log_idx))
 
     if logger is not None:
         logger.add_scaler("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
         logger.add_scaler("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
-        logger.dump_scaler(frames_per_task)
+        logger.dump_scaler(log_idx)
 
     return torch.stack(repeat_rewards)

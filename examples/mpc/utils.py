@@ -1,7 +1,5 @@
 from itertools import product
 from copy import deepcopy
-import os
-import math
 
 from tqdm import tqdm
 import torch
@@ -10,9 +8,6 @@ from torchrl.envs import SerialEnv
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import ListStorage
-from matplotlib import pyplot as plt
-from matplotlib import colors as mcolors
-from matplotlib import cm
 
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.mdp_env import MDPEnv
@@ -20,7 +15,9 @@ from causal_meta.utils import evaluate_policy, plot_context, match_length
 
 
 def reset_module(policy, task_num):
-    new_policy = deepcopy(policy).to(next(policy.parameters()).device)
+    device = next(policy.parameters()).device
+
+    new_policy = deepcopy(policy).to(device)
 
     sub_module = new_policy
     while not isinstance(sub_module, MDPEnv):
@@ -109,7 +106,7 @@ def meta_test(
         policy,
         logger,
         log_idx,
-        adapt_threshold=-3.
+        adapt_threshold=-3.5
 ):
     logger.dump_scaler(log_idx)
 
@@ -145,25 +142,22 @@ def meta_test(
     world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
     pbar = tqdm(total=cfg.meta_test_frames, desc="meta_test_adjust")
-    train_model_iters = 0
     collected_frames = 0
     for i, tensordict in enumerate(collector):
         current_frames = tensordict.get(("collector", "mask")).sum().item()
         pbar.update(current_frames)
         collected_frames += current_frames
-
         tensordict = match_length(tensordict, cfg.batch_length)
         tensordict = tensordict.reshape(-1, cfg.batch_length)
-
         replay_buffer.extend(tensordict)
 
-        train_model_iters = train_model(
+        train_model(
             cfg, replay_buffer, world_model, world_model_loss,
             training_steps=cfg.optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{log_idx}",
-            iters=train_model_iters
+            deterministic_mask=True
         )
         plot_context(cfg, world_model, oracle_context, logger, collected_frames,
                      log_prefix=f"meta_test_model_{log_idx}")
@@ -173,25 +167,25 @@ def meta_test(
 
     if cfg.get("new_oracle_context", None):  # adapt to target domain, only for transition
         with torch.no_grad():
-            sampled_tensordict = replay_buffer.sample(10000).to(device, non_blocking=True)
+            sampled_tensordict = replay_buffer.sample(len(replay_buffer)).to(device, non_blocking=True)
             loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=True)
         mean_transition_loss = loss_td["transition_loss"].mean(0)
         adapt_idx = torch.where(mean_transition_loss > adapt_threshold)[0].tolist()
-        print(mean_transition_loss)
+        print("mean transition loss after phase (1):", mean_transition_loss)
         print(adapt_idx)
         if world_model.model_type == "causal":
             world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
         new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
-        new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                                 weight_decay=cfg.world_model_weight_decay))
+        new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr))
         if world_model.model_type == "causal" and cfg.reinforce:
             logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
         else:
             logits_opt = None
 
-        for frame in tqdm(range(cfg.meta_test_frames, 2 * cfg.meta_test_frames, cfg.frames_per_batch)):
+        train_model_iters = 0
+        for frame in tqdm(range(cfg.meta_test_frames, 3 * cfg.meta_test_frames, cfg.frames_per_batch)):
             train_model_iters = train_model(
                 cfg, replay_buffer, world_model, world_model_loss,
                 training_steps=cfg.optim_steps_per_batch,
@@ -199,7 +193,8 @@ def meta_test(
                 logger=logger,
                 log_prefix=f"meta_test_model_{log_idx}",
                 iters=train_model_iters,
-                only_train=adapt_idx
+                only_train=adapt_idx,
+                deterministic_mask=False
             )
             plot_context(cfg, world_model, oracle_context, logger, frame + cfg.frames_per_batch,
                          log_prefix=f"meta_test_model_{log_idx}")
@@ -207,5 +202,10 @@ def meta_test(
             if cfg.model_type == "causal":
                 print("meta test causal mask:")
                 print(world_model.causal_mask.printing_mask)
+
+        with torch.no_grad():
+            loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=True)
+        mean_transition_loss = loss_td["transition_loss"].mean(0)
+        print("mean transition loss after phase (3):", mean_transition_loss)
 
     evaluate_policy(cfg, oracle_context, policy, logger, log_idx, log_prefix="meta_test")

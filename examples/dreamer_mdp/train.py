@@ -18,10 +18,13 @@ from causal_meta.utils.envs import make_mdp_env, create_make_env_list
 from utils import (
     meta_test,
     train_model,
-    train_policy
+    train_policy,
+    build_loss
 )
 
 torch.multiprocessing.set_sharing_strategy('file_system')
+os.environ['MAX_IDLE_COUNT'] = '100000'
+
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg):
@@ -54,37 +57,9 @@ def main(cfg):
     else:
         reward_normalizer = None
 
-    world_model_loss = CausalWorldModelLoss(
-        world_model,
-        lambda_transition=cfg.lambda_transition,
-        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
-        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.,
-        sparse_weight=cfg.sparse_weight,
-        context_sparse_weight=cfg.context_sparse_weight,
-        context_max_weight=cfg.context_max_weight,
-        sampling_times=cfg.sampling_times,
-    ).to(device)
-    actor_loss = DreamActorLoss(
-        actor,
-        critic,
-        model_based_env,
-        imagination_horizon=cfg.imagination_horizon,
-        discount_loss=cfg.discount_loss,
-        pred_continue=cfg.pred_continue,
-        lambda_entropy=cfg.lambda_entropy
-    )
-    critic_loss = DreamCriticLoss(
-        critic,
-        discount_loss=cfg.discount_loss,
-    )
+    world_model_loss, actor_loss, critic_loss = build_loss(cfg, world_model, model_based_env, actor, critic)
 
-    explore_policy = AdditiveGaussianWrapper(
-        actor,
-        sigma_init=0.3,
-        sigma_end=0.3,
-        # annealing_num_steps=cfg.meta_train_frames,
-        spec=proof_env.action_spec,
-    )
+    explore_policy = AdditiveGaussianWrapper(actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec)
     del proof_env
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
@@ -109,7 +84,8 @@ def main(cfg):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
+                                       weight_decay=cfg.world_model_weight_decay)
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
     if cfg.model_type == "causal" and cfg.reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
@@ -157,13 +133,12 @@ def main(cfg):
         if collected_frames < cfg.meta_train_init_frames:
             continue
 
+        l_opt = logits_opt if collected_frames >= cfg.meta_train_logits_frames else None
         train_model_iters = train_model(
             cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_batch, world_model_opt, logits_opt, logger,
+            cfg.optim_steps_per_batch, world_model_opt, l_opt, logger,
             iters=train_model_iters, reward_normalizer=reward_normalizer
         )
-        print(world_model.context_model.context_hat[0])
-
         train_policy(cfg, replay_buffer, actor_loss, critic_loss, cfg.optim_steps_per_batch,
                      actor_opt, critic_opt, logger, reward_normalizer=reward_normalizer)
 
@@ -171,8 +146,8 @@ def main(cfg):
             evaluate_policy(cfg, train_oracle_context, explore_policy, logger, collected_frames)
 
         if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, explore_policy, world_model, logger,
-                      collected_frames)
+            meta_test(cfg, test_make_env_list, test_oracle_context, world_model, actor, critic, logger,
+                      collected_frames, reward_normalizer=reward_normalizer)
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)

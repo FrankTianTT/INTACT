@@ -2,11 +2,10 @@ import os
 import math
 
 import torch
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib import cm
-
-
 
 
 def plot_context(
@@ -14,9 +13,8 @@ def plot_context(
         world_model,
         oracle_context,
         logger=None,
-        frames_per_task=0,
+        log_idx=0,
         log_prefix="model",
-        plot_path="",
         color_values=None
 ):
     context_model = world_model.context_model
@@ -29,8 +27,6 @@ def plot_context(
 
     mcc, permutation, context_hat = context_model.get_mcc(context_gt, valid_context_idx)
     idxes_hat, idxes_gt = permutation
-
-    os.makedirs(log_prefix, exist_ok=True)
 
     if color_values is None:
         cmap = None
@@ -61,12 +57,11 @@ def plot_context(
         if color_values is not None and len(scatters) > 0:
             plt.colorbar(scatters[0], ax=axs)
 
-    if plot_path == "":
-        plot_path = os.path.join(log_prefix, f"{frames_per_task}.png")
-    plt.savefig(plot_path)
+    os.makedirs(log_prefix, exist_ok=True)
+    plt.savefig(os.path.join(log_prefix, f"{log_idx}.png"))
     plt.close()
+    np.save(os.path.join(log_prefix, f"{log_idx}.npy"), context_hat)
 
     if logger is not None:
         logger.add_scaler("{}/valid_context_num".format(log_prefix), float(len(valid_context_idx)))
         logger.add_scaler("{}/mcc".format(log_prefix), mcc)
-

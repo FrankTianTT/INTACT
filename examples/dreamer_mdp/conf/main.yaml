@@ -1,5 +1,5 @@
 defaults:
-  - overrides: cartpole
+  - overrides: cartpole_meta
   - _self_
 
 
@@ -12,6 +12,7 @@ env_max_steps: ${overrides.env_max_steps}
 # learning
 meta_train_frames: ${overrides.meta_train_frames}
 meta_train_init_frames: ${overrides.meta_train_init_frames}
+meta_train_logits_frames: ${overrides.meta_train_logits_frames}
 frames_per_batch: ${overrides.frames_per_batch}
 normalize_rewards_online: ${overrides.normalize_rewards_online}
 
@@ -21,26 +22,27 @@ pred_continue: True
 imagination_horizon: ${overrides.imagination_horizon}
 
 # model learning
-model_type: plain
+model_type: causal
 reinforce: True
+alpha: 1.
 buffer_size: 10000
 optim_steps_per_batch: ${overrides.optim_steps_per_batch}
 train_mask_iters: 10
 train_model_iters: 40
 
-batch_size: 100
+batch_size: ${overrides.batch_size}
 batch_length: ${overrides.batch_length}
 
-world_model_lr: 0.001
+world_model_lr: 5e-4
 actor_lr: 1e-4
 critic_lr: 1e-4
-context_lr: 0.001
+context_lr: 0.005
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
 
 world_model_weight_decay: 0.00001
 hidden_size: 200
-hidden_layers: 4
+hidden_layers: 2
 lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
@@ -61,12 +63,12 @@ eval_repeat_nums: 3
 eval_record_nums: 0
 save_model_interval: 10
 
-# envs-RL
-meta: True
+# meta-RL
+meta: ${overrides.meta}
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 10
-meta_test_interval: 200
+meta_test_interval: 100
 meta_test_frames: ${overrides.meta_test_frames}
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}

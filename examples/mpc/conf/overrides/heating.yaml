@@ -3,21 +3,22 @@ termination_fns: "no_termination"
 reward_fns: ""
 env_max_steps: 200
 
+meta: False
+
 meta_train_frames: 500_000
 meta_train_init_frames: 1_000
-meta_test_frames: 5_000
+meta_test_frames:
 frames_per_batch: 50
 
+batch_size: 200
 batch_length: 1
+optim_steps_per_batch: 100
+
 planning_horizon: 10
-optim_steps_per_batch: 50
 
 sparse_weight: 0.02
-context_sparse_weight: 0.005
-context_max_weight: 0.01
+context_sparse_weight: 0.
+context_max_weight: 0.
 
 oracle_context:
-  c1: [ -1., 1. ]
-  c2: [ -1., 1. ]
 new_oracle_context:
-  c3: [ -1., 1. ]

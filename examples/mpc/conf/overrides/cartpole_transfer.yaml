@@ -24,3 +24,4 @@ oracle_context:
   cart_vel_bias: [ -1., 1. ]
   pole_vel_bias: [ -1., 1. ]
 new_oracle_context:
+  gravity: [ 5.0, 20.0 ]

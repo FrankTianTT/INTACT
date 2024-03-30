@@ -1,6 +1,5 @@
 import os
 from functools import partial
-from time import time
 
 from tqdm import tqdm
 import numpy as np
@@ -22,6 +21,7 @@ from utils import (
 )
 
 torch.multiprocessing.set_sharing_strategy('file_system')
+os.environ['MAX_IDLE_COUNT'] = '100000'
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -37,7 +37,7 @@ def main(cfg):
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
 
-    logger = build_logger(cfg)
+    logger = build_logger(cfg, name="mpc")
 
     make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
     train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
@@ -45,6 +45,7 @@ def main(cfg):
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
+    print("test_make_env_list", test_make_env_list)
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
@@ -81,7 +82,6 @@ def main(cfg):
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
     serial_env.set_seed(cfg.seed)
     collector = aSyncDataCollector(
-    # collector = SyncDataCollector(
         create_env_fn=serial_env,
         policy=explore_policy,
         total_frames=cfg.meta_train_frames,
@@ -91,6 +91,7 @@ def main(cfg):
         storing_device=collector_device,
         split_trajs=True
     )
+
     # replay buffer
     buffer_size = cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(

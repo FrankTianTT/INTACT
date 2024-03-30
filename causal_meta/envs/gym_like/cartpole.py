@@ -206,6 +206,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         obs = np.array(self.state, dtype=np.float32)
         obs[1] += self.cart_vel_bias
         obs[3] += self.pole_vel_bias
+        obs[3] += self.pole_vel_bias
         return obs
 
     def reset(
