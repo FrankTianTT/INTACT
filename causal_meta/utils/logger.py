@@ -15,7 +15,7 @@ def build_logger(cfg, name="mpc", log_dir=""):
 
     if cfg.logger == 'wandb':
         wandb_kwargs = {
-            "project": "causal_meta",
+            "project": "INTACT",
             "entity": "causal_focus",
             "group": f"{name.upper()}_{cfg.env_name}",
             "config": logging_cfg,

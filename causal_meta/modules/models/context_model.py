@@ -36,7 +36,8 @@ class ContextModel(nn.Module):
 
     def set_context(self, context):
         assert context.shape == self._context_hat.shape
-        context = torch.clamp(context, -self.context_clip, self.context_clip)
+        if self.context_clip > 0:
+            context = torch.clamp(context, -self.context_clip, self.context_clip)
         self._context_hat.data = context.to(self.device)
 
     def fix(self, idx=None):

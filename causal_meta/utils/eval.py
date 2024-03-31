@@ -58,6 +58,7 @@ def evaluate_policy(
                 break
             else:
                 tensordict = step_mdp(tensordict, exclude_action=False)
+        print(rewards)
         repeat_rewards.append(rewards)
         repeat_lengths.append(lengths)
 

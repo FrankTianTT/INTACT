@@ -78,9 +78,26 @@ class CausalWorldModel(PlainMDPWorldModel):
             output_dim=2,
             hidden_dims=self.hidden_dims,
             extra_dims=[self.output_dim],
-            activate_name="ReLU",
+            activate_name="SiLU",
         )
         return ModuleDict(dict(para_mlp=para_mlp))
+
+    # def build_nets(self):
+    #     para_mlp1 = build_mlp(
+    #         input_dim=self.obs_dim + self.action_dim ,
+    #         output_dim=self.hidden_dims[-2],
+    #         hidden_dims=self.hidden_dims[:-2],
+    #         extra_dims=[self.output_dim],
+    #         activate_name="ReLU",
+    #     )
+    #     para_mlp2 = build_mlp(
+    #         input_dim=self.hidden_dims[-2] + self.max_context_dim,
+    #         output_dim=2,
+    #         hidden_dims=[self.hidden_dims[-1]],
+    #         extra_dims=[self.output_dim],
+    #         activate_name="SiLU",
+    #     )
+    #     return ModuleDict(dict(para_mlp1=para_mlp1, para_mlp2=para_mlp2))
 
     @property
     def params_dict(self):
@@ -96,12 +113,13 @@ class CausalWorldModel(PlainMDPWorldModel):
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
         masked_inputs, mask = self.causal_mask(inputs.reshape(-1, dim), deterministic=deterministic_mask)
-        mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
+        # first_inputs = masked_inputs[:, :, :self.obs_dim + self.action_dim]
+        # hidden = self.nets["para_mlp1"](first_inputs)
+        #
+        # second_inputs = torch.cat([hidden, masked_inputs[:, :, self.obs_dim + self.action_dim:]], dim=-1)
+        # mean, log_var = self.nets["para_mlp2"](second_inputs).permute(2, 1, 0)
 
-        # if self.util_model is not None:
-        #     util_mean, util_log_var = self.util_model(inputs.reshape(-1, dim)).chunk(2, dim=-1)
-        #     mean = (mean + util_mean) / 2
-        #     log_var = (log_var + util_log_var) / 2
+        mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
 
         mask = mask.reshape(*batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
         return *self.get_outputs(mean, log_var, observation, batch_shape), mask

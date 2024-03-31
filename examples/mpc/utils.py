@@ -57,6 +57,7 @@ def train_model(
     else:
         causal_mask = None
 
+    world_model.train()
     for step in range(training_steps):
         world_model.zero_grad()
 

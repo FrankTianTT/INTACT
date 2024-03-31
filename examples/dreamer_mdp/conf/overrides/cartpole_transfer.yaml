@@ -28,3 +28,4 @@ oracle_context:
   pole_vel_bias: [ -1., 1. ]
   masscart: [ 0.8, 1.2 ]
 new_oracle_context:
+  gravity: [ 5.0, 20.0 ]

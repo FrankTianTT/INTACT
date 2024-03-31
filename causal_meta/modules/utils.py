@@ -42,6 +42,7 @@ def build_mlp(
         hidden_dims: Union[int, Optional[List[int]]] = None,
         extra_dims: Union[int, Optional[List[int]]] = None,
         bias: bool = True,
+        drop_out: Optional[float] = 0.2,
         activate_name: str = "ReLU",
         last_activate_name: Optional[str] = None,
         batch_norm: bool = False,
@@ -61,6 +62,8 @@ def build_mlp(
                                       extra_dims=extra_dims, bias=bias)]
         if batch_norm:
             layers += [nn.BatchNorm1d(all_dims[i + 1])]
+        if drop_out is not None:
+            layers += [nn.Dropout(drop_out)]
 
         if i < len(all_dims) - 2:
             layers += [get_activate(activate_name)]
