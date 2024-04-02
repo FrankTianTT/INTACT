@@ -15,6 +15,7 @@ from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
 from causal_meta.utils.eval import evaluate_policy
 from causal_meta.utils.envs import make_dreamer_env
 from causal_meta.utils.plot import plot_context
+from causal_meta.utils.data import match_length
 
 
 def grad_norm(optimizer: torch.optim.Optimizer):
