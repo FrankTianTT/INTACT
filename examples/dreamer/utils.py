@@ -11,11 +11,11 @@ from torchrl.collectors.collectors import aSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 
-from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
-from causal_meta.utils.eval import evaluate_policy
-from causal_meta.utils.envs import make_dreamer_env
-from causal_meta.utils.plot import plot_context
-from causal_meta.utils.data import match_length
+from intact.objectives.causal_dreamer import CausalDreamerModelLoss
+from intact.utils.eval import evaluate_policy
+from intact.utils.envs import make_dreamer_env
+from intact.utils.plot import plot_context
+from intact.utils.data import match_length
 
 
 def grad_norm(optimizer: torch.optim.Optimizer):
@@ -50,7 +50,7 @@ def train_model(
     reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
-    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.use_reinforce
     if train_logits_by_reinforce:
         assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
 
@@ -69,7 +69,7 @@ def train_model(
             reward_normalizer.normalize_reward(sampled_tensordict)
 
         if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
-            grad, sampling_loss = world_model_loss.reinforce(sampled_tensordict)
+            grad, sampling_loss = world_model_loss.use_reinforce(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
             logits.backward(grad)

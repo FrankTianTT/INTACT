@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.causal_mask import CausalMask
+from intact.modules.models.causal_mask import CausalMask
 
 
 def test_causal_mask_reinforce():

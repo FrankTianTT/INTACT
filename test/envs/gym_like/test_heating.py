@@ -1,4 +1,4 @@
-from causal_meta.envs.gym_like.heating import HeatingEnv
+from intact.envs.gym_like.heating import HeatingEnv
 
 
 def test_heating_env():

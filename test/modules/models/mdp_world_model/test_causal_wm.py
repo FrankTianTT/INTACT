@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.mdp_world_model.causal_wm import CausalWorldModel
+from intact.modules.models.mdp_world_model.causal_wm import CausalWorldModel
 
 
 def test_causal_world_model_without_meta():

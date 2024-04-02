@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.mdp_world_model.plain_wm import PlainMDPWorldModel
+from intact.modules.models.mdp_world_model.plain_wm import PlainMDPWorldModel
 
 
 def test_plain_world_model():
@@ -22,8 +22,6 @@ def test_plain_world_model():
 
 
 def test_reset():
-    from torch.optim import Adam
-
     obs_dim = 4
     action_dim = 1
     task_num = 100

@@ -1,6 +1,6 @@
-from torchrl.envs import Transform, RewardSum, Compose
+from torchrl.envs import Compose
 
-from causal_meta.envs.reward_truncated_transform import RewardTruncatedTransform
+from intact.envs.reward_truncated_transform import RewardTruncatedTransform
 
 
 def test_reward_truncated_transform():

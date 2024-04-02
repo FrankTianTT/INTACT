@@ -1,8 +1,8 @@
 import torch
 from tensordict import TensorDict
 
-from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
-from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
+from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
+from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
 
 def test_plain_mdp_wrapper():

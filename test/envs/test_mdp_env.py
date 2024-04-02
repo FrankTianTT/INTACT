@@ -1,9 +1,9 @@
-from causal_meta.envs.mdp_env import MDPEnv
+from intact.envs.mdp_env import MDPEnv
 
 
 def test_mdp_env():
-    from causal_meta.modules.models.mdp_world_model import CausalWorldModel
-    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
+    from intact.modules.models.mdp_world_model import CausalWorldModel
+    from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
     from torchrl.envs import GymEnv
 
     obs_dim = 4
@@ -25,5 +25,6 @@ def test_mdp_env():
 
     td = proof_env.reset()
 
+    mdp_env.reset()
     td = mdp_env.rollout(10, auto_reset=False, tensordict=td, break_when_any_done=False)
     # print(td)

@@ -3,8 +3,8 @@ from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
 from torchrl.modules.models.models import MLP
 
-from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
-from causal_meta.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
+from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
+from intact.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
 
 
 def build_example_causal_dreamer_wrapper(meta=False):

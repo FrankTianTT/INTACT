@@ -5,11 +5,11 @@ from torch.nn import functional as F
 from torch.distributions import Bernoulli
 from torch.utils.data import DataLoader, Dataset
 
-from causal_meta.modules.utils import build_mlp
-from causal_meta.stats.mcc import mean_corr_coef
+from intact.modules.utils import build_mlp
+from intact.stats.mcc import mean_corr_coef
 from examples.toy_example.data_ganeration import gen_nonlinear_data
-from causal_meta.stats.metric import mutual_info_estimation
-from causal_meta.utils.functional import total_mask_grad
+from intact.stats.metric import mutual_info_estimation
+from intact.utils.functional import total_mask_grad
 
 
 class MyDataset(Dataset):

@@ -16,9 +16,9 @@ from torchrl.collectors.collectors import aSyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
-from causal_meta.utils import make_dreamer, build_logger, evaluate_policy, plot_context, match_length
-from causal_meta.utils.envs import make_dreamer_env, create_make_env_list
-from causal_meta.objectives.causal_dreamer import CausalDreamerModelLoss
+from intact.utils import make_dreamer, build_logger, evaluate_policy, plot_context, match_length
+from intact.utils.envs import make_dreamer_env, create_make_env_list
+from intact.objectives.causal_dreamer import CausalDreamerModelLoss
 
 from utils import meta_test, train_model, train_agent
 
@@ -117,7 +117,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # optimizers
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal" and cfg.reinforce:
+    if cfg.model_type == "causal" and cfg.use_reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
         logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     else:

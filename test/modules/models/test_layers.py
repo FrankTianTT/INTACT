@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.layers import ParallelLinear, ParallelGRUCell
+from intact.modules.models.layers import ParallelLinear, ParallelGRUCell
 
 
 def test_parallel_linear():

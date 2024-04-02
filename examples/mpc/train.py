@@ -10,10 +10,10 @@ from torchrl.collectors.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.data.replay_buffers import TensorDictReplayBuffer, LazyMemmapStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.utils import make_mdp_model, build_logger, evaluate_policy, plot_context, match_length
-from causal_meta.utils.envs import make_mdp_env, create_make_env_list
-from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
-from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
+from intact.utils import make_mdp_model, build_logger, evaluate_policy, plot_context, match_length
+from intact.utils.envs import make_mdp_env, create_make_env_list
+from intact.objectives.mdp.causal_mdp import CausalWorldModelLoss
+from intact.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
 from utils import meta_test, train_model
 
@@ -102,7 +102,7 @@ def main(cfg):
         world_model.get_parameter("nets"), lr=cfg.world_model_lr, weight_decay=cfg.world_model_weight_decay
     )
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal" and cfg.reinforce:
+    if cfg.model_type == "causal" and cfg.use_reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
         logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
     else:

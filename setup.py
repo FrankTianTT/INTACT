@@ -14,14 +14,14 @@ with open("README.md", "r") as f:
     long_description = f.read()
 
 setup(
-    name="causal_meta",
+    name="intact",
     version="0.01",
     author="Honglong Tian",
-    description="Meta-RL with identifiable causal world model.",
+    description="Identifiable aNd TrAnsferable Causal meTa World Model.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/FrankTianTT/causal-meta",
-    packages=[package for package in find_packages() if package.startswith("causal_meta")],
+    url="https://github.com/FrankTianTT/intact",
+    packages=[package for package in find_packages() if package.startswith("intact")],
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",

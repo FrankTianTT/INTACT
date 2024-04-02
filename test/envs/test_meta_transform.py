@@ -1,8 +1,8 @@
-from torchrl.envs import GymEnv, TransformedEnv
-from tensordict import TensorDict
 import torch
+from tensordict import TensorDict
+from torchrl.envs import GymEnv, TransformedEnv
 
-from causal_meta.envs.meta_transform import MetaIdxTransform
+from intact.envs.meta_transform import MetaIdxTransform
 
 
 def test_meta_idx_transform():

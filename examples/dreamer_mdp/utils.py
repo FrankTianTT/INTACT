@@ -10,9 +10,9 @@ from torchrl.data.replay_buffers import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import ListStorage
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
 
-from causal_meta.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
-from causal_meta.envs.mdp_env import MDPEnv
-from causal_meta.utils import evaluate_policy, plot_context, match_length
+from intact.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
+from intact.envs.mdp_env import MDPEnv
+from intact.utils import evaluate_policy, plot_context, match_length
 
 
 def reset_module(world_model, actor, critic, new_domain_task_num):
@@ -85,7 +85,7 @@ def train_model(
     reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
-    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce and logits_opt
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.use_reinforce and logits_opt
 
     if cfg.model_type == "causal":
         causal_mask = world_model.causal_mask
@@ -238,7 +238,7 @@ def meta_test(
 
         new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
         new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr))
-        if world_model.model_type == "causal" and cfg.reinforce:
+        if world_model.model_type == "causal" and cfg.use_reinforce:
             logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
         else:
             logits_opt = None

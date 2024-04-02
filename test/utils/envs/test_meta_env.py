@@ -1,7 +1,7 @@
 from omegaconf import DictConfig
 
-from causal_meta.utils.envs.mdp_env import make_mdp_env
-from causal_meta.utils.envs.meta_env import create_make_env_list
+from intact.utils.envs.mdp_env import make_mdp_env
+from intact.utils.envs.meta_env import create_make_env_list
 
 
 def test_env_constructor():

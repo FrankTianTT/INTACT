@@ -1,5 +1,6 @@
 import torch
-from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
+
+from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 
 
 def test_causal_rssm_prior():

@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.stats.metric import mutual_info_estimation
+from intact.stats.metric import mutual_info_estimation
 
 
 def test_mutual_info_estimation():

@@ -1,4 +1,4 @@
-from causal_meta.utils.envs.mdp_env import make_mdp_env
+from intact.utils.envs.mdp_env import make_mdp_env
 
 
 def test_make_mdp_env():

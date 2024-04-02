@@ -1,5 +1,6 @@
 import torch
-from causal_meta.modules.utils import build_mlp, get_activate
+
+from intact.modules.utils import build_mlp, get_activate
 
 
 def test_build_mlp_parallel():
@@ -29,7 +30,7 @@ def test_build_mlp_plain():
 
 
 def test_parallel_data():
-    from causal_meta.modules.models.causal_mask import CausalMask
+    from intact.modules.models.causal_mask import CausalMask
 
     input_dim = 10
     output_dim = 5

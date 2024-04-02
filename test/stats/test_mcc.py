@@ -1,11 +1,9 @@
 import numpy as np
 
-from causal_meta.stats.mcc import mean_corr_coef
+from intact.stats.mcc import mean_corr_coef
 
 
 def test_non_linear():
-    import matplotlib.pyplot as plt
-
     sample_num = 100
 
     x = (np.random.random([sample_num, 1]) - 0.5) * 2

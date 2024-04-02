@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.context_model import ContextModel
+from intact.modules.models.context_model import ContextModel
 
 
 def test_context_model():

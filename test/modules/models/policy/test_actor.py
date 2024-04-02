@@ -1,7 +1,7 @@
 import torch
 
-from causal_meta.modules.models.context_model import ContextModel
-from causal_meta.modules.models.policy.actor import Actor
+from intact.modules.models.context_model import ContextModel
+from intact.modules.models.policy.actor import Actor
 
 
 def test_actor_mdp():

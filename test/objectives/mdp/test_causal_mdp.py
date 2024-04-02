@@ -1,15 +1,13 @@
 import torch
-import torch.nn.functional as F
-from torchrl.objectives.common import LossModule
 from tensordict import TensorDict
+from torch.optim import Adam
 
-from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
+from intact.modules.models.mdp_world_model import CausalWorldModel
+from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
+from intact.objectives.mdp.causal_mdp import CausalWorldModelLoss
 
 
 def test_causal_world_model_loss():
-    from causal_meta.modules.models.mdp_world_model import CausalWorldModel
-    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
-    from torch.optim import Adam
 
     obs_dim = 4
     action_dim = 1

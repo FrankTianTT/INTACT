@@ -4,7 +4,7 @@ from torchrl.envs import GymEnv, TransformedEnv, SerialEnv, ParallelEnv
 import torch
 from tqdm import tqdm
 
-from causal_meta.envs.meta_transform import MetaIdxTransform
+from intact.envs.meta_transform import MetaIdxTransform
 
 
 def gen_mdp_data(env_name="CartPoleContinuous-v0", sample_num=1000):

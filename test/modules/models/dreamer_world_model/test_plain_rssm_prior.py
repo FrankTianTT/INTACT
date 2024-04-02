@@ -1,6 +1,6 @@
 import torch
 
-from causal_meta.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
+from intact.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
 
 
 def test_plain_rssm_prior():

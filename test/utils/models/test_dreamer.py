@@ -1,26 +1,14 @@
-import torch
-from torchrl.envs import GymEnv, TransformedEnv, Compose, ToTensorImage, DoubleToFloat, TensorDictPrimer
-from torchrl.data import UnboundedContinuousTensorSpec
+from functools import partial
 
-from causal_meta.utils.models.mdp import DreamerConfig
-from causal_meta.utils.models.dreamer import make_dreamer
+from intact.utils.envs.dreamer_env import make_dreamer_env
+from intact.utils.models.dreamer import make_dreamer
+from intact.utils.models.mdp import DreamerConfig
 
 
-# def test_make_causal_dreamer():
-#     cfg = DreamerConfig()
-#
-#     env = TransformedEnv(GymEnv("MyCartPole-v0", from_pixels=True), Compose(ToTensorImage(), DoubleToFloat()))
-#
-#     default_dict = {
-#         "state": UnboundedContinuousTensorSpec(
-#             shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.state_dim_per_variable))
-#         ),
-#         "belief": UnboundedContinuousTensorSpec(
-#             shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.hidden_dim_per_variable))
-#         ),
-#     }
-#     env.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
-#
-#     world_model, model_based_env, actor_simulator, value_model, actor_realworld = make_dreamer(cfg, env)
+def test_make_causal_dreamer():
+    cfg = DreamerConfig()
 
-# world_model.get_parameter("transition_model.0.weight")
+    make_env_fn = partial(make_dreamer_env, env_name="MyCartPole-v0")
+    env = make_env_fn()
+
+    world_model, model_based_env, actor_simulator, value_model, actor_realworld = make_dreamer(cfg, env)
