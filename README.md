@@ -19,7 +19,7 @@ conda activate intact
 
 # install torch, torchvision, tensordict
 pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install tensordict-nightly==2023.11.26 -i https://pypi.org/simple
+pip install tensordict-nightly -i https://pypi.org/simple # do not use mirror
 
 # install intact
 https://github.com/FrankTianTT/intact.git --depth 1
