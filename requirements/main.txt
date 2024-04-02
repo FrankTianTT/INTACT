@@ -8,7 +8,7 @@ seaborn==0.13.0
 torch>=2.1.0
 torchvision>=0.16.0
 tensordict-nightly==2023.11.28
-torchrl>=0.2.1
+torchrl @ git+https://github.com/FrankTianTT/rl.git@dreamer_discount
 tqdm==4.66.1
 wandb==0.15.12
 causal-learn>=0.1.3.7
