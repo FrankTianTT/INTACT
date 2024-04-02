@@ -20,53 +20,51 @@ from env_generation import gen_meta_mdp_data
 
 
 class GINCouplingBlock(_BaseCouplingBlock):
+    def __init__(
+        self,
+        dims_in,
+        dims_c=[],
+        subnet_constructor: Callable = None,
+        clamp: float = 2.0,
+        clamp_activation: Union[str, Callable] = "ATAN",
+        split_len: Union[float, int] = 0.5,
+    ):
 
-    def __init__(self, dims_in, dims_c=[],
-                 subnet_constructor: Callable = None,
-                 clamp: float = 2.,
-                 clamp_activation: Union[str, Callable] = "ATAN",
-                 split_len: Union[float, int] = 0.5):
-
-        super().__init__(dims_in, dims_c, clamp, clamp_activation,
-                         split_len=split_len)
+        super().__init__(dims_in, dims_c, clamp, clamp_activation, split_len=split_len)
 
         self.subnet1 = subnet_constructor(self.split_len1 + self.condition_length, self.split_len2 * 2)
         self.subnet2 = subnet_constructor(self.split_len2 + self.condition_length, self.split_len1 * 2)
 
     def _coupling1(self, x1, u2, rev=False):
         a2 = self.subnet2(u2)
-        s2, t2 = a2[:, :self.split_len1], a2[:, self.split_len1:]
+        s2, t2 = a2[:, : self.split_len1], a2[:, self.split_len1 :]
         s2 = self.clamp * self.f_clamp(s2)
 
         s2 = s2 - s2.mean(1, keepdim=True)
 
         if rev:
             y1 = (x1 - t2) * torch.exp(-s2)
-            return y1, 0.
+            return y1, 0.0
         else:
             y1 = torch.exp(s2) * x1 + t2
-            return y1, 0.
+            return y1, 0.0
 
     def _coupling2(self, x2, u1, rev=False):
         a1 = self.subnet1(u1)
-        s1, t1 = a1[:, :self.split_len2], a1[:, self.split_len2:]
+        s1, t1 = a1[:, : self.split_len2], a1[:, self.split_len2 :]
         s1 = self.clamp * self.f_clamp(s1)
         s1 = s1 - s1.mean(1, keepdim=True)
 
         if rev:
             y2 = (x2 - t1) * torch.exp(-s1)
-            return y2, 0.
+            return y2, 0.0
         else:
             y2 = torch.exp(s1) * x2 + t1
-            return y2, 0.
+            return y2, 0.0
 
 
 def subnet_fc(dims_in, dims_out):
-    return nn.Sequential(
-        nn.Linear(dims_in, 256),
-        nn.ReLU(),
-        nn.Linear(256, dims_out)
-    )
+    return nn.Sequential(nn.Linear(dims_in, 256), nn.ReLU(), nn.Linear(256, dims_out))
 
 
 class InvWorldModel(nn.Module):
@@ -78,21 +76,13 @@ class InvWorldModel(nn.Module):
         self.task_num = task_num
         self.residual = residual
 
-        nodes = [
-            ConditionNode(obs_dim + action_dim, name='State and Action Input'),
-            InputNode(obs_dim, name='Context Input')
-        ]
+        nodes = [ConditionNode(obs_dim + action_dim, name="State and Action Input"), InputNode(obs_dim, name="Context Input")]
         for k in range(4):
-            nodes.append(Node(nodes[-1],
-                              GINCouplingBlock,
-                              {'subnet_constructor': subnet_fc},
-                              conditions=nodes[0],
-                              name=f"Coupling_{k}"))
-            nodes.append(Node(nodes[-1],
-                              PermuteRandom,
-                              {'seed': k},
-                              name=F'Permute_{k}'))
-        nodes.append(OutputNode(nodes[-1], name='Output'))
+            nodes.append(
+                Node(nodes[-1], GINCouplingBlock, {"subnet_constructor": subnet_fc}, conditions=nodes[0], name=f"Coupling_{k}")
+            )
+            nodes.append(Node(nodes[-1], PermuteRandom, {"seed": k}, name=f"Permute_{k}"))
+        nodes.append(OutputNode(nodes[-1], name="Output"))
 
         self.module = GraphINN(nodes)
         self.mu = nn.Parameter(torch.randn(task_num, obs_dim) * 0.05, requires_grad=True)
@@ -128,23 +118,19 @@ class InvWorldModel(nn.Module):
 
 
 def inn_world_model(
-        env_name='CartPoleContinuous-v0',
-        task_num=100,
-        sample_num=10000,
-        batch_size=256,
-        lr=1e-3,
-        device="cuda",
-        empirical_vars=False,
-        sparsity_reg=0.0,
+    env_name="CartPoleContinuous-v0",
+    task_num=100,
+    sample_num=10000,
+    batch_size=256,
+    lr=1e-3,
+    device="cuda",
+    empirical_vars=False,
+    sparsity_reg=0.0,
 ):
     if not torch.cuda.is_available():
         device = "cpu"
 
-    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(
-        env_name=env_name,
-        task_num=task_num,
-        sample_num=sample_num
-    )
+    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(env_name=env_name, task_num=task_num, sample_num=sample_num)
 
     model = InvWorldModel(obs.shape[1], action.shape[1], task_num).to(device)
 
@@ -227,22 +213,18 @@ def inn_world_model(
 
 
 def mlp(
-        env_name='CartPoleContinuous-v0',
-        task_num=100,
-        sample_num=10000,
-        batch_size=256,
-        context_dim=1,
-        lr=1e-3,
-        device="cuda",
+    env_name="CartPoleContinuous-v0",
+    task_num=100,
+    sample_num=10000,
+    batch_size=256,
+    context_dim=1,
+    lr=1e-3,
+    device="cuda",
 ):
     if not torch.cuda.is_available():
         device = "cpu"
 
-    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(
-        env_name=env_name,
-        task_num=task_num,
-        sample_num=sample_num
-    )
+    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(env_name=env_name, task_num=task_num, sample_num=sample_num)
     context = nn.Parameter(torch.zeros(task_num, context_dim), requires_grad=True)
 
     model = nn.Sequential(
@@ -250,7 +232,7 @@ def mlp(
         nn.ReLU(),
         nn.Linear(256, 256),
         nn.ReLU(),
-        nn.Linear(256, obs.shape[1])
+        nn.Linear(256, obs.shape[1]),
     )
 
     optimizer = torch.optim.Adam(list(model.parameters()) + [context], lr=lr)
@@ -282,5 +264,5 @@ def mlp(
             print(mcc)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     mlp()

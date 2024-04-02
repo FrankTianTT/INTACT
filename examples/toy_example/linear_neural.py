@@ -41,8 +41,8 @@ def identify_theta(x, y, theta_size):
         theta_optimizer.step()
 
     print(mse_list[-1], mi_list[-1])
-    plt.plot(mse_list, label='mse')
-    plt.plot(mi_list, label='reg')
+    plt.plot(mse_list, label="mse")
+    plt.plot(mi_list, label="reg")
     plt.legend()
     plt.show()
 
@@ -52,7 +52,7 @@ def identify_theta(x, y, theta_size):
     return theta_hat.detach().numpy()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     task_num = 100
     sample_per_task = 10
     x_size = 5

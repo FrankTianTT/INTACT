@@ -28,20 +28,20 @@ def get_init(shape, bias, scale):
 
 class CausalMask(nn.Module):
     def __init__(
-            self,
-            observed_input_dim,
-            mask_output_dim,
-            reinforce=True,
-            latent=False,
-            gumbel_softmax=False,
-            meta=False,
-            context_input_dim=10,
-            logits_clip=3.0,
-            observed_logits_init_bias=0.3,
-            context_logits_init_bias=0.5,
-            observed_logits_init_scale=0.05,
-            context_logits_init_scale=0.5,
-            alpha=10.,
+        self,
+        observed_input_dim,
+        mask_output_dim,
+        reinforce=True,
+        latent=False,
+        gumbel_softmax=False,
+        meta=False,
+        context_input_dim=10,
+        logits_clip=3.0,
+        observed_logits_init_bias=0.3,
+        context_logits_init_bias=0.5,
+        observed_logits_init_scale=0.05,
+        context_logits_init_scale=0.5,
+        alpha=10.0,
     ):
         super().__init__()
 
@@ -59,24 +59,26 @@ class CausalMask(nn.Module):
         self.context_logits_init_scale = context_logits_init_scale
         self.alpha = alpha
 
-        self._observed_logits = nn.Parameter(get_init(
-            shape=(self.mask_output_dim, self.observed_input_dim),
-            bias=observed_logits_init_bias,
-            scale=observed_logits_init_scale
-        ))
+        self._observed_logits = nn.Parameter(
+            get_init(
+                shape=(self.mask_output_dim, self.observed_input_dim),
+                bias=observed_logits_init_bias,
+                scale=observed_logits_init_scale,
+            )
+        )
         # self._observed_logits = nn.Parameter(torch.ones((self.mask_output_dim, self.observed_input_dim)) * logits_clip)
 
-        self._context_logits = nn.Parameter(get_init(
-            shape=(self.mask_output_dim, self.context_input_dim),
-            bias=context_logits_init_bias,
-            scale=context_logits_init_scale
-        ))
+        self._context_logits = nn.Parameter(
+            get_init(
+                shape=(self.mask_output_dim, self.context_input_dim),
+                bias=context_logits_init_bias,
+                scale=context_logits_init_scale,
+            )
+        )
 
     def extra_repr(self):
-        return 'observed_input_dim={}, mask_output_dim={}, context_input_dim={}'.format(
-            self.observed_input_dim,
-            self.mask_output_dim,
-            self.context_input_dim
+        return "observed_input_dim={}, mask_output_dim={}, context_input_dim={}".format(
+            self.observed_input_dim, self.mask_output_dim, self.context_input_dim
         )
 
     @property
@@ -109,7 +111,7 @@ class CausalMask(nn.Module):
 
     @property
     def valid_context_idx(self):
-        non_zero = self.mask[:, self.observed_input_dim:].any(dim=0)
+        non_zero = self.mask[:, self.observed_input_dim :].any(dim=0)
         return torch.where(non_zero)[0]
 
     def reset(self, line_idx=None):
@@ -124,18 +126,18 @@ class CausalMask(nn.Module):
         reset_matrix = line_matrix * column_matrix
 
         self._context_logits.data[reset_matrix] = get_init(
-            shape=(len(line_idx) * len(column_idx)),
-            bias=self.context_logits_init_bias,
-            scale=self.context_logits_init_scale
+            shape=(len(line_idx) * len(column_idx)), bias=self.context_logits_init_bias, scale=self.context_logits_init_scale
         ).to(self._context_logits.device)
 
     def forward(self, inputs, dim_map=None, deterministic=False):
         assert len(inputs.shape) == 2, "inputs should be 2D tensor: batch_size x input_dim"
         batch_size, input_dim = inputs.shape
         if dim_map is None:
-            assert input_dim == self.mask_input_dim, \
-                ("dimension of inputs should be equal to mask_input_dim if dim_map is None,"
-                 "got {} and {} instead".format(input_dim, self.mask_input_dim))
+            assert (
+                input_dim == self.mask_input_dim
+            ), "dimension of inputs should be equal to mask_input_dim if dim_map is None," "got {} and {} instead".format(
+                input_dim, self.mask_input_dim
+            )
 
         # shape: mask_output_dim * batch_size * input_dim
         repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
@@ -148,9 +150,7 @@ class CausalMask(nn.Module):
         else:
             if self.gumbel_softmax:
                 original_mask = F.gumbel_softmax(
-                    logits=torch.stack((self.mask_logits, 1 - self.mask_logits)),
-                    hard=True,
-                    dim=0
+                    logits=torch.stack((self.mask_logits, 1 - self.mask_logits)), hard=True, dim=0
                 )[0]
             else:
                 original_mask = torch.sigmoid(self.alpha * self.mask_logits)
@@ -160,12 +160,7 @@ class CausalMask(nn.Module):
         return masked_inputs, original_mask
 
     def total_mask_grad(
-            self,
-            sampling_mask,
-            sampling_loss,
-            sparse_weight=0.05,
-            context_sparse_weight=0.05,
-            context_max_weight=0.2
+        self, sampling_mask, sampling_loss, sparse_weight=0.05, context_sparse_weight=0.05, context_max_weight=0.2
     ):
         num_pos = sampling_mask.sum(dim=0)
         num_neg = sampling_mask.shape[0] - num_pos
@@ -181,13 +176,14 @@ class CausalMask(nn.Module):
 
         sampling_grad = (pos_grads - neg_grads) * g
         reg_grad = torch.ones_like(self.mask_logits)
-        reg_grad[:, :self.observed_input_dim] *= sparse_weight
+        reg_grad[:, : self.observed_input_dim] *= sparse_weight
         # if self.latent:
         #     max_idx = self.mask_logits[:, :self.observed_input_dim].argmax(dim=1)
         #     reg_grad[torch.arange(self.mask_output_dim), max_idx] = 0
-        reg_grad[:, self.observed_input_dim:] *= context_sparse_weight
-        reg_grad[:, self.observed_input_dim:] += (context_max_weight *
-                                                  max_sigmoid_grad(self.mask_logits[:, self.observed_input_dim:]))
+        reg_grad[:, self.observed_input_dim :] *= context_sparse_weight
+        reg_grad[:, self.observed_input_dim :] += context_max_weight * max_sigmoid_grad(
+            self.mask_logits[:, self.observed_input_dim :]
+        )
         grad = is_valid * (sampling_grad + reg_grad)
         return grad.mean(dim=0)
 
@@ -199,61 +195,3 @@ class CausalMask(nn.Module):
             if i != self.mask.shape[0] - 1:
                 string += "\n"
         return string
-
-
-def test_causal_mask_reinforce():
-    observed_input_dim = 5
-    context_input_dim = 10
-    real_input_dim = 100
-    mask_output_dim = 6
-    batch_size = 5
-
-    causal_mask = CausalMask(
-        observed_input_dim=observed_input_dim,
-        context_input_dim=context_input_dim,
-        mask_output_dim=mask_output_dim,
-        meta=True
-    )
-
-    inputs = torch.randn(batch_size, real_input_dim)
-    dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
-
-    masked_inputs, mask = causal_mask(inputs, dim_map=dim_map)
-
-    assert masked_inputs.shape == (mask_output_dim, batch_size, real_input_dim)
-    assert mask.shape == (batch_size, mask_output_dim, context_input_dim + observed_input_dim)
-
-    print(causal_mask.mask)
-    causal_mask.reset()
-    print(causal_mask.get_parameter("context_logits"))
-
-
-def test_causal_mask_sigmoid():
-    observed_input_dim = 5
-    context_input_dim = 10
-    real_input_dim = 100
-    mask_output_dim = 6
-    batch_size = 5
-
-    causal_mask = CausalMask(
-        observed_input_dim=observed_input_dim,
-        context_input_dim=context_input_dim,
-        mask_output_dim=mask_output_dim,
-        meta=True,
-        reinforce=False
-    )
-
-    inputs = torch.randn(batch_size, real_input_dim)
-    dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
-
-    masked_inputs, _ = causal_mask(inputs, dim_map=dim_map)
-
-    assert masked_inputs.shape == (mask_output_dim, batch_size, real_input_dim)
-
-
-if __name__ == '__main__':
-    a = nn.Parameter(torch.randn((3, 4)))
-
-    print(a)
-    print(a.argmax(dim=1))
-    print(a[torch.arange(3), a.argmax(dim=1)])

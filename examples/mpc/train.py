@@ -15,13 +15,10 @@ from causal_meta.utils.envs import make_mdp_env, create_make_env_list
 from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
-from utils import (
-    meta_test,
-    train_model
-)
+from utils import meta_test, train_model
 
-torch.multiprocessing.set_sharing_strategy('file_system')
-os.environ['MAX_IDLE_COUNT'] = '100000'
+torch.multiprocessing.set_sharing_strategy("file_system")
+os.environ["MAX_IDLE_COUNT"] = "100000"
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -54,8 +51,8 @@ def main(cfg):
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
-        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
-        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.,
+        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.0,
+        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.0,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -89,7 +86,7 @@ def main(cfg):
         init_random_frames=cfg.meta_train_init_frames,
         device=collector_device,
         storing_device=collector_device,
-        split_trajs=True
+        split_trajs=True,
     )
 
     # replay buffer
@@ -101,8 +98,9 @@ def main(cfg):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                       weight_decay=cfg.world_model_weight_decay)
+    world_model_opt = torch.optim.Adam(
+        world_model.get_parameter("nets"), lr=cfg.world_model_lr, weight_decay=cfg.world_model_weight_decay
+    )
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
     if cfg.model_type == "causal" and cfg.reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
@@ -110,10 +108,10 @@ def main(cfg):
     else:
         logits_opt = None
         if cfg.model_type == "causal":
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("observed_logits"),
-                                                 lr=cfg.observed_logits_lr))
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"),
-                                                 lr=cfg.context_logits_lr))
+            world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+            )
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
 
     # Training loop
     collected_frames = 0
@@ -145,9 +143,15 @@ def main(cfg):
             continue
 
         train_model_iters = train_model(
-            cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_batch, world_model_opt, logits_opt, logger,
-            iters=train_model_iters
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
+            cfg.optim_steps_per_batch,
+            world_model_opt,
+            logits_opt,
+            logger,
+            iters=train_model_iters,
         )
 
         if (i + 1) % cfg.eval_interval == 0:
@@ -171,5 +175,5 @@ def main(cfg):
     collector.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

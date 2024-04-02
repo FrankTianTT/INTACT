@@ -61,11 +61,11 @@ class DreamCriticLoss(LossModule):
     default_keys = _AcceptedKeys()
 
     def __init__(
-            self,
-            value_model: TensorDictModule,
-            value_loss: Optional[str] = None,
-            discount_loss: bool = False,  # for consistency with paper
-            gamma: int = 0.99,
+        self,
+        value_model: TensorDictModule,
+        value_loss: Optional[str] = None,
+        discount_loss: bool = False,  # for consistency with paper
+        gamma: int = 0.99,
     ):
         super().__init__()
         self.value_model = value_model
@@ -90,11 +90,18 @@ class DreamCriticLoss(LossModule):
         # print("value", fake_data.get(self.tensor_keys.value)[0].reshape(-1))
         # print("target", lambda_target[0].reshape(-1))
 
-        value_loss = (discount * distance_loss(
-            fake_data.get(self.tensor_keys.value),
-            lambda_target,
-            self.value_loss,
-        )).sum((-1, -2)).mean()
+        value_loss = (
+            (
+                discount
+                * distance_loss(
+                    fake_data.get(self.tensor_keys.value),
+                    lambda_target,
+                    self.value_loss,
+                )
+            )
+            .sum((-1, -2))
+            .mean()
+        )
 
         loss_tensordict = TensorDict({"loss_value": value_loss}, [])
         return loss_tensordict, fake_data

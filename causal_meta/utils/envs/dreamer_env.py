@@ -14,9 +14,8 @@ from torchrl.envs.transforms import (
     StepCounter,
     FlattenObservation,
     TensorDictPrimer,
-    DoubleToFloat
+    DoubleToFloat,
 )
-from torchrl.envs import ParallelEnv, SerialEnv
 
 from causal_meta.envs.meta_transform import MetaIdxTransform
 
@@ -27,16 +26,16 @@ LIBS = {
 
 
 def make_dreamer_env(
-        env_name,
-        env_kwargs=None,
-        idx=None,
-        task_num=None,
-        pixel=True,
-        env_library="gym",
-        image_size=64,
-        variable_num=10,
-        state_dim_per_variable=3,
-        hidden_dim_per_variable=20,
+    env_name,
+    env_kwargs=None,
+    idx=None,
+    task_num=None,
+    pixel=True,
+    env_library="gym",
+    image_size=64,
+    variable_num=10,
+    state_dim_per_variable=3,
+    hidden_dim_per_variable=20,
 ):
     if env_kwargs is None:
         env_kwargs = {}
@@ -58,36 +57,11 @@ def make_dreamer_env(
 
     assert state_dim_per_variable > 0
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(
-            shape=torch.Size((*env.batch_size, variable_num * state_dim_per_variable))
-        ),
-        "belief": UnboundedContinuousTensorSpec(
-            shape=torch.Size((*env.batch_size, variable_num * hidden_dim_per_variable))
-        )
+        "state": UnboundedContinuousTensorSpec(shape=torch.Size((*env.batch_size, variable_num * state_dim_per_variable))),
+        "belief": UnboundedContinuousTensorSpec(shape=torch.Size((*env.batch_size, variable_num * hidden_dim_per_variable))),
     }
     transforms.append(TensorDictPrimer(random=False, default_value=0, **default_dict))
 
     if idx is not None:
         transforms.append(MetaIdxTransform(idx, task_num))
     return TransformedEnv(env, transform=Compose(*transforms))
-
-
-def test_make_pomdp_env():
-    torch.multiprocessing.set_sharing_strategy('file_system')
-
-    make_env_fn = partial(make_dreamer_env, env_name="MyCartPole-v0")
-    env = make_env_fn()
-    td = env.rollout(5, auto_reset=True)
-
-    parallel_env = ParallelEnv(
-        num_workers=16,
-        create_env_fn=[make_env_fn] * 16,
-    )
-
-    td = parallel_env.rollout(5, auto_reset=True)
-
-    parallel_env.close()
-
-
-if __name__ == '__main__':
-    test_make_pomdp_env()

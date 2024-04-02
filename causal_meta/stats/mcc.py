@@ -14,7 +14,7 @@ def kernel_independence_test(x, y):
     result_matrix = np.zeros((x_dim, y_dim))
     for i in range(x_dim):
         for j in range(y_dim):
-            p_value, test_stat = ci_test.compute_pvalue(x[:, i:i + 1], y[:, j:j + 1])
+            p_value, test_stat = ci_test.compute_pvalue(x[:, i : i + 1], y[:, j : j + 1])
             result_matrix[i, j] = 1 - min(0.05, p_value) * 20
     return result_matrix
 
@@ -25,16 +25,16 @@ def kernel_ridge_regression(x, y):
     result_matrix = np.zeros((x_dim, y_dim))
     for i in range(x_dim):
         for j in range(y_dim):
-            krr = KernelRidge(alpha=1.0, kernel='rbf', gamma=3.0)
-            krr.fit(x[:, i:i + 1], y[:, j])
-            y_hat = krr.predict(x[:, i:i + 1])
+            krr = KernelRidge(alpha=1.0, kernel="rbf", gamma=3.0)
+            krr.fit(x[:, i : i + 1], y[:, j])
+            y_hat = krr.predict(x[:, i : i + 1])
             r2 = r2_score(y[:, j], y_hat)
 
             result_matrix[i, j] = r2
     return result_matrix
 
 
-def mean_corr_coef(x, y, method='pearson', return_permutation=False):
+def mean_corr_coef(x, y, method="pearson", return_permutation=False):
     """
     A numpy implementation of the mean correlation coefficient metric.
 
@@ -54,18 +54,18 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
     """
 
     d = x.shape[1]
-    if method == 'pearson':
+    if method == "pearson":
         cc = np.corrcoef(x, y, rowvar=False)[:d, d:]
         cc = np.abs(cc)
-    elif method == 'spearman':
+    elif method == "spearman":
         cc = spearmanr(x, y)[0][:d, d:]
         cc = np.abs(cc)
-    elif method == 'kit':
+    elif method == "kit":
         cc = kernel_independence_test(x, y)
-    elif method == 'krr':
+    elif method == "krr":
         cc = kernel_ridge_regression(x, y)
     else:
-        raise ValueError('not a valid method: {}'.format(method))
+        raise ValueError("not a valid method: {}".format(method))
 
     if np.isnan(cc).any():
         cc = np.nan_to_num(cc)
@@ -82,33 +82,3 @@ def mean_corr_coef(x, y, method='pearson', return_permutation=False):
         return score, permutation
     else:
         return score
-
-
-def test_non_linear():
-    import matplotlib.pyplot as plt
-
-    sample_num = 100
-
-    x = (np.random.random([sample_num, 1]) - 0.5) * 2
-    y = np.abs(x)  # + np.random.random([sample_num, 1]) * 0.2
-    # plt.scatter(x, y)
-    # plt.show()
-
-    mcc1 = mean_corr_coef(x, y, "krr")
-    mcc2 = mean_corr_coef(x, y, "pearson")
-
-    print(mcc1, mcc2)
-
-
-def test_mcc():
-    sample_num = 100
-
-    x = np.random.random([sample_num, 3])
-    y = np.random.random([sample_num, 3])
-
-    mcc = mean_corr_coef(x, y)
-    print(mcc)
-
-
-if __name__ == '__main__':
-    test_mcc()

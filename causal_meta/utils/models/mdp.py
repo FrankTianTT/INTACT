@@ -9,8 +9,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
 from torchrl.modules.models.models import MLP
-from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_value_model, \
-    _dreamer_make_actors
+from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_value_model, _dreamer_make_actors
 from torchrl.modules.models.model_based import RSSMRollout
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -22,7 +21,7 @@ from torchrl.modules.distributions import TanhNormal
 
 from causal_meta.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 from causal_meta.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
-from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
+from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
 from causal_meta.modules.models.policy.actor import Actor
 from causal_meta.modules.models.policy.critic import Critic
 from causal_meta.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
@@ -31,23 +30,19 @@ from causal_meta.envs.mdp_env import MDPEnv
 
 
 def make_mdp_model(
-        cfg: "DictConfig",  # noqa: F821
-        proof_env: EnvBase,
-        device: DEVICE_TYPING = "cpu",
+    cfg: "DictConfig",  # noqa: F821
+    proof_env: EnvBase,
+    device: DEVICE_TYPING = "cpu",
 ):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
     if cfg.model_type == "causal":
-        wm_class = partial(
-            CausalWorldModel,
-            reinforce=cfg.reinforce,
-            alpha=cfg.alpha
-        )
+        wm_class = partial(CausalWorldModel, reinforce=cfg.reinforce, alpha=cfg.alpha)
     elif cfg.model_type == "plain":
         wm_class = PlainMDPWorldModel
-    elif cfg.model_type == "inn":
-        wm_class = INNWorldModel
+    # elif cfg.model_type == "inn":
+    #     wm_class = INNWorldModel
     else:
         raise NotImplementedError
     world_model = wm_class(
@@ -57,24 +52,19 @@ def make_mdp_model(
         max_context_dim=cfg.max_context_dim,
         task_num=cfg.task_num,
         hidden_dims=[cfg.hidden_size] * cfg.hidden_layers,
-
     )
     world_model = MDPWrapper(world_model).to(device)
 
-    model_based_env = MDPEnv(
-        world_model,
-        termination_fns=cfg.termination_fns,
-        reward_fns=cfg.reward_fns
-    ).to(device)
+    model_based_env = MDPEnv(world_model, termination_fns=cfg.termination_fns, reward_fns=cfg.reward_fns).to(device)
     model_based_env.set_specs_from_env(proof_env)
 
     return world_model, model_based_env
 
 
 def make_mdp_dreamer(
-        cfg: "DictConfig",  # noqa: F821
-        proof_env: EnvBase,
-        device: DEVICE_TYPING = "cpu",
+    cfg: "DictConfig",  # noqa: F821
+    proof_env: EnvBase,
+    device: DEVICE_TYPING = "cpu",
 ):
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
@@ -110,9 +100,7 @@ def make_mdp_dreamer(
             distribution_class=TanhNormal,
             distribution_kwargs={"tanh_loc": True},
             default_interaction_type=InteractionType.RANDOM,
-            spec=CompositeSpec(
-                **{"action": proof_env.action_spec.to("cpu")}
-            ),
+            spec=CompositeSpec(**{"action": proof_env.action_spec.to("cpu")}),
         ),
     ).to(device)
     critic_module = Critic(
@@ -128,7 +116,6 @@ def make_mdp_dreamer(
     ).to(device)
 
     return world_model, model_based_env, actor, critic
-
 
 
 @dataclass
@@ -182,17 +169,14 @@ def test_make_causal_dreamer():
 
     cfg = DreamerConfig()
 
-    env = TransformedEnv(
-        GymEnv("CartPoleContinuous-v0", from_pixels=True),
-        Compose(ToTensorImage(), DoubleToFloat())
-    )
+    env = TransformedEnv(GymEnv("CartPoleContinuous-v0", from_pixels=True), Compose(ToTensorImage(), DoubleToFloat()))
     default_dict = {
-        "state": UnboundedContinuousTensorSpec(shape=torch.Size((
-            *env.batch_size, cfg.variable_num * cfg.state_dim_per_variable
-        ))),
-        "belief": UnboundedContinuousTensorSpec(shape=torch.Size((
-            *env.batch_size, cfg.variable_num * cfg.hidden_dim_per_variable
-        )))
+        "state": UnboundedContinuousTensorSpec(
+            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.state_dim_per_variable))
+        ),
+        "belief": UnboundedContinuousTensorSpec(
+            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.hidden_dim_per_variable))
+        ),
     }
     env.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
 
@@ -201,7 +185,7 @@ def test_make_causal_dreamer():
     world_model.get_parameter("transition_model.0.weight")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # test_make_causal_dreamer()
 
     import matplotlib.pyplot as plt

@@ -34,19 +34,19 @@ def retrieve_stats_from_state_dict(obs_norm_state_dict):
 
 
 def train_model(
-        cfg,
-        replay_buffer,
-        world_model,
-        world_model_loss,
-        model_opt,
-        training_steps,
-        logits_opt=None,
-        logger=None,
-        deterministic_mask=False,
-        log_prefix="model",
-        iters=0,
-        only_train=None,
-        reward_normalizer=None
+    cfg,
+    replay_buffer,
+    world_model,
+    world_model_loss,
+    model_opt,
+    training_steps,
+    logits_opt=None,
+    logger=None,
+    deterministic_mask=False,
+    log_prefix="model",
+    iters=0,
+    only_train=None,
+    reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce
@@ -67,8 +67,7 @@ def train_model(
         if reward_normalizer:
             reward_normalizer.normalize_reward(sampled_tensordict)
 
-        if (train_logits_by_reinforce and
-                iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
+        if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
             grad, sampling_loss = world_model_loss.reinforce(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
@@ -103,17 +102,17 @@ def train_model(
 
 
 def train_agent(
-        cfg,
-        replay_buffer,
-        actor_model,
-        actor_loss,
-        actor_opt,
-        value_model,
-        value_loss,
-        value_opt,
-        training_steps,
-        logger=None,
-        reward_normalizer=None
+    cfg,
+    replay_buffer,
+    actor_model,
+    actor_loss,
+    actor_opt,
+    value_model,
+    value_loss,
+    value_opt,
+    training_steps,
+    logger=None,
+    reward_normalizer=None,
 ):
     device = next(actor_model.parameters()).device
 
@@ -143,8 +142,7 @@ def train_agent(
         logger.add_scaler("value/grad", grad_norm(value_opt))
         logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
         logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
-        logger.add_scaler("value/mean_continue",
-                          (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+        logger.add_scaler("value/mean_continue", (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
         value_opt.zero_grad()
 
 
@@ -161,16 +159,7 @@ def reset_module(policy, world_model, new_domain_task_num):
     return new_policy, new_world_model
 
 
-def meta_test(
-        cfg,
-        make_env_list,
-        oracle_context,
-        policy,
-        world_model,
-        logger,
-        frames_per_task,
-        adapt_threshold=-3.
-):
+def meta_test(cfg, make_env_list, oracle_context, policy, world_model, logger, frames_per_task, adapt_threshold=-3.0):
     logger.dump_scaler(frames_per_task)
 
     task_num = len(make_env_list)
@@ -199,7 +188,7 @@ def meta_test(
         init_random_frames=0,
         device=cfg.collector_device,
         storing_device=cfg.collector_device,
-        split_trajs=True
+        split_trajs=True,
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -216,21 +205,33 @@ def meta_test(
         replay_buffer.extend(tensordict.reshape(-1))
 
         train_model_iters = train_model(
-            cfg, replay_buffer, world_model, world_model_loss, world_model_opt,
-            cfg.optim_steps_per_batch, None, logger,
-            iters=train_model_iters, log_prefix=f"meta_test_model_{frames_per_task}",
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
+            world_model_opt,
+            cfg.optim_steps_per_batch,
+            None,
+            logger,
+            iters=train_model_iters,
+            log_prefix=f"meta_test_model_{frames_per_task}",
         )
 
         plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{frames_per_task}")
         logger.dump_scaler(frame)
 
     evaluate_policy(
-        cfg, oracle_context, policy, logger, frames_per_task, log_prefix="meta_test",
+        cfg,
+        oracle_context,
+        policy,
+        logger,
+        frames_per_task,
+        log_prefix="meta_test",
         make_env_fn=partial(
             make_dreamer_env,
             variable_num=cfg.variable_num,
             state_dim_per_variable=cfg.state_dim_per_variable,
-            hidden_dim_per_variable=cfg.belief_dim_per_variable
+            hidden_dim_per_variable=cfg.belief_dim_per_variable,
         ),
-        disable_pixel_if_possible=False
+        disable_pixel_if_possible=False,
     )

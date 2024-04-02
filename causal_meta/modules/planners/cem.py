@@ -12,16 +12,15 @@ from torchrl.modules import CEMPlanner
 
 class MyCEMPlanner(CEMPlanner):
     def __init__(
-            self,
-            env: EnvBase,
-            planning_horizon: int,
-            optim_steps: int,
-            num_candidates: int,
-            top_k: int,
-            reward_key: str = ("next", "reward"),
-            action_key: str = "action",
-            alpha=0.1
-
+        self,
+        env: EnvBase,
+        planning_horizon: int,
+        optim_steps: int,
+        num_candidates: int,
+        top_k: int,
+        reward_key: str = ("next", "reward"),
+        action_key: str = "action",
+        alpha=0.1,
     ):
         super().__init__(
             env=env,
@@ -57,11 +56,7 @@ class MyCEMPlanner(CEMPlanner):
         )
         TIME_DIM = len(self.action_spec.shape) - 3
         K_DIM = len(self.action_spec.shape) - 4
-        expanded_original_tensordict = (
-            tensordict.unsqueeze(-1)
-            .expand(*batch_size, self.num_candidates)
-            .to_tensordict()
-        )
+        expanded_original_tensordict = tensordict.unsqueeze(-1).expand(*batch_size, self.num_candidates).to_tensordict()
         _action_means = torch.zeros(
             *action_stats_shape,
             device=tensordict.device,
@@ -95,17 +90,11 @@ class MyCEMPlanner(CEMPlanner):
             policy = _PrecomputedActionsSequentialSetter(actions)
             optim_tensordict = self.reward_truncated_rollout(policy=policy, tensordict=optim_tensordict)
 
-            sum_rewards = optim_tensordict.get(self.reward_key).sum(
-                dim=TIME_DIM, keepdim=True
-            )
+            sum_rewards = optim_tensordict.get(self.reward_key).sum(dim=TIME_DIM, keepdim=True)
             _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
             top_k = top_k.expand(action_topk_shape)
             best_actions = actions.gather(K_DIM, top_k)
-            self.update_stats(
-                best_actions.mean(dim=K_DIM, keepdim=True),
-                best_actions.std(dim=K_DIM, keepdim=True),
-                container
-            )
+            self.update_stats(best_actions.mean(dim=K_DIM, keepdim=True), best_actions.std(dim=K_DIM, keepdim=True), container)
         action_means = container.get(("stats", "_action_means"))
         return action_means[..., 0, 0, :]
 

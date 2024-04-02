@@ -47,10 +47,10 @@ def is_sparse(graph):
 
 
 def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):
-    model = build_mlp(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name='Tanh')
+    model = build_mlp(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name="Tanh")
 
     for name, p in model.named_parameters():
-        if 'weight' in name:
+        if "weight" in name:
             p.data = torch.randn_like(p.data)
 
     x = torch.randn(task_num, sample_per_task, x_size)
@@ -66,7 +66,7 @@ def gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, theta_size, th
     return x.detach().numpy(), y.detach().numpy(), theta.detach().numpy(), graph
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     np.random.seed(0)
     torch.random.manual_seed(0)
 

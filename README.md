@@ -25,5 +25,5 @@ pip install -e .
 ```
 
 ```shell
-xvfb-run --auto-servernum --server-num=1 python examples/dreamer/train.py 
+xvfb-run --auto-servernum --server-num=1 python examples/dreamer/train.py
 ```

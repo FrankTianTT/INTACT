@@ -7,12 +7,12 @@ from causal_meta.stats.metric import mutual_info_estimation
 
 class ContextModel(nn.Module):
     def __init__(
-            self,
-            meta=False,
-            max_context_dim=0,
-            task_num=0,
-            init_scale=0.,
-            context_clip=0.3,
+        self,
+        meta=False,
+        max_context_dim=0,
+        task_num=0,
+        init_scale=0.0,
+        context_clip=0.3,
     ):
         super().__init__()
         self.meta = meta
@@ -22,7 +22,7 @@ class ContextModel(nn.Module):
         self.context_clip = context_clip
 
         init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
-        self._context_hat = torch.nn.Parameter(init_context_hat)
+        self._context_hat: torch.nn.Parameter = torch.nn.Parameter(init_context_hat)
 
         self.fixed_idx = None
 
@@ -69,7 +69,7 @@ class ContextModel(nn.Module):
 
     def extra_repr(self):
         if self.meta:
-            return 'max_context_dim={}, task_num={}'.format(
+            return "max_context_dim={}, task_num={}".format(
                 self.max_context_dim,
                 self.task_num,
             )
@@ -84,7 +84,7 @@ class ContextModel(nn.Module):
         assert idx.shape[-1] == 1, "last dim of idx should be 1, got {}".format(idx.shape)
         return self.context_hat[idx[..., 0]]
 
-    def get_mutual_info(self, idx, valid_context_idx=None, reduction='mean'):
+    def get_mutual_info(self, idx, valid_context_idx=None, reduction="mean"):
         context_hat = self(idx)
         if valid_context_idx is not None:
             context_hat = context_hat[:, valid_context_idx]
@@ -105,58 +105,3 @@ class ContextModel(nn.Module):
             return mcc, permutation, context_hat
         else:
             return mcc
-
-
-def test_context_model():
-    max_context_dim = 10
-    task_num = 100
-    batch_size = 32
-    x_size = 4
-
-    context_model = ContextModel(meta=False)
-    x = torch.randn(batch_size, x_size)
-    x = torch.cat([x, context_model(None)], dim=-1)
-    assert x.shape == (batch_size, x_size)
-
-    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num)
-    idx = torch.randint(0, task_num, (batch_size, 1))
-    x = torch.randn(batch_size, x_size)
-    x = torch.cat([x, context_model(idx)], dim=-1)
-    assert x.shape == (batch_size, x_size + max_context_dim)
-
-
-def test_fix():
-    from torch.optim import SGD
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    max_context_dim = 2
-    task_num = 5
-
-    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num).to(device)
-    context_model.set_context(torch.ones_like(context_model.context_hat) * 0.25)
-    context_model.fix([1])
-    optim = SGD(context_model.parameters(), lr=0.1)
-
-    for i in range(100):
-        context_model.zero_grad()
-        loss = (context_model.context_hat ** 2).sum()
-        loss.backward()
-        optim.step()
-
-    assert (context_model.context_hat[:, 0] < 1e-5).all()
-    assert torch.allclose(context_model.context_hat[:, 1], torch.tensor(0.25))
-
-    context_model.unfix()
-
-    for i in range(100):
-        context_model.zero_grad()
-        loss = (context_model.context_hat ** 2).sum()
-        loss.backward()
-        optim.step()
-
-    assert (context_model.context_hat < 1e-5).all()
-
-
-if __name__ == '__main__':
-    test_fix()

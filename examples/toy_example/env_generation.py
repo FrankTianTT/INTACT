@@ -7,7 +7,7 @@ from tqdm import tqdm
 from causal_meta.envs.meta_transform import MetaIdxTransform
 
 
-def gen_mdp_data(env_name='CartPoleContinuous-v0', sample_num=1000):
+def gen_mdp_data(env_name="CartPoleContinuous-v0", sample_num=1000):
     env = GymEnv(env_name)
 
     td = env.rollout(sample_num, auto_reset=True, break_when_any_done=False)
@@ -20,12 +20,12 @@ def gen_mdp_data(env_name='CartPoleContinuous-v0', sample_num=1000):
 
 
 def env_constructor(
-        env_name='CartPoleContinuous-v0',
-        task_num=100,
-        oracle_context=None,
+    env_name="CartPoleContinuous-v0",
+    task_num=100,
+    oracle_context=None,
 ):
     if oracle_context is None:
-        if env_name == 'CartPoleContinuous-v0':
+        if env_name == "CartPoleContinuous-v0":
             # oracle_context = dict(gravity=(1, 10))
             oracle_context = dict(x_dot_bias=(-2, 2))
         else:
@@ -48,7 +48,7 @@ def env_constructor(
     return make_env_list, context_dict
 
 
-def gen_meta_mdp_data(env_name='CartPoleContinuous-v0', task_num=100, sample_num=10000):
+def gen_meta_mdp_data(env_name="CartPoleContinuous-v0", task_num=100, sample_num=10000):
     if env_name == "toy":
         context_dict = {"p0": torch.rand(task_num), "p1": torch.rand(task_num)}
 
@@ -56,8 +56,8 @@ def gen_meta_mdp_data(env_name='CartPoleContinuous-v0', task_num=100, sample_num
         action = torch.randn(sample_num, 1)
         idx = torch.randint(0, task_num, (sample_num, 1))
         next_obs = obs.clone()
-        next_obs[:, 0] += + torch.sin(context_dict["p0"][idx.squeeze()] * 2 * torch.pi)
-        next_obs[:, 1] += + torch.cos(context_dict["p1"][idx.squeeze()] * 2 * torch.pi)
+        next_obs[:, 0] += +torch.sin(context_dict["p0"][idx.squeeze()] * 2 * torch.pi)
+        next_obs[:, 1] += +torch.cos(context_dict["p1"][idx.squeeze()] * 2 * torch.pi)
 
         return obs, action, next_obs, idx, context_dict
 
@@ -80,5 +80,5 @@ def gen_meta_mdp_data(env_name='CartPoleContinuous-v0', task_num=100, sample_num
     return obs, action, next_obs, idx, context_dict
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     gen_meta_mdp_data("toy")

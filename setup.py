@@ -2,6 +2,7 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
+
 def parse_requirements_file(path):
     return [line.rstrip() for line in open(path, "r")]
 

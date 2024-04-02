@@ -12,14 +12,14 @@ from causal_meta.utils.envs import build_make_env_list, make_mdp_env
 
 
 def evaluate_policy(
-        cfg,
-        oracle_context,
-        policy,
-        logger,
-        log_idx,
-        make_env_fn=make_mdp_env,
-        log_prefix="meta_train",
-        disable_pixel_if_possible=True,
+    cfg,
+    oracle_context,
+    policy,
+    logger,
+    log_idx,
+    make_env_fn=make_mdp_env,
+    log_prefix="meta_train",
+    disable_pixel_if_possible=True,
 ):
     device = next(policy.parameters()).device
 

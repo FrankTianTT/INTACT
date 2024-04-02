@@ -42,7 +42,7 @@ def identify_theta(x, y, theta_size):
     return theta_hat
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     task_num = 1000
     sample_per_task = 100
     x_size = 5

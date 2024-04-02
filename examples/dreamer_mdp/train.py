@@ -15,15 +15,10 @@ from causal_meta.utils import make_mdp_dreamer, build_logger, evaluate_policy, p
 from causal_meta.objectives.mdp import CausalWorldModelLoss, DreamActorLoss, DreamCriticLoss
 from causal_meta.utils.envs import make_mdp_env, create_make_env_list
 
-from utils import (
-    meta_test,
-    train_model,
-    train_policy,
-    build_loss
-)
+from utils import meta_test, train_model, train_policy, build_loss
 
-torch.multiprocessing.set_sharing_strategy('file_system')
-os.environ['MAX_IDLE_COUNT'] = '100000'
+torch.multiprocessing.set_sharing_strategy("file_system")
+os.environ["MAX_IDLE_COUNT"] = "100000"
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
@@ -72,7 +67,7 @@ def main(cfg):
         init_random_frames=cfg.meta_train_init_frames,
         device=collector_device,
         storing_device=collector_device,
-        split_trajs=True
+        split_trajs=True,
     )
 
     # replay buffer
@@ -84,8 +79,9 @@ def main(cfg):
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr,
-                                       weight_decay=cfg.world_model_weight_decay)
+    world_model_opt = torch.optim.Adam(
+        world_model.get_parameter("nets"), lr=cfg.world_model_lr, weight_decay=cfg.world_model_weight_decay
+    )
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
     if cfg.model_type == "causal" and cfg.reinforce:
         logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
@@ -93,10 +89,10 @@ def main(cfg):
     else:
         logits_opt = None
         if cfg.model_type == "causal":
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("observed_logits"),
-                                                 lr=cfg.observed_logits_lr))
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"),
-                                                 lr=cfg.context_logits_lr))
+            world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+            )
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=cfg.actor_lr)
     critic_opt = torch.optim.Adam(critic.parameters(), lr=cfg.critic_lr)
@@ -135,19 +131,44 @@ def main(cfg):
 
         l_opt = logits_opt if collected_frames >= cfg.meta_train_logits_frames else None
         train_model_iters = train_model(
-            cfg, replay_buffer, world_model, world_model_loss,
-            cfg.optim_steps_per_batch, world_model_opt, l_opt, logger,
-            iters=train_model_iters, reward_normalizer=reward_normalizer
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
+            cfg.optim_steps_per_batch,
+            world_model_opt,
+            l_opt,
+            logger,
+            iters=train_model_iters,
+            reward_normalizer=reward_normalizer,
         )
-        train_policy(cfg, replay_buffer, actor_loss, critic_loss, cfg.optim_steps_per_batch,
-                     actor_opt, critic_opt, logger, reward_normalizer=reward_normalizer)
+        train_policy(
+            cfg,
+            replay_buffer,
+            actor_loss,
+            critic_loss,
+            cfg.optim_steps_per_batch,
+            actor_opt,
+            critic_opt,
+            logger,
+            reward_normalizer=reward_normalizer,
+        )
 
         if (i + 1) % cfg.eval_interval == 0:
             evaluate_policy(cfg, train_oracle_context, explore_policy, logger, collected_frames)
 
         if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, world_model, actor, critic, logger,
-                      collected_frames, reward_normalizer=reward_normalizer)
+            meta_test(
+                cfg,
+                test_make_env_list,
+                test_oracle_context,
+                world_model,
+                actor,
+                critic,
+                logger,
+                collected_frames,
+                reward_normalizer=reward_normalizer,
+            )
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)
@@ -168,5 +189,5 @@ def main(cfg):
     collector.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

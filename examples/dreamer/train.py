@@ -25,7 +25,7 @@ from utils import meta_test, train_model, train_agent
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="main")
 def main(cfg: "DictConfig"):  # noqa: F821
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    torch.multiprocessing.set_sharing_strategy("file_system")
 
     if torch.cuda.is_available():
         device = torch.device(cfg.model_device)
@@ -42,7 +42,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_dreamer_env,
         variable_num=cfg.variable_num,
         state_dim_per_variable=cfg.state_dim_per_variable,
-        hidden_dim_per_variable=cfg.belief_dim_per_variable
+        hidden_dim_per_variable=cfg.belief_dim_per_variable,
     )
     train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_train")
     test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_test")
@@ -103,7 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         init_random_frames=cfg.init_frames_per_task,
         device=cfg.collector_device,
         storing_device=cfg.collector_device,
-        split_trajs=True
+        split_trajs=True,
     )
 
     # replay buffer
@@ -123,10 +123,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         logits_opt = None
         if cfg.model_type == "causal":
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("observed_logits"),
-                                                 lr=cfg.observed_logits_lr))
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"),
-                                                 lr=cfg.context_logits_lr))
+            world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
+            )
+            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
 
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
@@ -167,24 +167,47 @@ def main(cfg: "DictConfig"):  # noqa: F821
             print(world_model.causal_mask.printing_mask)
 
         train_model_iters = train_model(
-            cfg, replay_buffer, world_model, world_model_loss, world_model_opt,
-            cfg.optim_steps_per_batch, logits_opt, logger,
-            iters=train_model_iters, reward_normalizer=reward_normalizer
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
+            world_model_opt,
+            cfg.optim_steps_per_batch,
+            logits_opt,
+            logger,
+            iters=train_model_iters,
+            reward_normalizer=reward_normalizer,
         )
 
         if collected_frames < cfg.policy_learning_frames_per_task:
             continue
 
-        train_agent(cfg, replay_buffer, actor_model, actor_loss, actor_opt, value_model, value_loss, value_opt,
-                    cfg.optim_steps_per_batch, logger)
+        train_agent(
+            cfg,
+            replay_buffer,
+            actor_model,
+            actor_loss,
+            actor_opt,
+            value_model,
+            value_loss,
+            value_opt,
+            cfg.optim_steps_per_batch,
+            logger,
+        )
 
         if (i + 1) % cfg.eval_interval == 0:
-            evaluate_policy(cfg, train_oracle_context, exploration_policy, logger, collected_frames,
-                            make_env_fn=make_env_fn, disable_pixel_if_possible=False)
+            evaluate_policy(
+                cfg,
+                train_oracle_context,
+                exploration_policy,
+                logger,
+                collected_frames,
+                make_env_fn=make_env_fn,
+                disable_pixel_if_possible=False,
+            )
 
         if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, exploration_policy, world_model, logger,
-                      collected_frames)
+            meta_test(cfg, test_make_env_list, test_oracle_context, exploration_policy, world_model, logger, collected_frames)
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)

@@ -36,18 +36,18 @@ def reset_module(policy, task_num):
 
 
 def train_model(
-        cfg,
-        replay_buffer,
-        world_model,
-        world_model_loss,
-        training_steps,
-        model_opt,
-        logits_opt=None,
-        logger=None,
-        deterministic_mask=False,
-        log_prefix="model",
-        iters=0,
-        only_train=None
+    cfg,
+    replay_buffer,
+    world_model,
+    world_model_loss,
+    training_steps,
+    model_opt,
+    logits_opt=None,
+    logger=None,
+    deterministic_mask=False,
+    log_prefix="model",
+    iters=0,
+    only_train=None,
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce and logits_opt
@@ -57,21 +57,19 @@ def train_model(
     else:
         causal_mask = None
 
-    world_model.train()
     for step in range(training_steps):
         world_model.zero_grad()
 
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-        if (train_logits_by_reinforce and
-                iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
+        if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
             grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
             logits_opt.step()
         else:
             loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
-            context_penalty = (world_model.context_model.context_hat ** 2).sum()
-            total_loss += context_penalty * 0.1
+            # context_penalty = (world_model.context_model.context_hat ** 2).sum()
+            # total_loss += context_penalty * 0.1
             total_loss.backward()
             model_opt.step()
 
@@ -100,15 +98,7 @@ def train_model(
     return iters
 
 
-def meta_test(
-        cfg,
-        make_env_list,
-        oracle_context,
-        policy,
-        logger,
-        log_idx,
-        adapt_threshold=-3.5
-):
+def meta_test(cfg, make_env_list, oracle_context, policy, logger, log_idx, adapt_threshold=-3.5):
     logger.dump_scaler(log_idx)
 
     task_num = len(make_env_list)
@@ -134,7 +124,7 @@ def meta_test(
         total_frames=cfg.meta_test_frames,
         frames_per_batch=cfg.frames_per_batch,
         init_random_frames=0,
-        split_trajs=True
+        split_trajs=True,
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -153,15 +143,17 @@ def meta_test(
         replay_buffer.extend(tensordict)
 
         train_model(
-            cfg, replay_buffer, world_model, world_model_loss,
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
             training_steps=cfg.optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{log_idx}",
-            deterministic_mask=True
+            deterministic_mask=True,
         )
-        plot_context(cfg, world_model, oracle_context, logger, collected_frames,
-                     log_prefix=f"meta_test_model_{log_idx}")
+        plot_context(cfg, world_model, oracle_context, logger, collected_frames, log_prefix=f"meta_test_model_{log_idx}")
         logger.dump_scaler(collected_frames)
     pbar.close()
     collector.shutdown()
@@ -188,17 +180,22 @@ def meta_test(
         train_model_iters = 0
         for frame in tqdm(range(cfg.meta_test_frames, 3 * cfg.meta_test_frames, cfg.frames_per_batch)):
             train_model_iters = train_model(
-                cfg, replay_buffer, world_model, world_model_loss,
+                cfg,
+                replay_buffer,
+                world_model,
+                world_model_loss,
                 training_steps=cfg.optim_steps_per_batch,
-                model_opt=new_world_model_opt, logits_opt=logits_opt,
+                model_opt=new_world_model_opt,
+                logits_opt=logits_opt,
                 logger=logger,
                 log_prefix=f"meta_test_model_{log_idx}",
                 iters=train_model_iters,
                 only_train=adapt_idx,
-                deterministic_mask=False
+                deterministic_mask=False,
             )
-            plot_context(cfg, world_model, oracle_context, logger, frame + cfg.frames_per_batch,
-                         log_prefix=f"meta_test_model_{log_idx}")
+            plot_context(
+                cfg, world_model, oracle_context, logger, frame + cfg.frames_per_batch, log_prefix=f"meta_test_model_{log_idx}"
+            )
             logger.dump_scaler(frame + cfg.frames_per_batch)
             if cfg.model_type == "causal":
                 print("meta test causal mask:")

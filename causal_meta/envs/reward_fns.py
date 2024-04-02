@@ -13,7 +13,7 @@ def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.
 
 def heating(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
     temp = next_obs * 10 + 20
-    return - (temp - 20).abs().sum(dim=-1, keepdim=True)
+    return -(temp - 20).abs().sum(dim=-1, keepdim=True)
 
 
 reward_fns_dict = {
@@ -21,7 +21,7 @@ reward_fns_dict = {
     "heating": heating,
 }
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     obs = torch.rand(10, 4) * 40
     act = torch.randn(10, 1)
     next_obs = torch.rand(10, 4) * 40

@@ -11,10 +11,7 @@ def hopper(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torc
     height = next_obs[..., 0]
     angle = next_obs[..., 1]
     not_done: torch.Tensor = (
-            torch.isfinite(next_obs).all(-1)
-            * (next_obs[..., 1:].abs() < 100).all(-1)
-            * (height > 0.7)
-            * (angle.abs() < 0.2)
+        torch.isfinite(next_obs).all(-1) * (next_obs[..., 1:].abs() < 100).all(-1) * (height > 0.7) * (angle.abs() < 0.2)
     )
     return (~not_done).unsqueeze(dim=-1)
 
@@ -25,10 +22,7 @@ def cartpole(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> to
     x_threshold = 2.4
     theta_threshold_radians = 12 * 2 * math.pi / 360
     not_done: torch.Tensor = (
-            (x > -x_threshold)
-            * (x < x_threshold)
-            * (theta > -theta_threshold_radians)
-            * (theta < theta_threshold_radians)
+        (x > -x_threshold) * (x < x_threshold) * (theta > -theta_threshold_radians) * (theta < theta_threshold_radians)
     )
     return (~not_done).unsqueeze(dim=-1)
 
@@ -71,5 +65,5 @@ def test_termination_fn():
         print("passed")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_termination_fn()

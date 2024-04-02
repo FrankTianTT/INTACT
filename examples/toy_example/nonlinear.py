@@ -40,12 +40,23 @@ def get_model_loss(model, x, y, logits):
     masked_x = torch.einsum("boi,obi->obi", mask, repeated_x)
 
     y_hat = model(masked_x).permute(2, 1, 0)[0]
-    return F.mse_loss(y, y_hat, reduction='none'), mask
+    return F.mse_loss(y, y_hat, reduction="none"), mask
 
 
-def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimizer, mask_optimizer, steps,
-          train_mask_iters=10, train_predictor_iters=50, sampling_times=50,
-          lambda_mutual_info=0):
+def train(
+    model,
+    mask_logits,
+    theta_hat,
+    loader,
+    model_optimizer,
+    theta_optimizer,
+    mask_optimizer,
+    steps,
+    train_mask_iters=10,
+    train_predictor_iters=50,
+    sampling_times=50,
+    lambda_mutual_info=0,
+):
     predictor_losses = []
     mi_losses = []
     reinforce_losses = []
@@ -89,7 +100,7 @@ def train(model, mask_logits, theta_hat, loader, model_optimizer, theta_optimize
                 observed_input_dim=x_size,
                 sparse_weight=0.05,
                 context_sparse_weight=0.05,
-                context_max_weight=1
+                context_max_weight=1,
             )
 
             mask_logits.backward(grad)
@@ -119,9 +130,9 @@ def identify_theta(x, y, theta_size):
 
     steps = 0
     for epoch in range(1000):
-        steps, predictor_losses, reinforce_losses, mi_losses = train(model, mask_logits, theta_hat, loader,
-                                                                     model_optimizer,
-                                                                     theta_optimizer, mask_optimizer, steps)
+        steps, predictor_losses, reinforce_losses, mi_losses = train(
+            model, mask_logits, theta_hat, loader, model_optimizer, theta_optimizer, mask_optimizer, steps
+        )
 
         print((mask_logits > 0).int())
 
@@ -135,7 +146,7 @@ def identify_theta(x, y, theta_size):
         print("permutation:", valid_context_idx[permutation])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     task_num = 300
     sample_per_task = 30
     x_size = 5

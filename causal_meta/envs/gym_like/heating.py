@@ -35,10 +35,10 @@ def generate_graph_between_room_and_context(num_rooms, context_dim, sparsity):
 
 
 def generate_influence_function(num_rooms, context_dim):
-    func = build_mlp(num_rooms + 1 + context_dim, 1, [32, 32], num_rooms, activate_name='Tanh')
+    func = build_mlp(num_rooms + 1 + context_dim, 1, [32, 32], num_rooms, activate_name="Tanh")
 
     for name, p in func.named_parameters():
-        if 'weight' in name:
+        if "weight" in name:
             p.data = torch.randn_like(p.data)
 
     return func
@@ -46,18 +46,18 @@ def generate_influence_function(num_rooms, context_dim):
 
 class HeatingEnv(gym.Env):
     def __init__(
-            self,
-            num_rooms=5,
-            context_dim=3,
-            sparsity=0.5,
-            context_sparsity=0.3,
-            target_temperature=(18, 22),
-            dt=0.1,
-            seed=42,
-            context_influence_type="neural",
-            frameskip=1,
-            render_mode='rgb_array',
-            **context_kwargs,
+        self,
+        num_rooms=5,
+        context_dim=3,
+        sparsity=0.5,
+        context_sparsity=0.3,
+        target_temperature=(18, 22),
+        dt=0.1,
+        seed=42,
+        context_influence_type="neural",
+        frameskip=1,
+        render_mode="rgb_array",
+        **context_kwargs,
     ):
         assert context_dim <= num_rooms, "source variables should be less than observed variables"
         self.num_rooms = num_rooms
@@ -78,15 +78,12 @@ class HeatingEnv(gym.Env):
 
         torch.manual_seed(self.seed)
         self.room_graph = generate_graph_cross_rooms(self.num_rooms, self.sparsity)
-        self.context_graph = generate_graph_between_room_and_context(
-            self.num_rooms, self.context_dim, self.context_sparsity
-        )
+        self.context_graph = generate_graph_between_room_and_context(self.num_rooms, self.context_dim, self.context_sparsity)
 
         self.masked_context = self.context_graph * self.contexts.expand(self.num_rooms, -1)
 
         self.inf_func = generate_influence_function(
-            num_rooms=self.num_rooms,
-            context_dim=self.context_dim if self.context_influence_type == "neural" else 0
+            num_rooms=self.num_rooms, context_dim=self.context_dim if self.context_influence_type == "neural" else 0
         )
         self.influence = None
 
@@ -114,7 +111,7 @@ class HeatingEnv(gym.Env):
         self.influence = influence.squeeze().numpy()
 
         if self.context_influence_type == "linear":
-            self.influence += self.masked_context.mean(dim=-1).numpy() * 5.
+            self.influence += self.masked_context.mean(dim=-1).numpy() * 5.0
         elif self.context_influence_type == "tanh":
             self.influence += torch.tanh(self.masked_context.mean(dim=-1)).numpy()
         elif self.context_influence_type == "neural":
@@ -131,15 +128,15 @@ class HeatingEnv(gym.Env):
         self.temperature += self.influence * self.dt
         # self.temperature = np.clip(self.temperature, 0, 40)
 
-        reward = - np.abs(self.temperature - 20).mean()
+        reward = -np.abs(self.temperature - 20).mean()
 
         return self.get_obs(), reward, False, False, {}
 
     def reset(
-            self,
-            *,
-            seed: Optional[int] = None,
-            options: Optional[dict] = None,
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
     ) -> Tuple[ObsType, dict]:
         self.temperature = np.random.uniform(0, 40, size=(self.num_rooms,))
         return self.get_obs(), {}
@@ -154,7 +151,7 @@ class HeatingEnv(gym.Env):
         return string
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 0 0 0 1 0 1 0 0 0 0 1 1 0
     # 1 0 0 1 0 0 1 0 0 0 1 0 0
     # 0 1 0 0 0 0 0 1 0 0 0 1 1

@@ -1,30 +1,23 @@
-from functools import reduce, partial
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Bernoulli
 from torchrl.objectives.common import LossModule
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase
 
-from causal_meta.modules.utils import build_mlp
-from causal_meta.stats.metric import mutual_info_estimation
 from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
 
 class CausalWorldModelLoss(LossModule):
     def __init__(
-            self,
-            world_model: MDPWrapper,
-            lambda_transition: float = 1.0,
-            lambda_reward: float = 1.0,
-            lambda_terminated: float = 1.0,
-            lambda_mutual_info: float = 0.0,  # use for envs identify
-            sparse_weight: float = 0.05,
-            context_sparse_weight: float = 0.01,
-            context_max_weight: float = 0.1,
-            sampling_times: int = 50,
+        self,
+        world_model: MDPWrapper,
+        lambda_transition: float = 1.0,
+        lambda_reward: float = 1.0,
+        lambda_terminated: float = 1.0,
+        lambda_mutual_info: float = 0.0,  # use for envs identify
+        sparse_weight: float = 0.05,
+        context_sparse_weight: float = 0.01,
+        context_max_weight: float = 0.1,
+        sampling_times: int = 50,
     ):
         super().__init__()
         self.world_model = world_model
@@ -55,13 +48,11 @@ class CausalWorldModelLoss(LossModule):
                 tensordict.get("obs_mean")[mask],
                 tensordict.get(("next", "observation"))[mask],
                 torch.exp(tensordict.get("obs_log_var"))[mask],
-                reduction=reduction
+                reduction=reduction,
             )
         else:
             transition_loss = F.mse_loss(
-                tensordict.get("obs_mean")[mask],
-                tensordict.get(("next", "observation"))[mask],
-                reduction=reduction
+                tensordict.get("obs_mean")[mask], tensordict.get(("next", "observation"))[mask], reduction=reduction
             )
 
         if self.learn_obs_var:
@@ -69,33 +60,33 @@ class CausalWorldModelLoss(LossModule):
                 tensordict.get("reward_mean")[mask],
                 tensordict.get(("next", "reward"))[mask],
                 torch.exp(tensordict.get("reward_log_var"))[mask],
-                reduction=reduction
+                reduction=reduction,
             )
         else:
             reward_loss = F.mse_loss(
-                tensordict.get("reward_mean")[mask],
-                tensordict.get(("next", "reward"))[mask],
-                reduction=reduction
+                tensordict.get("reward_mean")[mask], tensordict.get(("next", "reward"))[mask], reduction=reduction
             )
         terminated_loss = F.binary_cross_entropy_with_logits(
-            tensordict.get("terminated")[mask],
-            tensordict.get(("next", "terminated"))[mask].float(),
-            reduction=reduction
+            tensordict.get("terminated")[mask], tensordict.get(("next", "terminated"))[mask].float(), reduction=reduction
         )
 
-        loss_td = TensorDict({
-            "transition_loss": transition_loss.clone(),
-            "reward_loss": reward_loss.clone(),
-            "terminated_loss": terminated_loss.clone(),
-        },
-            batch_size=transition_loss.shape[0]
+        loss_td = TensorDict(
+            {
+                "transition_loss": transition_loss.clone(),
+                "reward_loss": reward_loss.clone(),
+                "terminated_loss": terminated_loss.clone(),
+            },
+            batch_size=transition_loss.shape[0],
         )
 
-        loss_tensor = torch.cat([
-            transition_loss * self.lambda_transition,
-            reward_loss * self.lambda_reward,
-            terminated_loss * self.lambda_terminated
-        ], dim=1)
+        loss_tensor = torch.cat(
+            [
+                transition_loss * self.lambda_transition,
+                reward_loss * self.lambda_reward,
+                terminated_loss * self.lambda_terminated,
+            ],
+            dim=1,
+        )
 
         return loss_td, loss_tensor
 
@@ -129,15 +120,10 @@ class CausalWorldModelLoss(LossModule):
             else:
                 valid_context_idx = torch.arange(self.context_model.max_context_dim)
             mutual_info_loss = self.context_model.get_mutual_info(
-                idx=tensordict["idx"],
-                valid_context_idx=valid_context_idx,
-                reduction="none"
+                idx=tensordict["idx"], valid_context_idx=valid_context_idx, reduction="none"
             ).reshape(-1, 1)
             loss_td.set("mutual_info_loss", mutual_info_loss)
-            loss_tensor = torch.cat([
-                loss_tensor,
-                mutual_info_loss * self.lambda_mutual_info
-            ], dim=-1)
+            loss_tensor = torch.cat([loss_tensor, mutual_info_loss * self.lambda_mutual_info], dim=-1)
 
         if self.model_type == "inn":
             tensordict = self.world_model.inv_forward(tensordict)
@@ -179,7 +165,7 @@ class CausalWorldModelLoss(LossModule):
                 sampling_loss=sampling_loss,
                 sparse_weight=self.sparse_weight,
                 context_sparse_weight=self.context_sparse_weight,
-                context_max_weight=self.context_max_weight
+                context_max_weight=self.context_max_weight,
             )
 
         if only_train is not None:
@@ -188,95 +174,3 @@ class CausalWorldModelLoss(LossModule):
             mask_grad[not_train] = 0
 
         return mask_grad
-
-
-def test_causal_world_model_loss():
-    from causal_meta.modules.models.mdp_world_model import CausalWorldModel
-    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
-    from torch.optim import Adam
-
-    obs_dim = 4
-    action_dim = 1
-    max_context_dim = 10
-    task_num = 100
-    batch_size = 32
-    batch_len = 1
-
-    world_model = CausalWorldModel(
-        obs_dim=obs_dim,
-        action_dim=action_dim,
-        meta=True,
-        max_context_dim=max_context_dim,
-        task_num=task_num,
-    )
-    causal_mdp_wrapper = MDPWrapper(world_model)
-    optim = Adam(causal_mdp_wrapper.get_parameter("nets"), lr=1e-3)
-    mdp_loss = CausalWorldModelLoss(causal_mdp_wrapper)
-
-    td = TensorDict({
-        "observation": torch.randn(batch_size, batch_len, obs_dim),
-        "action": torch.randn(batch_size, batch_len, action_dim),
-        "idx": torch.randint(0, task_num, (batch_size, batch_len, 1)),
-        "next": {
-            "terminated": torch.randn(batch_size, batch_len, 1) > 0,
-            "reward": torch.randn(batch_size, batch_len, 1),
-            "observation": torch.randn(batch_size, batch_len, obs_dim),
-        },
-        "collector": {
-            "mask": torch.ones(batch_size, batch_len, dtype=torch.bool)
-        }
-    },
-        batch_size=(batch_size, batch_len),
-    )
-
-    for name, param in world_model.named_parameters():
-        if name == "nets.para_mlp.0.weight":
-            print("0", param[0, 0])
-            print("3", param[3, 0])
-
-    td = causal_mdp_wrapper(td)
-    loss_td, total_loss = mdp_loss(td, only_train=[3])
-    total_loss.backward()
-    optim.step()
-
-    for name, param in world_model.named_parameters():
-        if name == "nets.para_mlp.0.weight":
-            print("0", param[0, 0])
-            print("3", param[3, 0])
-
-
-def test_inn_world_model_loss():
-    from causal_meta.modules.models.mdp_world_model import INNWorldModel
-    from causal_meta.modules.tensordict_module.mdp_wrapper import MDPWrapper
-
-    obs_dim = 4
-    action_dim = 1
-    task_num = 100
-    batch_size = 32
-
-    world_model = INNWorldModel(
-        obs_dim=obs_dim,
-        action_dim=action_dim,
-        task_num=task_num,
-    )
-    inn_mdp_wrapper = MDPWrapper(world_model)
-    mdp_loss = CausalWorldModelLoss(inn_mdp_wrapper)
-
-    td = TensorDict({
-        "observation": torch.randn(batch_size, obs_dim),
-        "action": torch.randn(batch_size, action_dim),
-        "idx": torch.randint(0, task_num, (batch_size, 1)),
-        "next": {
-            "terminated": torch.randn(batch_size, 1) > 0,
-            "reward": torch.randn(batch_size, 1),
-            "observation": torch.randn(batch_size, obs_dim),
-        }
-    },
-        batch_size=batch_size,
-    )
-
-    loss = mdp_loss(td)
-
-
-if __name__ == '__main__':
-    test_causal_world_model_loss()

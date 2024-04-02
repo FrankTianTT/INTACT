@@ -9,12 +9,7 @@ from causal_meta.envs import reward_fns_dict, termination_fns_dict
 
 class MDPEnv(ModelBasedEnvBase):
     def __init__(
-            self, world_model: TensorDictModuleBase,
-            device="cpu",
-            dtype=None,
-            batch_size=None,
-            termination_fns="",
-            reward_fns=""
+        self, world_model: TensorDictModuleBase, device="cpu", dtype=None, batch_size=None, termination_fns="", reward_fns=""
     ):
         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         self.termination_fns = termination_fns_dict[termination_fns] if termination_fns != "" else None
@@ -49,9 +44,7 @@ class MDPEnv(ModelBasedEnvBase):
             tensordict_out["terminated"] = tensordict_out["terminated"] > 0  # terminated from world-model are logits
         else:
             tensordict_out["terminated"] = self.termination_fns(
-                tensordict["observation"],
-                tensordict["action"],
-                tensordict_out["observation"]
+                tensordict["observation"], tensordict["action"], tensordict_out["observation"]
             )
 
         tensordict_out["truncated"] = torch.zeros_like(tensordict_out["truncated"]).bool()
@@ -61,9 +54,7 @@ class MDPEnv(ModelBasedEnvBase):
             tensordict_out["reward"] = tensordict_out["reward_mean"] + reward_std * torch.randn_like(reward_std)
         else:
             tensordict_out["reward"] = self.reward_fns(
-                tensordict["observation"],
-                tensordict["action"],
-                tensordict_out["observation"]
+                tensordict["observation"], tensordict["action"], tensordict_out["observation"]
             )
 
         return tensordict_out.select(
@@ -107,5 +98,5 @@ def test_mdp_env():
     print(td)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_mdp_env()

@@ -86,9 +86,7 @@ class MeanScalarWrapper(Logger):
         self._cache = defaultdict(AverageMeter)
 
 
-def get_logger(
-        logger_type: Union[str, list], logger_name: str, experiment_name: str, mean_scaler=True, **kwargs
-) -> Logger:
+def get_logger(logger_type: Union[str, list], logger_name: str, experiment_name: str, mean_scaler=True, **kwargs) -> Logger:
     if isinstance(logger_type, str):
         logger = _get_logger(logger_type, logger_name, experiment_name, **kwargs)
     else:
@@ -98,25 +96,3 @@ def get_logger(
     if mean_scaler:
         logger = MeanScalarWrapper(logger)
     return logger
-
-
-def test_multiple_logger():
-    logger = MultipleLoggerWrapper([CSVLogger("1", "1"), TensorboardLogger("1", "1")])
-
-    logger.log_scalar("1", 1)
-
-
-def test_mean_scalar_wrapper():
-    logger = CSVLogger("1", "1")
-    logger = MeanScalarWrapper(logger)
-
-    logger.add_scaler("1", 1)
-    logger.add_scaler("1", 2)
-    logger.dump_scaler(1)
-
-    logger.add_scaler("1", 3)
-    logger.dump_scaler(2)
-
-
-if __name__ == '__main__':
-    test_mean_scalar_wrapper()

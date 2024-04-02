@@ -8,21 +8,21 @@ from causal_meta.modules.models.causal_mask import CausalMask
 
 class CausalWorldModel(PlainMDPWorldModel):
     def __init__(
-            self,
-            obs_dim,
-            action_dim,
-            meta=False,
-            reinforce=True,
-            alpha=10.,
-            max_context_dim=10,
-            task_num=100,
-            residual=True,
-            hidden_dims=None,
-            log_var_bounds=(-10.0, 0.5),
-            logits_clip=3.0,
-            observed_logits_init_bias=0.5,
-            context_logits_init_bias=0.5,
-            logits_init_scale=0.0,
+        self,
+        obs_dim,
+        action_dim,
+        meta=False,
+        reinforce=True,
+        alpha=10.0,
+        max_context_dim=10,
+        task_num=100,
+        residual=True,
+        hidden_dims=None,
+        log_var_bounds=(-10.0, 0.5),
+        logits_clip=3.0,
+        observed_logits_init_bias=0.5,
+        context_logits_init_bias=0.5,
+        logits_init_scale=0.0,
     ):
         """World-model class for environment learning with causal discovery.
 
@@ -56,7 +56,7 @@ class CausalWorldModel(PlainMDPWorldModel):
             task_num=task_num,
             residual=residual,
             hidden_dims=hidden_dims,
-            log_var_bounds=log_var_bounds
+            log_var_bounds=log_var_bounds,
         )
 
         self.causal_mask = CausalMask(
@@ -78,7 +78,7 @@ class CausalWorldModel(PlainMDPWorldModel):
             output_dim=2,
             hidden_dims=self.hidden_dims,
             extra_dims=[self.output_dim],
-            activate_name="SiLU",
+            activate_name="ReLU",
         )
         return ModuleDict(dict(para_mlp=para_mlp))
 
@@ -123,71 +123,3 @@ class CausalWorldModel(PlainMDPWorldModel):
 
         mask = mask.reshape(*batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
         return *self.get_outputs(mean, log_var, observation, batch_shape), mask
-
-
-def test_causal_world_model_without_meta():
-    obs_dim = 4
-    action_dim = 1
-    batch_size = 32
-    env_num = 5
-
-    world_model = CausalWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=False)
-
-    for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
-        observation = torch.randn(*batch_shape, obs_dim)
-        action = torch.randn(*batch_shape, action_dim)
-
-        next_obs_mean, next_obs_log_var, reward, terminated, mask = world_model(observation, action)
-
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
-        assert reward.shape == terminated.shape == (*batch_shape, 1)
-        assert mask.shape == (*batch_shape, obs_dim + 2, obs_dim + action_dim)
-
-
-def test_causal_world_model_with_meta():
-    obs_dim = 4
-    action_dim = 1
-    max_context_dim = 10
-    task_num = 100
-    batch_size = 32
-    env_num = 5
-
-    world_model = CausalWorldModel(
-        obs_dim=obs_dim,
-        action_dim=action_dim,
-        meta=True,
-        max_context_dim=max_context_dim,
-        task_num=task_num
-    )
-
-    for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
-        observation = torch.randn(*batch_shape, obs_dim)
-        action = torch.randn(*batch_shape, action_dim)
-        idx = torch.randint(0, task_num, (*batch_shape, 1))
-
-        next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated, mask \
-            = world_model(observation, action, idx)
-
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
-        assert reward_mean.shape == reward_log_var.shape == terminated.shape == (*batch_shape, 1)
-        assert mask.shape == (*batch_shape, obs_dim + 2, obs_dim + action_dim + max_context_dim)
-
-
-def test_reset():
-    obs_dim = 4
-    action_dim = 1
-    max_context_dim = 10
-    task_num = 100
-
-    world_model = CausalWorldModel(
-        obs_dim=obs_dim,
-        action_dim=action_dim,
-        meta=True,
-        max_context_dim=max_context_dim,
-        task_num=task_num
-    )
-    world_model.reset()
-
-
-if __name__ == '__main__':
-    test_causal_world_model_with_meta()

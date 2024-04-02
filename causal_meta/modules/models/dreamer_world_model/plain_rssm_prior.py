@@ -10,18 +10,18 @@ from causal_meta.modules.models.base_world_model import BaseWorldModel
 
 class PlainRSSMPrior(BaseWorldModel):
     def __init__(
-            self,
-            action_dim,
-            variable_num=10,
-            state_dim_per_variable=3,
-            belief_dim_per_variable=20,
-            hidden_dim=256,
-            disable_belief=False,
-            meta=False,
-            max_context_dim=10,
-            task_num=50,
-            residual=True,
-            scale_lb=0.1,
+        self,
+        action_dim,
+        variable_num=10,
+        state_dim_per_variable=3,
+        belief_dim_per_variable=20,
+        hidden_dim=256,
+        disable_belief=False,
+        meta=False,
+        max_context_dim=10,
+        task_num=50,
+        residual=True,
+        scale_lb=0.1,
     ):
         self.variable_num = variable_num
         self.state_dim_per_variable = state_dim_per_variable
@@ -64,10 +64,12 @@ class PlainRSSMPrior(BaseWorldModel):
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        module_dict = nn.ModuleDict(dict(
-            as2middle=action_state_to_middle_projector,
-            middle2s=middle_to_prior_projector,
-        ))
+        module_dict = nn.ModuleDict(
+            dict(
+                as2middle=action_state_to_middle_projector,
+                middle2s=middle_to_prior_projector,
+            )
+        )
         if not self.disable_belief:
             rnn = nn.GRUCell(
                 input_size=self.total_belief_dim,
@@ -98,40 +100,3 @@ class PlainRSSMPrior(BaseWorldModel):
         next_state = prior_mean + torch.randn_like(prior_std) * prior_std
 
         return prior_mean, prior_std, next_state, next_belief
-
-
-def test_plain_rssm_prior():
-    action_dim = 1
-    variable_num = 10
-    state_dim_per_variable = 3
-    hidden_dim_per_variable = 20
-    max_context_dim = 10
-    task_num = 50
-    env_num = 10
-    batch_size = 32
-
-    prior = PlainRSSMPrior(
-        action_dim=action_dim,
-        variable_num=variable_num,
-        state_dim_per_variable=state_dim_per_variable,
-        belief_dim_per_variable=hidden_dim_per_variable,
-        max_context_dim=max_context_dim,
-        task_num=task_num,
-        meta=True,
-        disable_belief=True
-    )
-
-    for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
-        state = torch.randn(*batch_shape, variable_num * state_dim_per_variable)
-        belief = torch.randn(*batch_shape, variable_num * hidden_dim_per_variable)
-        action = torch.randn(*batch_shape, action_dim)
-        idx = torch.randint(0, task_num, (*batch_shape, 1))
-
-        prior_mean, prior_std, next_state, next_belief = prior(state, belief, action, idx)
-
-        assert prior_mean.shape == prior_std.shape == next_state.shape == state.shape
-        assert next_belief.shape == belief.shape
-
-
-if __name__ == '__main__':
-    test_plain_rssm_prior()

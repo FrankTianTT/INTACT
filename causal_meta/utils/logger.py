@@ -13,7 +13,7 @@ def build_logger(cfg, name="mpc", log_dir=""):
     logging_cfg = dict(cfg)
     logging_cfg.update({"log_dir": log_dir})
 
-    if cfg.logger == 'wandb':
+    if cfg.logger == "wandb":
         wandb_kwargs = {
             "project": "INTACT",
             "entity": "causal_focus",
@@ -24,10 +24,5 @@ def build_logger(cfg, name="mpc", log_dir=""):
     else:
         wandb_kwargs = None
 
-    logger = get_logger(
-        logger_type=cfg.logger,
-        logger_name=log_dir,
-        experiment_name=exp_name,
-        wandb_kwargs=wandb_kwargs
-    )
+    logger = get_logger(logger_type=cfg.logger, logger_name=log_dir, experiment_name=exp_name, wandb_kwargs=wandb_kwargs)
     return logger

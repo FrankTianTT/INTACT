@@ -54,8 +54,8 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-#eval_interval: 20
-eval_interval: 20000
+eval_interval: 20
+#eval_interval: 20000
 eval_repeat_nums: 1
 eval_record_nums: 0
 save_model_interval: 10

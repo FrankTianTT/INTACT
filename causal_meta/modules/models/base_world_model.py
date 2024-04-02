@@ -7,15 +7,15 @@ from causal_meta.modules.models.context_model import ContextModel
 
 class BaseWorldModel(nn.Module):
     def __init__(
-            self,
-            obs_dim,
-            action_dim,
-            meta=False,
-            max_context_dim=10,
-            task_num=100,
-            residual=True,
-            learned_reward=True,
-            learned_termination=True,
+        self,
+        obs_dim,
+        action_dim,
+        meta=False,
+        max_context_dim=10,
+        task_num=100,
+        residual=True,
+        learned_reward=True,
+        learned_termination=True,
     ):
         """World-model class for environment learning with causal discovery.
 
@@ -55,10 +55,7 @@ class BaseWorldModel(nn.Module):
 
     @property
     def params_dict(self):
-        return dict(
-            nets=self.nets.parameters(),
-            context=self.context_model.parameters()
-        )
+        return dict(nets=self.nets.parameters(), context=self.context_model.parameters())
 
     def get_parameter(self, target: str):
         if target in self.params_dict:

@@ -106,9 +106,7 @@ def main(cfg):
         proof_env.close()
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
+    proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False, stats=stats)()
 
     # MBPO models
 
@@ -137,9 +135,7 @@ def main(cfg):
     imagination_horizon_planner = ImaginationStepsPlanner(cfg)
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
-    world_model_opt = torch.optim.Adam(
-        world_model_loss.parameters(), lr=cfg.world_model_lr
-    )
+    world_model_opt = torch.optim.Adam(world_model_loss.parameters(), lr=cfg.world_model_lr)
     sac_opt = torch.optim.Adam(sac_loss.parameters(), lr=cfg.sac_lr)
 
     # Recorder
@@ -256,10 +252,7 @@ def main(cfg):
         with_replacement_data_buffer.extend(tensordict.cpu())
         imagination_horizon = imagination_horizon_planner(i)
         model_buffer._storage.set_max_size(
-            imagination_horizon
-            * cfg.num_model_rollouts
-            * cfg.optim_steps_per_batch
-            * cfg.keep_model_samples_n_collect_steps
+            imagination_horizon * cfg.num_model_rollouts * cfg.optim_steps_per_batch * cfg.keep_model_samples_n_collect_steps
         )
 
         if collected_frames >= cfg.init_random_frames:
@@ -269,15 +262,9 @@ def main(cfg):
                 # Sample data from model and buffer it
                 if j % cfg.train_model_every_k_optim_step == 0:
                     world_model_train_losses = []
-                    without_replacement_data_buffer._sampler.reset(
-                        without_replacement_data_buffer._storage
-                    )
-                    num_model_steps = (
-                            len(without_replacement_data_buffer) // cfg.model_batch_size
-                    )
-                    num_model_train_steps = int(
-                        num_model_steps * cfg.model_holdout_ratio
-                    )
+                    without_replacement_data_buffer._sampler.reset(without_replacement_data_buffer._storage)
+                    num_model_steps = len(without_replacement_data_buffer) // cfg.model_batch_size
+                    num_model_train_steps = int(num_model_steps * cfg.model_holdout_ratio)
                     num_model_test_steps = num_model_steps - num_model_train_steps
 
                     for _ in range(num_model_train_steps):
@@ -296,16 +283,10 @@ def main(cfg):
                         world_model_opt.zero_grad()
                         scaler1.update()
                         world_model_train_losses.append(model_loss_td.detach())
-                    world_model_train_losses = torch.stack(
-                        world_model_train_losses, dim=0
-                    )
-                    loss_world_model_train = world_model_train_losses[
-                        "loss_world_model"
-                    ].mean()
+                    world_model_train_losses = torch.stack(world_model_train_losses, dim=0)
+                    loss_world_model_train = world_model_train_losses["loss_world_model"].mean()
 
-                    per_network_world_model_loss_train = world_model_train_losses[
-                        "per_network_world_model_loss"
-                    ].mean(dim=0)
+                    per_network_world_model_loss_train = world_model_train_losses["per_network_world_model_loss"].mean(dim=0)
 
                     if j == 0:
                         logger.log_scalar(
@@ -327,27 +308,15 @@ def main(cfg):
                             (
                                 model_sampled_tensordict,
                                 _,
-                            ) = without_replacement_data_buffer.sample(
-                                cfg.model_batch_size
-                            )
-                            model_sampled_tensordict = model_sampled_tensordict.to(
-                                device
-                            )
+                            ) = without_replacement_data_buffer.sample(cfg.model_batch_size)
+                            model_sampled_tensordict = model_sampled_tensordict.to(device)
                             with autocast(dtype=torch.float16):
-                                model_loss_td = world_model_loss(
-                                    model_sampled_tensordict
-                                )
+                                model_loss_td = world_model_loss(model_sampled_tensordict)
                             world_model_test_losses.append(model_loss_td.detach())
 
-                        world_model_test_losses = torch.stack(
-                            world_model_test_losses, dim=0
-                        )
-                        loss_world_model_test = world_model_test_losses[
-                            "loss_world_model"
-                        ].mean()
-                        per_network_world_model_loss_test = world_model_test_losses[
-                            "per_network_world_model_loss"
-                        ].mean(dim=0)
+                        world_model_test_losses = torch.stack(world_model_test_losses, dim=0)
+                        loss_world_model_test = world_model_test_losses["loss_world_model"].mean()
+                        per_network_world_model_loss_test = world_model_test_losses["per_network_world_model_loss"].mean(dim=0)
 
                         if j == 0:
                             logger.log_scalar(
@@ -361,9 +330,7 @@ def main(cfg):
                                     loss,
                                     step=collected_frames,
                                 )
-                        elites = torch.argsort(per_network_world_model_loss_test)[
-                                 : cfg.num_elites
-                                 ]
+                        elites = torch.argsort(per_network_world_model_loss_test)[: cfg.num_elites]
                         model_based_env.elites = elites
 
                     with torch.no_grad(), set_exploration_mode("random"):
@@ -371,21 +338,15 @@ def main(cfg):
                             (
                                 model_sampled_tensordict,
                                 _,
-                            ) = with_replacement_data_buffer.sample(
-                                cfg.num_model_rollouts
-                            )
-                            model_sampled_tensordict = model_sampled_tensordict.to(
-                                device
-                            )
+                            ) = with_replacement_data_buffer.sample(cfg.num_model_rollouts)
+                            model_sampled_tensordict = model_sampled_tensordict.to(device)
                             fake_traj_tensordict = model_based_env.rollout(
                                 max_steps=imagination_horizon,
                                 policy=policy,
                                 auto_reset=False,
                                 tensordict=model_sampled_tensordict,
                             )
-                            fake_traj_tensordict = fake_traj_tensordict.select(
-                                *original_keys
-                            )
+                            fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
                             model_buffer.extend(fake_traj_tensordict.view(-1).cpu())
                 if len(model_buffer) > cfg.init_random_frames:
                     sac_losses_list = []
@@ -396,9 +357,7 @@ def main(cfg):
 
                         # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
 
-                        fake_sampled_tensordict, _ = model_buffer.sample(
-                            num_fake_samples
-                        )
+                        fake_sampled_tensordict, _ = model_buffer.sample(num_fake_samples)
 
                         (
                             real_sampled_tensordict,
@@ -417,10 +376,10 @@ def main(cfg):
                         with autocast(dtype=torch.float16):
                             sac_loss_td = sac_loss(agent_sampled_tensordict)
                             sac_loss_sum = (
-                                    sac_loss_td["loss_actor"]
-                                    + sac_loss_td["loss_qvalue"]
-                                    + sac_loss_td["loss_value"]
-                                    + sac_loss_td["loss_alpha"]
+                                sac_loss_td["loss_actor"]
+                                + sac_loss_td["loss_qvalue"]
+                                + sac_loss_td["loss_value"]
+                                + sac_loss_td["loss_alpha"]
                             )
                         sac_losses_list.append(sac_loss_td.detach())
                         scaler2.scale(sac_loss_sum).backward()
@@ -491,9 +450,7 @@ class ImaginationStepsPlanner:
         else:
             return int(
                 self.start_horizon
-                + (epoch - self.start_epoch)
-                * (self.end_horizon - self.start_horizon)
-                / (self.end_epoch - self.start_epoch)
+                + (epoch - self.start_epoch) * (self.end_horizon - self.start_horizon) / (self.end_epoch - self.start_epoch)
             )
 
 

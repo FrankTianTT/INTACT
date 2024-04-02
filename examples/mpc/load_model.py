@@ -17,12 +17,7 @@ from causal_meta.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from causal_meta.envs.meta_transform import MetaIdxTransform
 from causal_meta.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
-from utils import (
-    build_make_env_list,
-    evaluate_policy,
-    plot_context,
-    MultiOptimizer
-)
+from utils import build_make_env_list, evaluate_policy, plot_context, MultiOptimizer
 
 
 def restore_make_env_list(cfg, oracle_context):
@@ -119,9 +114,11 @@ def main(path, load_frames, train_frames_per_task):
     print("max", repeat_rewards.max(dim=0))
     print("min", repeat_rewards.min(dim=0))
     plot_context(
-        cfg, world_model, train_oracle_context,
+        cfg,
+        world_model,
+        train_oracle_context,
         plot_path=os.path.join(path, "load_model", "before_context.png"),
-        color_values=repeat_rewards.mean(dim=0).cpu().numpy()
+        color_values=repeat_rewards.mean(dim=0).cpu().numpy(),
     )
     #
     # world_model.reset()
@@ -167,17 +164,19 @@ def main(path, load_frames, train_frames_per_task):
 
     # repeat_rewards = evaluate_policy(cfg, train_make_env_list, explore_policy)
     plot_context(
-        cfg, world_model, train_oracle_context,
+        cfg,
+        world_model,
+        train_oracle_context,
         plot_path=os.path.join(path, "load_model", "after_context.png"),
         # color_values=repeat_rewards.mean(dim=0).cpu().numpy()
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('path', type=str)
-    parser.add_argument('load_frames', type=int)
-    parser.add_argument('--train_frames_per_task', type=int, default=-1)
+    parser.add_argument("path", type=str)
+    parser.add_argument("load_frames", type=int)
+    parser.add_argument("--train_frames_per_task", type=int, default=-1)
 
     args = parser.parse_args()
 

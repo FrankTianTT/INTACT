@@ -30,7 +30,3 @@ def make_mdp_env(env_name, env_kwargs=None, idx=None, task_num=None, pixel=False
     if idx is not None:
         transforms.append(MetaIdxTransform(idx, task_num))
     return TransformedEnv(env, transform=Compose(*transforms))
-
-
-if __name__ == '__main__':
-    env = make_mdp_env("Walker2d-v4")

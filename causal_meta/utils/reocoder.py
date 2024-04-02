@@ -23,22 +23,21 @@ from torchrl.trainers import Recorder as BaseRecorder
 
 
 class Recorder(BaseRecorder):
-
     def __init__(
-            self,
-            *,
-            record_interval: int,
-            env_max_steps: int = 1000,
-            eval_repeat_times: int = 3,
-            frame_skip: int = 1,
-            policy_exploration: TensorDictModule = ExplorationType.MODE,
-            environment: EnvBase = None,
-            exploration_type: ExplorationType = ExplorationType.RANDOM,
-            log_keys: Optional[List[Union[str, Tuple[str]]]] = None,
-            out_keys: Optional[Dict[Union[str, Tuple[str]], str]] = None,
-            suffix: Optional[str] = None,
-            log_pbar: bool = False,
-            recorder: EnvBase = None,
+        self,
+        *,
+        record_interval: int,
+        env_max_steps: int = 1000,
+        eval_repeat_times: int = 3,
+        frame_skip: int = 1,
+        policy_exploration: TensorDictModule = ExplorationType.MODE,
+        environment: EnvBase = None,
+        exploration_type: ExplorationType = ExplorationType.RANDOM,
+        log_keys: Optional[List[Union[str, Tuple[str]]]] = None,
+        out_keys: Optional[Dict[Union[str, Tuple[str]], str]] = None,
+        suffix: Optional[str] = None,
+        log_pbar: bool = False,
+        recorder: EnvBase = None,
     ) -> None:
         self.env_max_steps = env_max_steps
         self.eval_repeat_times = eval_repeat_times
@@ -53,7 +52,7 @@ class Recorder(BaseRecorder):
             out_keys=out_keys,
             suffix=suffix,
             log_pbar=log_pbar,
-            recorder=recorder
+            recorder=recorder,
         )
 
         assert self.log_keys == [("next", "reward")]
@@ -99,5 +98,5 @@ class Recorder(BaseRecorder):
         }
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     recoder = Recorder(record_interval=1)

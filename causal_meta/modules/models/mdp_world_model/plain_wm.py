@@ -13,16 +13,16 @@ from causal_meta.modules.models.base_world_model import BaseWorldModel
 
 class PlainMDPWorldModel(BaseWorldModel):
     def __init__(
-            self,
-            obs_dim,
-            action_dim,
-            meta=False,
-            max_context_dim=10,
-            task_num=100,
-            residual=True,
-            learn_obs_var=True,
-            hidden_dims=None,
-            log_var_bounds=(-10.0, 0.5)
+        self,
+        obs_dim,
+        action_dim,
+        meta=False,
+        max_context_dim=10,
+        task_num=100,
+        residual=True,
+        learn_obs_var=True,
+        hidden_dims=None,
+        log_var_bounds=(-10.0, 0.5),
     ):
         """World-model class for environment learning with causal discovery.
 
@@ -97,40 +97,3 @@ class PlainMDPWorldModel(BaseWorldModel):
 
         mean, log_var = self.nets["mlp"](inputs.reshape(-1, dim)).chunk(2, dim=-1)
         return self.get_outputs(mean, log_var, observation, batch_shape)
-
-
-def test_plain_world_model():
-    obs_dim = 4
-    action_dim = 1
-    batch_size = 32
-    env_num = 5
-
-    world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=False)
-
-    for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
-        observation = torch.randn(*batch_shape, obs_dim)
-        action = torch.randn(*batch_shape, action_dim)
-
-        next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated = world_model(observation, action)
-
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
-        assert reward_mean.shape == reward_log_var.shape == terminated.shape == (*batch_shape, 1)
-
-
-def test_reset():
-    from torch.optim import Adam
-
-    obs_dim = 4
-    action_dim = 1
-    task_num = 100
-    new_task_num = 10
-    max_context_dim = 10
-    batch_size = 32
-
-    world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=True,
-                                     task_num=task_num, max_context_dim=max_context_dim)
-    world_model.reset()
-
-
-if __name__ == '__main__':
-    test_plain_world_model()

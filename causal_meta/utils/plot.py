@@ -8,15 +8,7 @@ from matplotlib import colors as mcolors
 from matplotlib import cm
 
 
-def plot_context(
-        cfg,
-        world_model,
-        oracle_context,
-        logger=None,
-        log_idx=0,
-        log_prefix="model",
-        color_values=None
-):
+def plot_context(cfg, world_model, oracle_context, logger=None, log_idx=0, log_prefix="model", color_values=None):
     context_model = world_model.context_model
     context_gt = torch.stack([v for v in oracle_context.values()], dim=-1).cpu()
 
@@ -32,7 +24,7 @@ def plot_context(
         cmap = None
     else:
         norm = mcolors.Normalize(vmin=min(color_values), vmax=max(color_values))
-        cmap = cm.ScalarMappable(norm, plt.get_cmap('Blues')).cmap
+        cmap = cm.ScalarMappable(norm, plt.get_cmap("Blues")).cmap
 
     if len(idxes_gt) == 0:
         pass

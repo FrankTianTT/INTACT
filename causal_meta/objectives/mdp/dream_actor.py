@@ -41,17 +41,17 @@ class DreamActorLoss(LossModule):
     default_value_estimator = ValueEstimators.TDLambda
 
     def __init__(
-            self,
-            actor_model: TensorDictModule,
-            value_model: TensorDictModule,
-            model_based_env: MDPEnv,
-            *,
-            imagination_horizon: int = 15,
-            discount_loss: bool = False,  # for consistency with paper
-            pred_continue: bool = True,
-            gamma: int = None,
-            lmbda: int = None,
-            lambda_entropy: float = 3e-4,
+        self,
+        actor_model: TensorDictModule,
+        value_model: TensorDictModule,
+        model_based_env: MDPEnv,
+        *,
+        imagination_horizon: int = 15,
+        discount_loss: bool = False,  # for consistency with paper
+        pred_continue: bool = True,
+        gamma: int = None,
+        lmbda: int = None,
+        lambda_entropy: float = 3e-4,
     ):
         super().__init__()
         self.actor_model = actor_model
@@ -103,9 +103,7 @@ class DreamActorLoss(LossModule):
             mask = tensordict.get(("collector", "mask")).clone()
             tensordict = tensordict[mask]
 
-        with hold_out_net(self.model_based_env), set_exploration_type(
-                ExplorationType.RANDOM
-        ):
+        with hold_out_net(self.model_based_env), set_exploration_type(ExplorationType.RANDOM):
             fake_data = self.rollout(tensordict.clone())
 
             next_tensordict = step_mdp(
@@ -125,12 +123,11 @@ class DreamActorLoss(LossModule):
 
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
-            discount = (1. - terminated.float()) * gamma
+            discount = (1.0 - terminated.float()) * gamma
             # discount = gamma.expand(lambda_target.shape).clone()
-            discount = torch.cat([
-                torch.ones_like(discount[..., :1, :]).to(tensordict.device),
-                discount[..., :-1, :] * gamma
-            ], dim=-2)
+            discount = torch.cat(
+                [torch.ones_like(discount[..., :1, :]).to(tensordict.device), discount[..., :-1, :] * gamma], dim=-2
+            )
             discount = discount.cumprod(dim=-2)
             fake_data.set("discount", discount)
             actor_loss = -(actor_target * discount).sum((-2, -1)).mean()
@@ -175,9 +172,7 @@ class DreamActorLoss(LossModule):
         elif value_type is ValueEstimators.GAE:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
+            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
         elif value_type is ValueEstimators.TDLambda:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda

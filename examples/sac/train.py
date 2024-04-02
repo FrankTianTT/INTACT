@@ -80,11 +80,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
     init_random_frames = cfg.collector.init_random_frames
-    num_updates = int(
-        cfg.collector.env_per_collector
-        * cfg.collector.frames_per_batch
-        * cfg.optim.utd_ratio
-    )
+    num_updates = int(cfg.collector.env_per_collector * cfg.collector.frames_per_batch * cfg.optim.utd_ratio)
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
@@ -113,9 +109,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(
-                        device, non_blocking=True
-                    )
+                    sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
@@ -141,9 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 alpha_loss.backward()
                 optimizer_alpha.step()
 
-                losses[i] = loss_td.select(
-                    "loss_actor", "loss_qvalue", "loss_alpha"
-                ).detach()
+                losses[i] = loss_td.select("loss_actor", "loss_qvalue", "loss_alpha").detach()
 
                 # Update qnet_target params
                 target_net_updater.step()
@@ -153,11 +145,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     replay_buffer.update_priority(sampled_tensordict)
 
         training_time = time.time() - training_start
-        episode_end = (
-            tensordict["next", "done"]
-            if tensordict["next", "done"].any()
-            else tensordict["next", "truncated"]
-        )
+        episode_end = tensordict["next", "done"] if tensordict["next", "done"].any() else tensordict["next", "truncated"]
         episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
         # Logging
@@ -165,9 +153,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][episode_end]
             metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
-                episode_length
-            )
+            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(episode_length)
         if collected_frames >= init_random_frames:
             metrics_to_log["train/q_loss"] = losses.get("loss_qvalue").mean().item()
             metrics_to_log["train/actor_loss"] = losses.get("loss_actor").mean().item()

@@ -87,17 +87,17 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
     }
 
     def __init__(
-            self,
-            gravity: float = 9.8,
-            masscart: float = 1.0,
-            masspole: float = 0.1,
-            length: float = 0.5,
-            force_mag: float = 10.0,
-            tau: float = 0.02,
-            cart_vel_bias: float = 0.0,
-            pole_vel_bias: float = 0.0,
-            theta_threshold_degree: float = 12,
-            render_mode: Optional[str] = None
+        self,
+        gravity: float = 9.8,
+        masscart: float = 1.0,
+        masspole: float = 0.1,
+        length: float = 0.5,
+        force_mag: float = 10.0,
+        tau: float = 0.02,
+        cart_vel_bias: float = 0.0,
+        pole_vel_bias: float = 0.0,
+        theta_threshold_degree: float = 12,
+        render_mode: Optional[str] = None,
     ):
         self.gravity = gravity
         self.masscart = masscart
@@ -153,11 +153,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (
-                       force + self.polemass_length * theta_dot ** 2 * sintheta
-               ) / self.total_mass
+        temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
-                self.length * (4.0 / 3.0 - self.masspole * costheta ** 2 / self.total_mass)
+            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
         )
         xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
 
@@ -210,17 +208,15 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         return obs
 
     def reset(
-            self,
-            *,
-            seed: Optional[int] = None,
-            options: Optional[dict] = None,
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
         # Note that if you use custom reset bounds, it may lead to out-of-bound
         # state/observations.
-        low, high = utils.maybe_parse_reset_bounds(
-            options, -0.05, 0.05  # default low
-        )  # default high
+        low, high = utils.maybe_parse_reset_bounds(options, -0.05, 0.05)  # default low  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.steps_beyond_terminated = None
 
@@ -241,17 +237,13 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             import pygame
             from pygame import gfxdraw
         except ImportError:
-            raise DependencyNotInstalled(
-                "pygame is not installed, run `pip install gym[classic_control]`"
-            )
+            raise DependencyNotInstalled("pygame is not installed, run `pip install gym[classic_control]`")
 
         if self.screen is None:
             pygame.init()
             if self.render_mode == "human":
                 pygame.display.init()
-                self.screen = pygame.display.set_mode(
-                    (self.screen_width, self.screen_height)
-                )
+                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
             else:  # mode == "rgb_array"
                 self.screen = pygame.Surface((self.screen_width, self.screen_height))
         if self.clock is None:
@@ -321,9 +313,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.display.flip()
 
         elif self.render_mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-            )
+            return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
 
     def close(self):
         if self.screen is not None:

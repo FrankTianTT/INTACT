@@ -31,16 +31,16 @@ def reset_module(world_model, actor, critic, new_domain_task_num):
 
 
 def train_policy(
-        cfg,
-        replay_buffer,
-        actor_loss,
-        critic_loss,
-        training_steps,
-        actor_opt,
-        critic_opt,
-        logger,
-        log_prefix="policy",
-        reward_normalizer=None
+    cfg,
+    replay_buffer,
+    actor_loss,
+    critic_loss,
+    training_steps,
+    actor_opt,
+    critic_opt,
+    logger,
+    log_prefix="policy",
+    reward_normalizer=None,
 ):
     device = next(actor_loss.parameters()).device
 
@@ -70,19 +70,19 @@ def train_policy(
 
 
 def train_model(
-        cfg,
-        replay_buffer,
-        world_model,
-        world_model_loss,
-        training_steps,
-        model_opt,
-        logits_opt=None,
-        logger=None,
-        deterministic_mask=False,
-        log_prefix="model",
-        iters=0,
-        only_train=None,
-        reward_normalizer=None
+    cfg,
+    replay_buffer,
+    world_model,
+    world_model_loss,
+    training_steps,
+    model_opt,
+    logits_opt=None,
+    logger=None,
+    deterministic_mask=False,
+    log_prefix="model",
+    iters=0,
+    only_train=None,
+    reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.reinforce and logits_opt
@@ -99,14 +99,13 @@ def train_model(
         if reward_normalizer:
             reward_normalizer.normalize_reward(sampled_tensordict)
 
-        if (train_logits_by_reinforce and
-                iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters):
+        if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
             grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
             logits_opt.step()
         else:
             loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
-            context_penalty = (world_model.context_model.context_hat ** 2).sum()
+            context_penalty = (world_model.context_model.context_hat**2).sum()
             total_loss += context_penalty * 0.5
             total_loss.backward()
             model_opt.step()
@@ -142,8 +141,8 @@ def build_loss(cfg, world_model, model_based_env, actor, critic):
     world_model_loss = CausalWorldModelLoss(
         world_model,
         lambda_transition=cfg.lambda_transition,
-        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.,
-        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.,
+        lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.0,
+        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.0,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -156,7 +155,7 @@ def build_loss(cfg, world_model, model_based_env, actor, critic):
         imagination_horizon=cfg.imagination_horizon,
         discount_loss=cfg.discount_loss,
         pred_continue=cfg.pred_continue,
-        lambda_entropy=cfg.lambda_entropy
+        lambda_entropy=cfg.lambda_entropy,
     )
     critic_loss = DreamCriticLoss(
         critic,
@@ -167,16 +166,7 @@ def build_loss(cfg, world_model, model_based_env, actor, critic):
 
 
 def meta_test(
-        cfg,
-        make_env_list,
-        oracle_context,
-        world_model,
-        actor,
-        critic,
-        logger,
-        log_idx,
-        reward_normalizer,
-        adapt_threshold=-4.
+    cfg, make_env_list, oracle_context, world_model, actor, critic, logger, log_idx, reward_normalizer, adapt_threshold=-4.0
 ):
     device = next(world_model.parameters()).device
     logger.dump_scaler(log_idx)
@@ -218,16 +208,18 @@ def meta_test(
         replay_buffer.extend(tensordict)
 
         train_model(
-            cfg, replay_buffer, world_model, world_model_loss,
+            cfg,
+            replay_buffer,
+            world_model,
+            world_model_loss,
             training_steps=cfg.optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{log_idx}",
             deterministic_mask=True,
-            reward_normalizer=reward_normalizer
+            reward_normalizer=reward_normalizer,
         )
-        plot_context(cfg, world_model, oracle_context, logger, collected_frames,
-                     log_prefix=f"meta_test_model_{log_idx}")
+        plot_context(cfg, world_model, oracle_context, logger, collected_frames, log_prefix=f"meta_test_model_{log_idx}")
         logger.dump_scaler(collected_frames)
     pbar.close()
     collector.shutdown()
@@ -256,21 +248,33 @@ def meta_test(
         train_model_iters = 0
         for frame in tqdm(range(cfg.meta_test_frames, 3 * cfg.meta_test_frames, cfg.frames_per_batch)):
             train_model_iters = train_model(
-                cfg, replay_buffer, world_model, world_model_loss,
+                cfg,
+                replay_buffer,
+                world_model,
+                world_model_loss,
                 training_steps=cfg.optim_steps_per_batch,
-                model_opt=new_world_model_opt, logits_opt=logits_opt,
+                model_opt=new_world_model_opt,
+                logits_opt=logits_opt,
                 logger=logger,
                 log_prefix=f"meta_test_model_{log_idx}",
                 iters=train_model_iters,
                 only_train=adapt_idx,
                 deterministic_mask=False,
-                reward_normalizer=reward_normalizer
+                reward_normalizer=reward_normalizer,
             )
-            train_policy(cfg, replay_buffer, actor_loss, critic_loss, cfg.optim_steps_per_batch,
-                         actor_opt, critic_opt, logger, reward_normalizer=reward_normalizer,
-                         log_prefix=f"meta_test_policy_{log_idx}")
-            plot_context(cfg, world_model, oracle_context, logger, frame,
-                         log_prefix=f"meta_test_model_{log_idx}")
+            train_policy(
+                cfg,
+                replay_buffer,
+                actor_loss,
+                critic_loss,
+                cfg.optim_steps_per_batch,
+                actor_opt,
+                critic_opt,
+                logger,
+                reward_normalizer=reward_normalizer,
+                log_prefix=f"meta_test_policy_{log_idx}",
+            )
+            plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{log_idx}")
             logger.dump_scaler(frame)
             if cfg.model_type == "causal":
                 print("envs test causal mask:")

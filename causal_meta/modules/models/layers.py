@@ -32,15 +32,15 @@ def truncated_normal_(tensor: torch.Tensor, mean: float = 0, std: float = 1) -> 
 
 class ParallelLinear(nn.Module):
     def __init__(
-            self,
-            in_features: int,
-            out_features: int,
-            extra_dims: Optional[List[int]] = None,
-            bias: bool = True,
-            device=None,
-            dtype=None
+        self,
+        in_features: int,
+        out_features: int,
+        extra_dims: Optional[List[int]] = None,
+        bias: bool = True,
+        device=None,
+        dtype=None,
     ):
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -50,7 +50,7 @@ class ParallelLinear(nn.Module):
         if bias:
             self.bias = nn.Parameter(torch.empty((*extra_dims, out_features), **factory_kwargs))
         else:
-            self.register_parameter('bias', None)
+            self.register_parameter("bias", None)
 
         self.reset_parameters()
 
@@ -70,42 +70,38 @@ class ParallelLinear(nn.Module):
         return ret
 
     def extra_repr(self):
-        return 'in_features={}, out_features={}, extra_dims={}, bias={}'.format(
+        return "in_features={}, out_features={}, extra_dims={}, bias={}".format(
             self.in_features, self.out_features, self.extra_dims, self.bias is not None
         )
 
 
 class ParallelGRUCell(nn.Module):
     def __init__(
-            self,
-            input_size: int,
-            hidden_size: int,
-            extra_dims: Optional[List[int]] = None,
-            bias: bool = True,
-            device=None,
-            dtype=None
+        self,
+        input_size: int,
+        hidden_size: int,
+        extra_dims: Optional[List[int]] = None,
+        bias: bool = True,
+        device=None,
+        dtype=None,
     ) -> None:
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.bias = bias
         self.extra_dims = [] if extra_dims is None else extra_dims
-        self.weight_ih = nn.Parameter(torch.empty(
-            (*self.extra_dims, 3 * self.hidden_size, self.input_size),
-            **factory_kwargs
-        ))
-        self.weight_hh = nn.Parameter(torch.empty(
-            (*self.extra_dims, 3 * self.hidden_size, self.hidden_size),
-            **factory_kwargs
-        ))
+        self.weight_ih = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size, self.input_size), **factory_kwargs))
+        self.weight_hh = nn.Parameter(
+            torch.empty((*self.extra_dims, 3 * self.hidden_size, self.hidden_size), **factory_kwargs)
+        )
 
         if bias:
             self.bias_ih = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs))
             self.bias_hh = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs))
         else:
-            self.register_parameter('bias_ih', None)
-            self.register_parameter('bias_hh', None)
+            self.register_parameter("bias_ih", None)
+            self.register_parameter("bias_hh", None)
 
         self.reset_parameters()
 
@@ -125,11 +121,13 @@ class ParallelGRUCell(nn.Module):
         """
         accepted_dims = (1 + len(self.extra_dims), 2 + len(self.extra_dims))
         if input.dim() not in accepted_dims:
-            raise ValueError(f"GRUCell: Expected input to be {accepted_dims[0]}D or {accepted_dims[1]}D, "
-                             f"got {input.dim()}D instead")
+            raise ValueError(
+                f"GRUCell: Expected input to be {accepted_dims[0]}D or {accepted_dims[1]}D, " f"got {input.dim()}D instead"
+            )
         if hx is not None and hx.dim() not in accepted_dims:
-            raise ValueError(f"GRUCell: Expected hidden to be {accepted_dims[0]}D or {accepted_dims[1]}D, "
-                             f"got {hx.dim()}D instead")
+            raise ValueError(
+                f"GRUCell: Expected hidden to be {accepted_dims[0]}D or {accepted_dims[1]}D, " f"got {hx.dim()}D instead"
+            )
         is_batched = input.dim() == 2 + len(self.extra_dims)
         if not is_batched:
             input = input.unsqueeze(-2)
@@ -178,45 +176,3 @@ def parallel_gru_cell(input, hx, weight_ih, weight_hh, bias_ih, bias_hh):
     hy = (1 - update_gate) * hx + update_gate * new_gate
 
     return hy
-
-
-def test_parallel_linear():
-    in_features = 3
-    out_features = 5
-    extra_dims = [10]
-    batch_size = 32
-
-    parallel_linear = ParallelLinear(
-        in_features=in_features,
-        out_features=out_features,
-        extra_dims=extra_dims,
-    )
-
-    inputs = torch.randn(*extra_dims, batch_size, in_features)
-    outputs = parallel_linear(inputs)
-
-    assert outputs.shape == (*extra_dims, batch_size, out_features)
-
-
-def test_parallel_gru_cell():
-    input_size = 3
-    hidden_size = 20
-    extra_dims = [10]
-    batch_size = 32
-
-    parallel_gru_cell = ParallelGRUCell(
-        input_size=input_size,
-        hidden_size=hidden_size,
-        extra_dims=extra_dims,
-        bias=True
-    )
-
-    inputs = torch.randn(*extra_dims, batch_size, input_size)
-    hx = torch.randn(*extra_dims, batch_size, hidden_size)
-
-    outputs = parallel_gru_cell(inputs, hx)
-    assert outputs.shape == (*extra_dims, batch_size, hidden_size)
-
-
-if __name__ == '__main__':
-    test_parallel_linear()

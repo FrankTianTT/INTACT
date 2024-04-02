@@ -6,13 +6,13 @@ from tensordict.nn import TensorDictModule
 from tensordict import TensorDict, TensorDictBase
 
 from causal_meta.modules.models.base_world_model import BaseWorldModel
-from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel, INNWorldModel
+from causal_meta.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
 
 
 class MDPWrapper(TensorDictModule):
     def __init__(
-            self,
-            mdp_world_model: BaseWorldModel,
+        self,
+        mdp_world_model: BaseWorldModel,
     ):
         if isinstance(mdp_world_model, PlainMDPWorldModel):
             out_keys = ["obs_mean", "obs_log_var", "reward_mean", "reward_log_var", "terminated"]
@@ -83,96 +83,3 @@ class MDPWrapper(TensorDictModule):
         tensors = self.world_model(*tensors, **kwargs)
         tensordict_out = self._write_to_tensordict(tensordict, tensors)
         return tensordict_out
-
-
-def test_plain_mdp_wrapper():
-    obs_dim = 4
-    action_dim = 1
-    batch_size = 32
-
-    world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim)
-
-    td = TensorDict({
-        "observation": torch.randn(batch_size, obs_dim),
-        "action": torch.randn(batch_size, action_dim),
-    },
-        batch_size=batch_size,
-    )
-
-    mdp_wrapper = MDPWrapper(world_model)
-
-    td = mdp_wrapper(td)
-    assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
-    assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
-    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
-    assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
-
-
-def test_causal_mdp_wrapper():
-    obs_dim = 4
-    action_dim = 1
-    batch_size = 32
-
-    world_model = CausalWorldModel(obs_dim=obs_dim, action_dim=action_dim)
-
-    td = TensorDict({
-        "observation": torch.randn(batch_size, obs_dim),
-        "action": torch.randn(batch_size, action_dim),
-    },
-        batch_size=batch_size,
-    )
-
-    causal_mdp_wrapper = MDPWrapper(world_model)
-
-    td = causal_mdp_wrapper(td)
-
-    assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
-    assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
-    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
-    assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
-    assert "causal_mask" in td.keys() and td["causal_mask"].shape == (batch_size, obs_dim + 2, obs_dim + action_dim)
-
-
-def test_inn_mdp_wrapper():
-    obs_dim = 4
-    action_dim = 1
-    batch_size = 32
-    task_num = 100
-
-    world_model = INNWorldModel(obs_dim=obs_dim, action_dim=action_dim, task_num=task_num)
-
-    td = TensorDict({
-        "observation": torch.randn(batch_size, obs_dim),
-        "action": torch.randn(batch_size, action_dim),
-        "idx": torch.randint(0, task_num, (batch_size, 1)),
-        "next": {
-            "observation": torch.randn(batch_size, obs_dim),
-            "reward": torch.randn(batch_size, 1),
-            "terminated": torch.randn(batch_size, 1),
-        }
-    },
-        batch_size=batch_size,
-    )
-
-    inn_mdp_wrapper = MDPWrapper(world_model)
-
-    td = inn_mdp_wrapper(td)
-
-    assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
-    assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward" in td.keys() and td["reward"].shape == (batch_size, 1)
-    assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
-    assert "log_jac_det" in td.keys() and td["log_jac_det"].shape == (batch_size, 1)
-
-    td = inn_mdp_wrapper.inv_forward(td)
-
-    assert "inv_context" in td.keys() and td["inv_context"].shape == (batch_size, obs_dim + 2)
-    assert "inv_log_jac_det" in td.keys() and td["inv_log_jac_det"].shape == (batch_size, 1)
-
-
-if __name__ == '__main__':
-    test_plain_mdp_wrapper()
-    test_causal_mdp_wrapper()
-    # test_inn_mdp_wrapper()
