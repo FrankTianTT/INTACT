@@ -124,14 +124,24 @@ class DreamerConfig:
 
     batch_length: int = 50
 
+    meta: bool = False
+
     variable_num: int = 10
     state_dim_per_variable: int = 3
     hidden_dim_per_variable: int = 20
-    rnn_input_dim_per_variable: int = 20
+    belief_dim_per_variable: int = 20
+    hidden_size: int = 400
+    disable_belief: bool = False
     residual: bool = False
     logits_clip: float = 3.0
     max_context_dim: int = 0
     task_num: int = 0
+
+    model_type = "causal"
+    using_cross_belief = False
+    reinforce = True
+
+    actor_dist_type: str = "tanh_normal"
 
     mlp_num_units: int = 400
     grad_clip: int = 100
@@ -161,39 +171,3 @@ class DreamerConfig:
     context_sparse_weight: float = 0.01
     context_max_weight: float = 0.2
     sampling_times: int = 30
-
-
-def test_make_causal_dreamer():
-    from torchrl.envs import GymEnv, TransformedEnv, Compose, ToTensorImage, DoubleToFloat, TensorDictPrimer
-    from torchrl.data import UnboundedContinuousTensorSpec
-
-    cfg = DreamerConfig()
-
-    env = TransformedEnv(GymEnv("CartPoleContinuous-v0", from_pixels=True), Compose(ToTensorImage(), DoubleToFloat()))
-    default_dict = {
-        "state": UnboundedContinuousTensorSpec(
-            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.state_dim_per_variable))
-        ),
-        "belief": UnboundedContinuousTensorSpec(
-            shape=torch.Size((*env.batch_size, cfg.variable_num * cfg.hidden_dim_per_variable))
-        ),
-    }
-    env.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
-
-    world_model, model_based_env, actor_simulator, value_model, actor_realworld = make_causal_dreamer(cfg, env)
-
-    world_model.get_parameter("transition_model.0.weight")
-
-
-if __name__ == "__main__":
-    # test_make_causal_dreamer()
-
-    import matplotlib.pyplot as plt
-
-    x = torch.randn(1000)
-    plt.hist(x, bins=100)
-    plt.show()
-
-    x = torch.pow(x, 3)
-    plt.hist(x, bins=100)
-    plt.show()
