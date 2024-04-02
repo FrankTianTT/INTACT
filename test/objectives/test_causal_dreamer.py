@@ -4,8 +4,7 @@ import torch
 
 from intact.objectives.causal_dreamer import CausalDreamerModelLoss
 from intact.utils.envs.dreamer_env import make_dreamer_env
-from intact.utils.models.dreamer import make_dreamer
-from intact.utils.models.mdp import DreamerConfig
+from intact.utils.models.dreamer import make_dreamer, DreamerConfig
 
 
 def test_make_causal_dreamer():

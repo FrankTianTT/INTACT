@@ -396,3 +396,58 @@ def _dreamer_make_value_model(state_dim, belief_dim, context_model, mlp_num_unit
         out_keys=[value_key],
     )
     return value_model
+
+
+@dataclass
+class DreamerConfig:
+    """Dreamer model config struct."""
+
+    batch_length: int = 50
+
+    meta: bool = False
+
+    variable_num: int = 10
+    state_dim_per_variable: int = 3
+    hidden_dim_per_variable: int = 20
+    belief_dim_per_variable: int = 20
+    hidden_size: int = 200
+    disable_belief: bool = False
+    residual: bool = False
+    logits_clip: float = 3.0
+    max_context_dim: int = 0
+    task_num: int = 0
+
+    model_type = "causal"
+    using_cross_belief = False
+    reinforce = True
+
+    actor_dist_type: str = "tanh_normal"
+
+    mlp_num_units: int = 400
+    grad_clip: int = 100
+    world_model_lr: float = 6e-4
+    actor_value_lr: float = 8e-5
+    context_lr: float = 1e-1
+    mask_logits_lr: float = 1e-3
+    lambda_kl: float = 1.0
+    lambda_reco: float = 1.0
+    lambda_reward: float = 1.0
+    lambda_continue: float = 1.0
+    imagination_horizon: int = 15
+    model_device: str = ""
+    # Decay of the reward moving averaging
+    exploration: str = "additive_gaussian"
+    # One of "additive_gaussian", "ou_exploration" or ""
+    discount_loss: bool = True
+    # Whether to use the discount loss
+    pred_continue: bool = True
+    # Whether to predict the continue signal
+    train_agent_frames: int = 100000
+
+    train_causal_iters: int = 10
+    train_model_iters: int = 50
+
+    sparse_weight: float = 0.02
+    context_sparse_weight: float = 0.01
+    context_max_weight: float = 0.2
+    sampling_times: int = 30
