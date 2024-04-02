@@ -130,7 +130,7 @@ class DreamerConfig:
     state_dim_per_variable: int = 3
     hidden_dim_per_variable: int = 20
     belief_dim_per_variable: int = 20
-    hidden_size: int = 400
+    hidden_size: int = 200
     disable_belief: bool = False
     residual: bool = False
     logits_clip: float = 3.0
