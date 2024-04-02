@@ -25,9 +25,9 @@ class CausalWorldModelLoss(LossModule):
 
         if self.model_type == "causal":
             self.causal_mask = world_model.causal_mask
-            self.reinforce = self.causal_mask.reinforce
+            self.using_reinforce = self.causal_mask.using_reinforce
         else:
-            self.causal_mask, self.reinforce = None, None
+            self.causal_mask, self.using_reinforce = None, None
         self.context_model = world_model.context_model
         self.learn_obs_var = world_model.learn_obs_var
 
@@ -139,7 +139,7 @@ class CausalWorldModelLoss(LossModule):
             loss_tensor[..., not_train] = 0
 
         total_loss = loss_tensor.mean()
-        if self.model_type == "causal" and not self.reinforce:
+        if self.model_type == "causal" and not self.using_reinforce:
             total_loss += torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight
             if self.causal_mask.context_input_dim > 0:
                 total_loss += torch.sigmoid(self.causal_mask.context_logits).sum() * self.context_sparse_weight
@@ -148,7 +148,7 @@ class CausalWorldModelLoss(LossModule):
 
     def reinforce_forward(self, tensordict: TensorDict, only_train=None):
         assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"
-        assert self.causal_mask.use_reinforce, "causal_mask should be learned by reinforce"
+        assert self.causal_mask.using_reinforce, "causal_mask should be learned by reinforce"
 
         tensordict = tensordict.clone()
         mask = tensordict.get(("collector", "mask")).clone()

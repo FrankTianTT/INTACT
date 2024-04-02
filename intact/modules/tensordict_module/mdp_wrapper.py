@@ -56,7 +56,7 @@ class MDPWrapper(TensorDictModule):
 
     def parallel_forward(self, tensordict, sampling_times=50):
         assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"
-        assert self.causal_mask.use_reinforce, "causal_mask should be learned by reinforce"
+        assert self.causal_mask.using_reinforce, "causal_mask should be learned by reinforce"
 
         assert len(tensordict.batch_size) == 1, "batch_size should be 1-d"
         batch_size = tensordict.batch_size[0]

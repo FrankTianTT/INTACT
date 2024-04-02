@@ -44,7 +44,7 @@ def make_dreamer(
         rssm_prior_class = partial(
             CausalRSSMPrior,
             using_cross_belief=cfg.using_cross_belief,
-            reinforce=cfg.reinforce,
+            using_reinforce=cfg.using_reinforce,
         )
     elif cfg.model_type == "plain":
         rssm_prior_class = PlainRSSMPrior
@@ -419,7 +419,7 @@ class DreamerConfig:
 
     model_type = "causal"
     using_cross_belief = False
-    reinforce = True
+    using_reinforce = True
 
     actor_dist_type: str = "tanh_normal"
 

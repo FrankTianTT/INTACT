@@ -35,7 +35,7 @@ class CausalDreamerModelLoss(DreamerModelLoss):
 
         if self.model_type == "causal":
             self.causal_mask = self.world_model.causal_mask
-            self.using_reinforce = self.causal_mask.reinforce
+            self.using_reinforce = self.causal_mask.using_reinforce
         else:
             self.causal_mask, self.using_reinforce = None, None
 
@@ -53,7 +53,7 @@ class CausalDreamerModelLoss(DreamerModelLoss):
                 )
         return model_loss_td, sampled_tensordict
 
-    def reinforce(self, tensordict: TensorDict):
+    def reinforce_forward(self, tensordict: TensorDict):
         tensordict = tensordict.clone(recurse=False)
         mask = tensordict.get(self.tensor_keys.collector_mask).clone()
 

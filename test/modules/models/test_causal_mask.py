@@ -39,7 +39,7 @@ def test_causal_mask_sigmoid():
         context_input_dim=context_input_dim,
         mask_output_dim=mask_output_dim,
         meta=True,
-        reinforce=False,
+        using_reinforce=False,
     )
 
     inputs = torch.randn(batch_size, real_input_dim)

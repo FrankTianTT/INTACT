@@ -50,7 +50,7 @@ def train_model(
     reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
-    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.use_reinforce
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.using_reinforce
     if train_logits_by_reinforce:
         assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
 
@@ -69,7 +69,7 @@ def train_model(
             reward_normalizer.normalize_reward(sampled_tensordict)
 
         if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
-            grad, sampling_loss = world_model_loss.use_reinforce(sampled_tensordict)
+            grad, sampling_loss = world_model_loss.reinforce_forward(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
             logits.backward(grad)

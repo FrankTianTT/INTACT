@@ -12,7 +12,7 @@ class CausalWorldModel(PlainMDPWorldModel):
         obs_dim,
         action_dim,
         meta=False,
-        reinforce=True,
+        using_reinforce=True,
         alpha=10.0,
         max_context_dim=10,
         task_num=100,
@@ -42,7 +42,7 @@ class CausalWorldModel(PlainMDPWorldModel):
         :param logits_init_scale: scale for mask logits initialization, default to 0.05
         :param log_var_bounds: bounds for log_var of gaussian nll loss
         """
-        self.reinforce = reinforce
+        self.using_reinforce = using_reinforce
         self.logits_clip = logits_clip
         self.observed_logits_init_bias = observed_logits_init_bias
         self.context_logits_init_bias = context_logits_init_bias
@@ -62,7 +62,7 @@ class CausalWorldModel(PlainMDPWorldModel):
         self.causal_mask = CausalMask(
             observed_input_dim=self.obs_dim + self.action_dim,
             mask_output_dim=self.output_dim,
-            reinforce=self.reinforce,
+            using_reinforce=self.using_reinforce,
             meta=self.meta,
             context_input_dim=self.max_context_dim,
             logits_clip=self.logits_clip,

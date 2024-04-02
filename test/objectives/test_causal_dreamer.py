@@ -21,4 +21,4 @@ def test_make_causal_dreamer():
     model_loss(td)
 
     td = td.reshape(5, 2)
-    model_loss.reinforce(td)
+    model_loss.reinforce_forward(td)

@@ -38,7 +38,7 @@ def make_mdp_model(
     action_dim = proof_env.action_spec.shape[0]
 
     if cfg.model_type == "causal":
-        wm_class = partial(CausalWorldModel, reinforce=cfg.reinforce, alpha=cfg.alpha)
+        wm_class = partial(CausalWorldModel, using_reinforce=cfg.using_reinforce, alpha=cfg.alpha)
     elif cfg.model_type == "plain":
         wm_class = PlainMDPWorldModel
     # elif cfg.model_type == "inn":
@@ -66,7 +66,7 @@ class MDPConfig:
     """MDP model config struct."""
 
     model_type = "causal"
-    reinforce = True
+    using_reinforce = True
     alpha = 1.0
     meta = False
     max_context_dim = 10

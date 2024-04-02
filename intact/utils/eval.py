@@ -1,6 +1,8 @@
 from functools import partial
 from warnings import catch_warnings, filterwarnings
+from dataclasses import dataclass
 
+from omegaconf import DictConfig
 from tqdm import tqdm
 import torch
 from tensordict.nn.probabilistic import set_interaction_mode
@@ -12,16 +14,19 @@ from intact.utils.envs import build_make_env_list, make_mdp_env
 
 
 def evaluate_policy(
-    cfg,
+    cfg: DictConfig,
     oracle_context,
     policy,
-    logger,
-    log_idx,
+    logger=None,
+    log_idx="",
     make_env_fn=make_mdp_env,
     log_prefix="meta_train",
     disable_pixel_if_possible=True,
 ):
-    device = next(policy.parameters()).device
+    if hasattr(policy, "parameters"):
+        device = next(policy.parameters()).device
+    else:
+        device = "cpu"
 
     pbar = tqdm(total=cfg.eval_repeat_nums * cfg.env_max_steps, desc="{}_eval".format(log_prefix))
     repeat_rewards = []
@@ -71,3 +76,13 @@ def evaluate_policy(
         logger.dump_scaler(log_idx)
 
     return torch.stack(repeat_rewards)
+
+
+@dataclass
+class EvaluateConfig:
+    env_name = "MyCartPole-v0"
+
+    eval_repeat_nums = 1
+    eval_record_nums = 0
+
+    env_max_steps = 200

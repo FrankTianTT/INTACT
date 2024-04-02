@@ -31,7 +31,7 @@ class CausalMask(nn.Module):
         self,
         observed_input_dim,
         mask_output_dim,
-        reinforce=True,
+        using_reinforce=True,
         latent=False,
         gumbel_softmax=False,
         meta=False,
@@ -47,7 +47,7 @@ class CausalMask(nn.Module):
 
         self.observed_input_dim = observed_input_dim
         self.mask_output_dim = mask_output_dim
-        self.reinforce = reinforce
+        self.using_reinforce = using_reinforce
         self.latent = latent
         self.gumbel_softmax = gumbel_softmax
         self.meta = meta
@@ -142,7 +142,7 @@ class CausalMask(nn.Module):
         # shape: mask_output_dim * batch_size * input_dim
         repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
 
-        if self.reinforce:
+        if self.using_reinforce:
             if deterministic:
                 original_mask = self.mask.float().expand(batch_size, -1, -1)
             else:

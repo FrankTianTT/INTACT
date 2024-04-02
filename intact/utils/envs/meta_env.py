@@ -4,8 +4,6 @@ import torch
 from tensordict import TensorDict
 from omegaconf import DictConfig
 
-from intact.utils.envs.mdp_env import make_mdp_env
-
 
 def build_make_env_list(env_name, make_env_fn, oracle_context=None):
     if oracle_context is None:
