@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torchrl.objectives.common import LossModule
 from tensordict import TensorDict
+from torchrl.objectives.common import LossModule
 
 from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
@@ -52,7 +52,9 @@ class CausalWorldModelLoss(LossModule):
             )
         else:
             transition_loss = F.mse_loss(
-                tensordict.get("obs_mean")[mask], tensordict.get(("next", "observation"))[mask], reduction=reduction
+                tensordict.get("obs_mean")[mask],
+                tensordict.get(("next", "observation"))[mask],
+                reduction=reduction,
             )
 
         if self.learn_obs_var:
@@ -64,10 +66,14 @@ class CausalWorldModelLoss(LossModule):
             )
         else:
             reward_loss = F.mse_loss(
-                tensordict.get("reward_mean")[mask], tensordict.get(("next", "reward"))[mask], reduction=reduction
+                tensordict.get("reward_mean")[mask],
+                tensordict.get(("next", "reward"))[mask],
+                reduction=reduction,
             )
         terminated_loss = F.binary_cross_entropy_with_logits(
-            tensordict.get("terminated")[mask], tensordict.get(("next", "terminated"))[mask].float(), reduction=reduction
+            tensordict.get("terminated")[mask],
+            tensordict.get(("next", "terminated"))[mask].float(),
+            reduction=reduction,
         )
 
         loss_td = TensorDict(
@@ -123,7 +129,9 @@ class CausalWorldModelLoss(LossModule):
                 idx=tensordict["idx"], valid_context_idx=valid_context_idx, reduction="none"
             ).reshape(-1, 1)
             loss_td.set("mutual_info_loss", mutual_info_loss)
-            loss_tensor = torch.cat([loss_tensor, mutual_info_loss * self.lambda_mutual_info], dim=-1)
+            loss_tensor = torch.cat(
+                [loss_tensor, mutual_info_loss * self.lambda_mutual_info], dim=-1
+            )
 
         if self.model_type == "inn":
             tensordict = self.world_model.inv_forward(tensordict)
@@ -142,8 +150,14 @@ class CausalWorldModelLoss(LossModule):
         if self.model_type == "causal" and not self.using_reinforce:
             total_loss += torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight
             if self.causal_mask.context_input_dim > 0:
-                total_loss += torch.sigmoid(self.causal_mask.context_logits).sum() * self.context_sparse_weight
-                total_loss += torch.sigmoid(self.causal_mask.context_logits).max(dim=1).sum() * self.context_max_weight
+                total_loss += (
+                    torch.sigmoid(self.causal_mask.context_logits).sum()
+                    * self.context_sparse_weight
+                )
+                total_loss += (
+                    torch.sigmoid(self.causal_mask.context_logits).max(dim=1).sum()
+                    * self.context_max_weight
+                )
         return loss_td, total_loss
 
     def reinforce_forward(self, tensordict: TensorDict, only_train=None):

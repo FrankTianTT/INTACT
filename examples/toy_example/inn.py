@@ -32,8 +32,12 @@ class GINCouplingBlock(_BaseCouplingBlock):
 
         super().__init__(dims_in, dims_c, clamp, clamp_activation, split_len=split_len)
 
-        self.subnet1 = subnet_constructor(self.split_len1 + self.condition_length, self.split_len2 * 2)
-        self.subnet2 = subnet_constructor(self.split_len2 + self.condition_length, self.split_len1 * 2)
+        self.subnet1 = subnet_constructor(
+            self.split_len1 + self.condition_length, self.split_len2 * 2
+        )
+        self.subnet2 = subnet_constructor(
+            self.split_len2 + self.condition_length, self.split_len1 * 2
+        )
 
     def _coupling1(self, x1, u2, rev=False):
         a2 = self.subnet2(u2)
@@ -76,10 +80,19 @@ class InvWorldModel(nn.Module):
         self.task_num = task_num
         self.residual = residual
 
-        nodes = [ConditionNode(obs_dim + action_dim, name="State and Action Input"), InputNode(obs_dim, name="Context Input")]
+        nodes = [
+            ConditionNode(obs_dim + action_dim, name="State and Action Input"),
+            InputNode(obs_dim, name="Context Input"),
+        ]
         for k in range(4):
             nodes.append(
-                Node(nodes[-1], GINCouplingBlock, {"subnet_constructor": subnet_fc}, conditions=nodes[0], name=f"Coupling_{k}")
+                Node(
+                    nodes[-1],
+                    GINCouplingBlock,
+                    {"subnet_constructor": subnet_fc},
+                    conditions=nodes[0],
+                    name=f"Coupling_{k}",
+                )
             )
             nodes.append(Node(nodes[-1], PermuteRandom, {"seed": k}, name=f"Permute_{k}"))
         nodes.append(OutputNode(nodes[-1], name="Output"))
@@ -109,12 +122,19 @@ class InvWorldModel(nn.Module):
     def init_by_data(self, loader):
         obs, action, next_obs, idx = next(iter(loader))
         device = self.mu.device
-        obs, action, next_obs, idx = obs.to(device), action.to(device), next_obs.to(device), idx.to(device)
+        obs, action, next_obs, idx = (
+            obs.to(device),
+            action.to(device),
+            next_obs.to(device),
+            idx.to(device),
+        )
         idx = idx.squeeze()
 
         z, log_jac_det = self.module(next_obs, c=torch.cat([obs, action], dim=-1), rev=True)
         self.mu.data = torch.stack([z[idx == i].mean(0) for i in range(self.task_num)])
-        self.log_sig.data = torch.stack([z[idx == i].std(0, unbiased=False) for i in range(self.task_num)]).log()
+        self.log_sig.data = torch.stack(
+            [z[idx == i].std(0, unbiased=False) for i in range(self.task_num)]
+        ).log()
 
 
 def inn_world_model(
@@ -130,7 +150,9 @@ def inn_world_model(
     if not torch.cuda.is_available():
         device = "cpu"
 
-    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(env_name=env_name, task_num=task_num, sample_num=sample_num)
+    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(
+        env_name=env_name, task_num=task_num, sample_num=sample_num
+    )
 
     model = InvWorldModel(obs.shape[1], action.shape[1], task_num).to(device)
 
@@ -151,7 +173,12 @@ def inn_world_model(
         recon_losses = []
         jac_losses = []
         for obs, action, next_obs, idx in dataloader:
-            obs, action, next_obs, idx = obs.to(device), action.to(device), next_obs.to(device), idx.to(device)
+            obs, action, next_obs, idx = (
+                obs.to(device),
+                action.to(device),
+                next_obs.to(device),
+                idx.to(device),
+            )
             idx = idx.squeeze()
             model.zero_grad()
 
@@ -187,7 +214,9 @@ def inn_world_model(
 
         context_gt = torch.stack(list(context_dict.values()), dim=-1).detach().cpu().numpy()
         context_hat = model.mu.detach().cpu().numpy()
-        mcc, permutation = mean_corr_coef(context_gt, context_hat, return_permutation=True, method="spearman")
+        mcc, permutation = mean_corr_coef(
+            context_gt, context_hat, return_permutation=True, method="spearman"
+        )
         print(f"Epoch {epoch}, mcc: {mcc}")
 
         os.makedirs("img", exist_ok=True)
@@ -200,7 +229,9 @@ def inn_world_model(
             num_rows = math.ceil(len(idxes_gt) / num_cols)
             fig, axs = plt.subplots(num_rows, num_cols, figsize=(10, 10))
 
-            for i, (idx_gt, idx_hat, name) in enumerate(zip(idxes_gt, idxes_hat, context_dict.keys())):
+            for i, (idx_gt, idx_hat, name) in enumerate(
+                zip(idxes_gt, idxes_hat, context_dict.keys())
+            ):
                 ax = axs.flatten()[i]
                 ax.set(xticks=[], yticks=[], xlabel=name)
                 ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat])
@@ -224,7 +255,9 @@ def mlp(
     if not torch.cuda.is_available():
         device = "cpu"
 
-    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(env_name=env_name, task_num=task_num, sample_num=sample_num)
+    obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(
+        env_name=env_name, task_num=task_num, sample_num=sample_num
+    )
     context = nn.Parameter(torch.zeros(task_num, context_dim), requires_grad=True)
 
     model = nn.Sequential(
@@ -244,7 +277,12 @@ def mlp(
         losses = []
 
         for obs, action, next_obs, idx in dataloader:
-            obs, action, next_obs, idx = obs.to(device), action.to(device), next_obs.to(device), idx.to(device)
+            obs, action, next_obs, idx = (
+                obs.to(device),
+                action.to(device),
+                next_obs.to(device),
+                idx.to(device),
+            )
             model.zero_grad()
 
             pred_next_obs = model(torch.cat([obs, action, context[idx[:, 0]]], dim=-1))

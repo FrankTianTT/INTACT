@@ -1,14 +1,14 @@
+from dataclasses import dataclass
 from functools import partial
 from warnings import catch_warnings, filterwarnings
-from dataclasses import dataclass
 
-from omegaconf import DictConfig
-from tqdm import tqdm
 import torch
+from omegaconf import DictConfig
 from tensordict.nn.probabilistic import set_interaction_mode
-from torchrl.envs.utils import step_mdp
 from torchrl.envs import TransformedEnv, SerialEnv
+from torchrl.envs.utils import step_mdp
 from torchrl.record import VideoRecorder
+from tqdm import tqdm
 
 from intact.utils.envs import build_make_env_list, make_mdp_env
 
@@ -23,6 +23,19 @@ def evaluate_policy(
     log_prefix="meta_train",
     disable_pixel_if_possible=True,
 ):
+    """Evaluate policy.
+
+    Args:
+        cfg: Configuration.
+        oracle_context: Oracle context.
+        policy: Policy.
+        logger: Logger.
+        log_idx: Log index.
+        make_env_fn: Make environment function.
+        log_prefix: Log prefix.
+        disable_pixel_if_possible: Disable pixel if possible.
+
+    """
     if hasattr(policy, "parameters"):
         device = next(policy.parameters()).device
     else:
@@ -71,8 +84,12 @@ def evaluate_policy(
             eval_env.transform.dump(suffix=str(log_idx))
 
     if logger is not None:
-        logger.add_scaler("{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean())
-        logger.add_scaler("{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean())
+        logger.add_scaler(
+            "{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean()
+        )
+        logger.add_scaler(
+            "{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean()
+        )
         logger.dump_scaler(log_idx)
 
     return torch.stack(repeat_rewards)

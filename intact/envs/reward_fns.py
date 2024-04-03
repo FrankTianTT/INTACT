@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import torch
 
-from intact.envs import termination_fns
-
 
 def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
     return torch.ones(*next_obs.shape[:-1], 1).to(next_obs.device)

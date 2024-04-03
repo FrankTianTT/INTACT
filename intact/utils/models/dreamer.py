@@ -2,24 +2,28 @@ from dataclasses import dataclass
 from functools import partial
 
 import torch
+from tensordict.nn.probabilistic import InteractionType
 from torch import nn
-from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.common import EnvBase
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeModule
-from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
-from torchrl.modules.models.models import MLP
-from torchrl.trainers.helpers.models import _dreamer_make_mbenv
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.modules import SafeProbabilisticTensorDictSequential, SafeProbabilisticModule, SafeSequential
-from tensordict.nn.probabilistic import InteractionType
-from torchrl.modules.distributions import TanhNormal, TruncatedNormal
-from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.dreamer import DreamerEnv
+from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules import SafeModule
+from torchrl.modules import (
+    SafeProbabilisticTensorDictSequential,
+    SafeProbabilisticModule,
+    SafeSequential,
+)
+from torchrl.modules.distributions import TanhNormal, TruncatedNormal
+from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
+from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.world_models import DreamerWrapper as OriginalDreamerWrapper
+from torchrl.trainers.helpers.models import _dreamer_make_mbenv
 
 from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
 from intact.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
@@ -36,6 +40,16 @@ def make_dreamer(
     value_key: str = "state_value",
     use_decoder_in_env: bool = True,
 ):
+    """Make Dreamer model.
+
+    Args:
+        cfg: Configuration.
+        proof_environment: Proof environment.
+        device: Device.
+        action_key: Action key.
+        value_key: Value key.
+        use_decoder_in_env: Use decoder in environment.
+    """
     # Modules
     obs_encoder = ObsEncoder()
     obs_decoder = ObsDecoder()
@@ -70,7 +84,9 @@ def make_dreamer(
     reward_module = MLP(out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU)
 
     if cfg.pred_continue:
-        continue_module = MLP(out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU)
+        continue_module = MLP(
+            out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU
+        )
     else:
         continue_module = None
 
@@ -129,7 +145,9 @@ def make_dreamer(
     return world_model, model_based_env, actor_simulator, value_model, actor_realworld
 
 
-def _dreamer_make_world_model(obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module):
+def _dreamer_make_world_model(
+    obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module
+):
     # World Model and reward model
     rssm_rollout = RSSMRollout(
         SafeModule(
@@ -250,7 +268,9 @@ def _dreamer_make_mbenv(
         "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
-    model_based_env.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
+    model_based_env.append_transform(
+        TensorDictPrimer(random=False, default_value=0, **default_dict)
+    )
     return model_based_env
 
 
@@ -278,15 +298,25 @@ def _dreamer_make_actors(
     )
     actor_module.set_context_model(context_model)
 
-    actor_simulator = _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type)
+    actor_simulator = _dreamer_make_actor_sim(
+        action_key, proof_environment, actor_module, actor_dist_type
+    )
     actor_realworld = _dreamer_make_actor_real(
-        obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment, actor_dist_type
+        obs_encoder,
+        rssm_prior,
+        rssm_posterior,
+        actor_module,
+        action_key,
+        proof_environment,
+        actor_dist_type,
     )
     return actor_simulator, actor_realworld
 
 
 def _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type):
-    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[actor_dist_type]
+    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[
+        actor_dist_type
+    ]
     actor_simulator = SafeProbabilisticTensorDictSequential(
         SafeModule(
             actor_module,
@@ -318,9 +348,17 @@ def _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_d
 
 
 def _dreamer_make_actor_real(
-    obs_encoder, rssm_prior, rssm_posterior, actor_module, action_key, proof_environment, actor_dist_type
+    obs_encoder,
+    rssm_prior,
+    rssm_posterior,
+    actor_module,
+    action_key,
+    proof_environment,
+    actor_dist_type,
 ):
-    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[actor_dist_type]
+    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[
+        actor_dist_type
+    ]
     # actor for real world: interacts with states ~ posterior
     # Out actor differs from the original paper where first they compute prior and posterior and then act on it
     # but we found that this approach worked better.

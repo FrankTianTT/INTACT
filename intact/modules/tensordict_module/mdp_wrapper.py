@@ -1,9 +1,5 @@
-from typing import Any
-from copy import deepcopy
-
-import torch
+from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
-from tensordict import TensorDict, TensorDictBase
 
 from intact.modules.models.base_world_model import BaseWorldModel
 from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
@@ -70,7 +66,13 @@ class MDPWrapper(TensorDictModule):
     def inv_forward(self, tensordict):
         assert self.model_type == "inn"
 
-        in_keys = ["observation", "action", ("next", "observation"), ("next", "reward"), ("next", "terminated")]
+        in_keys = [
+            "observation",
+            "action",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "terminated"),
+        ]
         out_keys = ["inv_context", "inv_log_jac_det"]
         tensors = tuple(tensordict.get(in_key, None) for in_key in in_keys)
         tensors = self.world_model.inv_forward(*tensors)

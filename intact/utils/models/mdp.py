@@ -1,32 +1,22 @@
 from dataclasses import dataclass
 from functools import partial
 
-import torch
-from torch import nn
-from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.common import EnvBase
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeModule
-from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior
-from torchrl.modules.models.models import MLP
-from torchrl.trainers.helpers.models import _dreamer_make_mbenv, _dreamer_make_value_model, _dreamer_make_actors
-from torchrl.modules.models.model_based import RSSMRollout
+from tensordict.nn.probabilistic import InteractionType
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.common import EnvBase
+from torchrl.modules import SafeModule
 from torchrl.modules import SafeProbabilisticTensorDictSequential, SafeProbabilisticModule
-from tensordict.nn.probabilistic import InteractionType
 from torchrl.modules.distributions import TanhNormal
 
-from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
-from intact.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
+from intact.envs.mdp_env import MDPEnv
 from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
 from intact.modules.models.policy.actor import Actor
 from intact.modules.models.policy.critic import Critic
-from intact.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
 from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
-from intact.envs.mdp_env import MDPEnv
 
 
 def make_mdp_model(
@@ -34,6 +24,13 @@ def make_mdp_model(
     proof_env: EnvBase,
     device: DEVICE_TYPING = "cpu",
 ):
+    """Make MDP model.
+
+    Args:
+        cfg: Configuration.
+        proof_env: Proof environment.
+        device: Device.
+    """
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
@@ -55,7 +52,9 @@ def make_mdp_model(
     )
     world_model = MDPWrapper(world_model).to(device)
 
-    model_based_env = MDPEnv(world_model, termination_fns=cfg.termination_fns, reward_fns=cfg.reward_fns).to(device)
+    model_based_env = MDPEnv(
+        world_model, termination_fns=cfg.termination_fns, reward_fns=cfg.reward_fns
+    ).to(device)
     model_based_env.set_specs_from_env(proof_env)
 
     return world_model, model_based_env

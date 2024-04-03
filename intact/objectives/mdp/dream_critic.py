@@ -2,27 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
-
-from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_WARNING,
-    default_value_kwargs,
-    distance_loss,
-    hold_out_net,
-    ValueEstimators,
-)
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.utils import distance_loss
 
 
 class DreamCriticLoss(LossModule):

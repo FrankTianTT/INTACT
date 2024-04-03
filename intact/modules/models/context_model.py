@@ -57,7 +57,9 @@ class ContextModel(nn.Module):
         else:
             context_hat = torch.zeros_like(self._context_hat).to(self.device)
             context_hat[:, self.fixed_idx] += self._context_hat.detach()[:, self.fixed_idx]
-            unfixed_idx = ~torch.isin(torch.arange(self.max_context_dim).to(self.device), self.fixed_idx)
+            unfixed_idx = ~torch.isin(
+                torch.arange(self.max_context_dim).to(self.device), self.fixed_idx
+            )
             context_hat[:, unfixed_idx] += self._context_hat[:, unfixed_idx]
         return torch.clamp(context_hat, -self.context_clip, self.context_clip)
 
@@ -99,7 +101,9 @@ class ContextModel(nn.Module):
         else:
             context_hat = self.context_hat[:, valid_idx].detach().cpu().numpy()
 
-        mcc, permutation = mean_corr_coef(context_hat, context_gt, return_permutation=True, method=method)
+        mcc, permutation = mean_corr_coef(
+            context_hat, context_gt, return_permutation=True, method=method
+        )
 
         if return_permutation:
             return mcc, permutation, context_hat

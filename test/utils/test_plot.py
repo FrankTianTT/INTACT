@@ -44,4 +44,10 @@ def test_plot_context2():
     world_model, model_based_env = make_mdp_model(config, env)
 
     log_prefix = os.path.join(tmp_dir, "test_plot_context2")
-    plot_context(config, world_model, oracle_context, log_prefix=log_prefix, color_values=np.random.randn(task_num))
+    plot_context(
+        config,
+        world_model,
+        oracle_context,
+        log_prefix=log_prefix,
+        color_values=np.random.randn(task_num),
+    )

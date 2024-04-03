@@ -37,7 +37,9 @@ def main(cfg):
     logger = build_logger(cfg, name="dreamer_mdp")
 
     make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
-    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
+    train_make_env_list, train_oracle_context = create_make_env_list(
+        cfg, make_env, mode="meta_train"
+    )
     test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
@@ -52,9 +54,13 @@ def main(cfg):
     else:
         reward_normalizer = None
 
-    world_model_loss, actor_loss, critic_loss = build_loss(cfg, world_model, model_based_env, actor, critic)
+    world_model_loss, actor_loss, critic_loss = build_loss(
+        cfg, world_model, model_based_env, actor, critic
+    )
 
-    explore_policy = AdditiveGaussianWrapper(actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec)
+    explore_policy = AdditiveGaussianWrapper(
+        actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec
+    )
     del proof_env
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
@@ -80,19 +86,29 @@ def main(cfg):
 
     # optimizers
     world_model_opt = torch.optim.Adam(
-        world_model.get_parameter("nets"), lr=cfg.world_model_lr, weight_decay=cfg.world_model_weight_decay
+        world_model.get_parameter("nets"),
+        lr=cfg.world_model_lr,
+        weight_decay=cfg.world_model_weight_decay,
     )
-    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
+    world_model_opt.add_param_group(
+        dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
+    )
     if cfg.model_type == "causal" and cfg.use_reinforce:
-        logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
-        logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
+        logits_opt = torch.optim.Adam(
+            world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr
+        )
+        logits_opt.add_param_group(
+            dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        )
     else:
         logits_opt = None
         if cfg.model_type == "causal":
             world_model_opt.add_param_group(
                 dict(params=world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
             )
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
+            world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+            )
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=cfg.actor_lr)
     critic_opt = torch.optim.Adam(critic.parameters(), lr=cfg.critic_lr)

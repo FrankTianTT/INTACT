@@ -252,7 +252,10 @@ def main(cfg):
         with_replacement_data_buffer.extend(tensordict.cpu())
         imagination_horizon = imagination_horizon_planner(i)
         model_buffer._storage.set_max_size(
-            imagination_horizon * cfg.num_model_rollouts * cfg.optim_steps_per_batch * cfg.keep_model_samples_n_collect_steps
+            imagination_horizon
+            * cfg.num_model_rollouts
+            * cfg.optim_steps_per_batch
+            * cfg.keep_model_samples_n_collect_steps
         )
 
         if collected_frames >= cfg.init_random_frames:
@@ -262,7 +265,9 @@ def main(cfg):
                 # Sample data from model and buffer it
                 if j % cfg.train_model_every_k_optim_step == 0:
                     world_model_train_losses = []
-                    without_replacement_data_buffer._sampler.reset(without_replacement_data_buffer._storage)
+                    without_replacement_data_buffer._sampler.reset(
+                        without_replacement_data_buffer._storage
+                    )
                     num_model_steps = len(without_replacement_data_buffer) // cfg.model_batch_size
                     num_model_train_steps = int(num_model_steps * cfg.model_holdout_ratio)
                     num_model_test_steps = num_model_steps - num_model_train_steps
@@ -286,7 +291,9 @@ def main(cfg):
                     world_model_train_losses = torch.stack(world_model_train_losses, dim=0)
                     loss_world_model_train = world_model_train_losses["loss_world_model"].mean()
 
-                    per_network_world_model_loss_train = world_model_train_losses["per_network_world_model_loss"].mean(dim=0)
+                    per_network_world_model_loss_train = world_model_train_losses[
+                        "per_network_world_model_loss"
+                    ].mean(dim=0)
 
                     if j == 0:
                         logger.log_scalar(
@@ -316,7 +323,9 @@ def main(cfg):
 
                         world_model_test_losses = torch.stack(world_model_test_losses, dim=0)
                         loss_world_model_test = world_model_test_losses["loss_world_model"].mean()
-                        per_network_world_model_loss_test = world_model_test_losses["per_network_world_model_loss"].mean(dim=0)
+                        per_network_world_model_loss_test = world_model_test_losses[
+                            "per_network_world_model_loss"
+                        ].mean(dim=0)
 
                         if j == 0:
                             logger.log_scalar(
@@ -450,7 +459,9 @@ class ImaginationStepsPlanner:
         else:
             return int(
                 self.start_horizon
-                + (epoch - self.start_epoch) * (self.end_horizon - self.start_horizon) / (self.end_epoch - self.start_epoch)
+                + (epoch - self.start_epoch)
+                * (self.end_horizon - self.start_horizon)
+                / (self.end_epoch - self.start_epoch)
             )
 
 

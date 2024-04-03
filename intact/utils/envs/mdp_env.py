@@ -1,16 +1,36 @@
-from functools import partial
-
-import torch
-import gym
-from tensordict import TensorDict
-from omegaconf import DictConfig
+from torchrl.envs.libs import GymEnv
 from torchrl.envs.transforms import TransformedEnv, Compose, RewardSum, DoubleToFloat, StepCounter
-from torchrl.envs.libs import GymWrapper, DMControlWrapper, GymEnv
-
 from intact.envs.meta_transform import MetaIdxTransform
 
 
-def make_mdp_env(env_name, env_kwargs=None, idx=None, task_num=None, pixel=False, env_library="gym", max_steps=1000):
+def make_mdp_env(
+    env_name,
+    env_kwargs=None,
+    idx=None,
+    task_num=None,
+    pixel=False,
+    env_library="gym",
+    max_steps=1000,
+):
+    """
+    Function to create a Markov Decision Process (MDP) environment.
+
+    Args:
+        env_name (str): The name of the environment to be created.
+        env_kwargs (dict, optional): Additional keyword arguments for the environment. Defaults to None.
+        idx (int, optional): Index for the MetaIdxTransform. Defaults to None.
+        task_num (int, optional): Task number for the MetaIdxTransform. Defaults to None.
+        pixel (bool, optional): If True, the environment will be created from pixels. Defaults to False.
+        env_library (str, optional): The library to use for creating the environment. Defaults to "gym".
+        max_steps (int, optional): The maximum number of steps for the environment. Defaults to 1000.
+
+    Raises:
+        NotImplementedError: If the environment library is "dm_control", as this is not currently implemented.
+        ValueError: If the environment library is not recognized.
+
+    Returns:
+        TransformedEnv: The created MDP environment, with applied transformations.
+    """
     if env_kwargs is None:
         env_kwargs = {}
     if pixel:

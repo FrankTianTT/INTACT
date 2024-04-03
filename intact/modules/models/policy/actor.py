@@ -2,8 +2,8 @@ from typing import Optional
 
 import torch
 from torch import nn
-from torchrl.modules.models.models import MLP
 from torchrl.modules.distributions import NormalParamWrapper
+from torchrl.modules.models.models import MLP
 
 from intact.modules.models.context_model import ContextModel
 

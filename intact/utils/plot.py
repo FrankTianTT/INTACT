@@ -1,14 +1,16 @@
-import os
 import math
+import os
 
-import torch
 import numpy as np
-from matplotlib import pyplot as plt
-from matplotlib import colors as mcolors
+import torch
 from matplotlib import cm
+from matplotlib import colors as mcolors
+from matplotlib import pyplot as plt
 
 
-def plot_context(cfg, world_model, oracle_context, logger=None, log_idx=0, log_prefix="model", color_values=None):
+def plot_context(
+    cfg, world_model, oracle_context, logger=None, log_idx=0, log_prefix="model", color_values=None
+):
     context_model = world_model.context_model
     context_gt = torch.stack([v for v in oracle_context.values()], dim=-1).cpu()
 
@@ -29,7 +31,9 @@ def plot_context(cfg, world_model, oracle_context, logger=None, log_idx=0, log_p
     if len(idxes_gt) == 0:
         pass
     elif len(idxes_gt) == 1:
-        plt.scatter(context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]], c=color_values, cmap=cmap)
+        plt.scatter(
+            context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]], c=color_values, cmap=cmap
+        )
     else:
         num_rows = math.ceil(math.sqrt(len(idxes_gt)))
         num_cols = math.ceil(len(idxes_gt) / num_rows)
@@ -39,8 +43,13 @@ def plot_context(cfg, world_model, oracle_context, logger=None, log_idx=0, log_p
         scatters = []
         for j, (idx_gt, idx_hat) in enumerate(zip(idxes_gt, idxes_hat)):
             ax = axs.flatten()[j]
-            ax.set(xlabel=context_names[idx_gt], ylabel="{}th context".format(valid_context_idx[idx_hat]))
-            scatter = ax.scatter(context_gt[:, idx_gt], context_hat[:, idx_hat], c=color_values, cmap=cmap)
+            ax.set(
+                xlabel=context_names[idx_gt],
+                ylabel="{}th context".format(valid_context_idx[idx_hat]),
+            )
+            scatter = ax.scatter(
+                context_gt[:, idx_gt], context_hat[:, idx_hat], c=color_values, cmap=cmap
+            )
             scatters.append(scatter)
 
         for j in range(len(idxes_gt), len(axs.flat)):

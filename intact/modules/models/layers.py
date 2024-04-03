@@ -1,8 +1,7 @@
 import math
-from typing import List, Optional, Tuple
 from itertools import product
+from typing import List, Optional
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -46,7 +45,9 @@ class ParallelLinear(nn.Module):
         self.out_features = out_features
         self.extra_dims = [] if extra_dims is None else extra_dims
 
-        self.weight = nn.Parameter(torch.empty((*extra_dims, out_features, in_features), **factory_kwargs))
+        self.weight = nn.Parameter(
+            torch.empty((*extra_dims, out_features, in_features), **factory_kwargs)
+        )
         if bias:
             self.bias = nn.Parameter(torch.empty((*extra_dims, out_features), **factory_kwargs))
         else:
@@ -91,14 +92,22 @@ class ParallelGRUCell(nn.Module):
         self.hidden_size = hidden_size
         self.bias = bias
         self.extra_dims = [] if extra_dims is None else extra_dims
-        self.weight_ih = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size, self.input_size), **factory_kwargs))
+        self.weight_ih = nn.Parameter(
+            torch.empty((*self.extra_dims, 3 * self.hidden_size, self.input_size), **factory_kwargs)
+        )
         self.weight_hh = nn.Parameter(
-            torch.empty((*self.extra_dims, 3 * self.hidden_size, self.hidden_size), **factory_kwargs)
+            torch.empty(
+                (*self.extra_dims, 3 * self.hidden_size, self.hidden_size), **factory_kwargs
+            )
         )
 
         if bias:
-            self.bias_ih = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs))
-            self.bias_hh = nn.Parameter(torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs))
+            self.bias_ih = nn.Parameter(
+                torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs)
+            )
+            self.bias_hh = nn.Parameter(
+                torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs)
+            )
         else:
             self.register_parameter("bias_ih", None)
             self.register_parameter("bias_hh", None)
@@ -122,22 +131,28 @@ class ParallelGRUCell(nn.Module):
         accepted_dims = (1 + len(self.extra_dims), 2 + len(self.extra_dims))
         if input.dim() not in accepted_dims:
             raise ValueError(
-                f"GRUCell: Expected input to be {accepted_dims[0]}D or {accepted_dims[1]}D, " f"got {input.dim()}D instead"
+                f"GRUCell: Expected input to be {accepted_dims[0]}D or {accepted_dims[1]}D, "
+                f"got {input.dim()}D instead"
             )
         if hx is not None and hx.dim() not in accepted_dims:
             raise ValueError(
-                f"GRUCell: Expected hidden to be {accepted_dims[0]}D or {accepted_dims[1]}D, " f"got {hx.dim()}D instead"
+                f"GRUCell: Expected hidden to be {accepted_dims[0]}D or {accepted_dims[1]}D, "
+                f"got {hx.dim()}D instead"
             )
         is_batched = input.dim() == 2 + len(self.extra_dims)
         if not is_batched:
             input = input.unsqueeze(-2)
 
         if hx is None:
-            hx = torch.zeros(*input.shape[:-1], self.hidden_size, dtype=input.dtype, device=input.device)
+            hx = torch.zeros(
+                *input.shape[:-1], self.hidden_size, dtype=input.dtype, device=input.device
+            )
         else:
             hx = hx.unsqueeze(-2) if not is_batched else hx
 
-        ret = parallel_gru_cell(input, hx, self.weight_ih, self.weight_hh, self.bias_ih, self.bias_hh)
+        ret = parallel_gru_cell(
+            input, hx, self.weight_ih, self.weight_hh, self.bias_ih, self.bias_hh
+        )
 
         if not is_batched:
             ret = ret.squeeze(0)

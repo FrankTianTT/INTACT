@@ -1,9 +1,9 @@
 import torch
 from torch.nn import ModuleDict
 
-from intact.modules.utils import build_mlp
-from intact.modules.models.mdp_world_model.plain_wm import PlainMDPWorldModel
 from intact.modules.models.causal_mask import CausalMask
+from intact.modules.models.mdp_world_model.plain_wm import PlainMDPWorldModel
+from intact.modules.utils import build_mlp
 
 
 class CausalWorldModel(PlainMDPWorldModel):
@@ -112,7 +112,9 @@ class CausalWorldModel(PlainMDPWorldModel):
         inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
-        masked_inputs, mask = self.causal_mask(inputs.reshape(-1, dim), deterministic=deterministic_mask)
+        masked_inputs, mask = self.causal_mask(
+            inputs.reshape(-1, dim), deterministic=deterministic_mask
+        )
         # first_inputs = masked_inputs[:, :, :self.obs_dim + self.action_dim]
         # hidden = self.nets["para_mlp1"](first_inputs)
         #
@@ -121,5 +123,7 @@ class CausalWorldModel(PlainMDPWorldModel):
 
         mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
 
-        mask = mask.reshape(*batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim)
+        mask = mask.reshape(
+            *batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim
+        )
         return *self.get_outputs(mean, log_var, observation, batch_shape), mask

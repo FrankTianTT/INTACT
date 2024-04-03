@@ -73,17 +73,22 @@ class HeatingEnv(gym.Env):
 
         torch.manual_seed(self.seed)
         self.room_graph = generate_graph_cross_rooms(self.num_rooms, self.sparsity)
-        self.context_graph = generate_graph_between_room_and_context(self.num_rooms, self.context_dim, self.context_sparsity)
+        self.context_graph = generate_graph_between_room_and_context(
+            self.num_rooms, self.context_dim, self.context_sparsity
+        )
 
         self.masked_context = self.context_graph * self.contexts.expand(self.num_rooms, -1)
 
         self.inf_func = generate_influence_function(
-            num_rooms=self.num_rooms, context_dim=self.context_dim if self.context_influence_type == "neural" else 0
+            num_rooms=self.num_rooms,
+            context_dim=self.context_dim if self.context_influence_type == "neural" else 0,
         )
         self.influence = None
 
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=(num_rooms,), dtype=np.float32)
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(num_rooms,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(num_rooms,), dtype=np.float32
+        )
         self.temperature = np.random.uniform(0, 40, size=(num_rooms,))
 
     @property

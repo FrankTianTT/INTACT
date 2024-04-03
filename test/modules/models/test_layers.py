@@ -27,7 +27,9 @@ def test_parallel_gru_cell():
     extra_dims = [10]
     batch_size = 32
 
-    parallel_gru_cell = ParallelGRUCell(input_size=input_size, hidden_size=hidden_size, extra_dims=extra_dims, bias=True)
+    parallel_gru_cell = ParallelGRUCell(
+        input_size=input_size, hidden_size=hidden_size, extra_dims=extra_dims, bias=True
+    )
 
     inputs = torch.randn(*extra_dims, batch_size, input_size)
     hx = torch.randn(*extra_dims, batch_size, hidden_size)

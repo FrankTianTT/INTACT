@@ -69,7 +69,9 @@ def gen_meta_mdp_data(env_name="CartPoleContinuous-v0", task_num=100, sample_num
     def callback(env, tensor_dict):
         par.update(tensor_dict.numel())
 
-    td = env.rollout(sample_num // task_num, auto_reset=True, break_when_any_done=False, callback=callback)
+    td = env.rollout(
+        sample_num // task_num, auto_reset=True, break_when_any_done=False, callback=callback
+    )
 
     td = td.reshape(-1)
     idx = td["idx"]

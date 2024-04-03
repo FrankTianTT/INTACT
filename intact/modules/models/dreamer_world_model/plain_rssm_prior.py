@@ -4,8 +4,8 @@ import torch
 from torch import nn
 from torchrl.modules.distributions import NormalParamWrapper
 
-from intact.modules.utils import build_mlp
 from intact.modules.models.base_world_model import BaseWorldModel
+from intact.modules.utils import build_mlp
 
 
 class PlainRSSMPrior(BaseWorldModel):
@@ -64,12 +64,12 @@ class PlainRSSMPrior(BaseWorldModel):
         return self.belief_dim_per_variable * self.variable_num
 
     def build_nets(self):
-        action_state_to_middle_projector = build_mlp(
+        as2middle = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.total_belief_dim,
             last_activate_name="ELU",
         )
-        middle_to_prior_projector = NormalParamWrapper(
+        middle2s = NormalParamWrapper(
             build_mlp(
                 input_dim=self.total_belief_dim,
                 output_dim=self.total_state_dim * 2,
@@ -80,12 +80,7 @@ class PlainRSSMPrior(BaseWorldModel):
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        module_dict = nn.ModuleDict(
-            dict(
-                as2middle=action_state_to_middle_projector,
-                middle2s=middle_to_prior_projector,
-            )
-        )
+        module_dict = nn.ModuleDict(dict(as2middle=as2middle, middle2s=middle2s))
         if not self.disable_belief:
             rnn = nn.GRUCell(
                 input_size=self.total_belief_dim,

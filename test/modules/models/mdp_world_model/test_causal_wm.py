@@ -15,7 +15,14 @@ def test_causal_world_model_without_meta():
         observation = torch.randn(*batch_shape, obs_dim)
         action = torch.randn(*batch_shape, action_dim)
 
-        next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated, mask = world_model(observation, action)
+        (
+            next_obs_mean,
+            next_obs_log_var,
+            reward_mean,
+            reward_log_var,
+            terminated,
+            mask,
+        ) = world_model(observation, action)
 
         assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
         assert reward_mean.shape == terminated.shape == (*batch_shape, 1)
@@ -31,7 +38,11 @@ def test_causal_world_model_with_meta():
     env_num = 5
 
     world_model = CausalWorldModel(
-        obs_dim=obs_dim, action_dim=action_dim, meta=True, max_context_dim=max_context_dim, task_num=task_num
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        meta=True,
+        max_context_dim=max_context_dim,
+        task_num=task_num,
     )
 
     for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
@@ -39,7 +50,14 @@ def test_causal_world_model_with_meta():
         action = torch.randn(*batch_shape, action_dim)
         idx = torch.randint(0, task_num, (*batch_shape, 1))
 
-        next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated, mask = world_model(observation, action, idx)
+        (
+            next_obs_mean,
+            next_obs_log_var,
+            reward_mean,
+            reward_log_var,
+            terminated,
+            mask,
+        ) = world_model(observation, action, idx)
 
         assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
         assert reward_mean.shape == reward_log_var.shape == terminated.shape == (*batch_shape, 1)
@@ -53,6 +71,10 @@ def test_reset():
     task_num = 100
 
     world_model = CausalWorldModel(
-        obs_dim=obs_dim, action_dim=action_dim, meta=True, max_context_dim=max_context_dim, task_num=task_num
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        meta=True,
+        max_context_dim=max_context_dim,
+        task_num=task_num,
     )
     world_model.reset()

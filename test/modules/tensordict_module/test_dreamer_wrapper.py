@@ -41,7 +41,13 @@ def build_example_causal_dreamer_wrapper(meta=False):
         SafeModule(
             rssm_prior,
             in_keys=["state", "belief", "action"],
-            out_keys=[("next", "prior_mean"), ("next", "prior_std"), "_", ("next", "belief"), "causal_mask"],
+            out_keys=[
+                ("next", "prior_mean"),
+                ("next", "prior_std"),
+                "_",
+                ("next", "belief"),
+                "causal_mask",
+            ],
         ),
         SafeModule(
             rssm_posterior,
@@ -111,7 +117,9 @@ def get_example_data(meta=False):
             "next": {
                 "pixels": torch.randn(batch_size, batch_len, 3, 64, 64),
                 "state": torch.randn(batch_size, batch_len, variable_num * state_dim_per_variable),
-                "belief": torch.randn(batch_size, batch_len, variable_num * hidden_dim_per_variable),
+                "belief": torch.randn(
+                    batch_size, batch_len, variable_num * hidden_dim_per_variable
+                ),
             },
         },
         batch_size=(batch_size, batch_len),
@@ -136,7 +144,9 @@ def test_optimize():
     pred_continue = output_td.get(("next", "pred_continue"))
     terminated = torch.randint(0, 2, pred_continue.shape).bool()
 
-    continue_loss = binary_cross_entropy_with_logits(pred_continue, 1 - terminated.float(), reduction="mean")
+    continue_loss = binary_cross_entropy_with_logits(
+        pred_continue, 1 - terminated.float(), reduction="mean"
+    )
 
     continue_loss.backward()
 

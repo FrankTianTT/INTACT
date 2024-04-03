@@ -1,7 +1,7 @@
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
-from torchrl.envs import EnvBase, TransformedEnv
+from torchrl.envs import EnvBase
 from torchrl.envs.model_based import ModelBasedEnvBase
 
 from intact.envs import reward_fns_dict, termination_fns_dict
@@ -9,7 +9,13 @@ from intact.envs import reward_fns_dict, termination_fns_dict
 
 class MDPEnv(ModelBasedEnvBase):
     def __init__(
-        self, world_model: TensorDictModuleBase, device="cpu", dtype=None, batch_size=None, termination_fns="", reward_fns=""
+        self,
+        world_model: TensorDictModuleBase,
+        device="cpu",
+        dtype=None,
+        batch_size=None,
+        termination_fns="",
+        reward_fns="",
     ):
         """
         Args:
@@ -21,7 +27,9 @@ class MDPEnv(ModelBasedEnvBase):
             reward_fns (str, optional): the reward function to use. Defaults to "".
         """
         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
-        self.termination_fns = termination_fns_dict[termination_fns] if termination_fns != "" else None
+        self.termination_fns = (
+            termination_fns_dict[termination_fns] if termination_fns != "" else None
+        )
         self.reward_fns = reward_fns_dict[reward_fns] if reward_fns != "" else None
 
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
@@ -47,20 +55,28 @@ class MDPEnv(ModelBasedEnvBase):
         else:
             obs_std = torch.zeros_like(tensordict_out["obs_mean"])
             reward_std = torch.zeros_like(tensordict_out["reward_mean"])
-        tensordict_out["observation"] = tensordict_out["obs_mean"] + obs_std * torch.randn_like(obs_std)
+        tensordict_out["observation"] = tensordict_out["obs_mean"] + obs_std * torch.randn_like(
+            obs_std
+        )
 
         if self.termination_fns is None:
-            tensordict_out["terminated"] = tensordict_out["terminated"] > 0  # terminated from world-model are logits
+            tensordict_out["terminated"] = (
+                tensordict_out["terminated"] > 0
+            )  # terminated from world-model are logits
         else:
             tensordict_out["terminated"] = self.termination_fns(
                 tensordict["observation"], tensordict["action"], tensordict_out["observation"]
             )
 
         tensordict_out["truncated"] = torch.zeros_like(tensordict_out["truncated"]).bool()
-        tensordict_out["done"] = torch.logical_or(tensordict_out["terminated"], tensordict_out["truncated"])
+        tensordict_out["done"] = torch.logical_or(
+            tensordict_out["terminated"], tensordict_out["truncated"]
+        )
 
         if self.reward_fns is None:
-            tensordict_out["reward"] = tensordict_out["reward_mean"] + reward_std * torch.randn_like(reward_std)
+            tensordict_out["reward"] = tensordict_out[
+                "reward_mean"
+            ] + reward_std * torch.randn_like(reward_std)
         else:
             tensordict_out["reward"] = self.reward_fns(
                 tensordict["observation"], tensordict["action"], tensordict_out["observation"]

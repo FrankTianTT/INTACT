@@ -5,8 +5,8 @@
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.envs.utils import step_mdp
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import CEMPlanner
 
 
@@ -56,7 +56,9 @@ class MyCEMPlanner(CEMPlanner):
         )
         TIME_DIM = len(self.action_spec.shape) - 3
         K_DIM = len(self.action_spec.shape) - 4
-        expanded_original_tensordict = tensordict.unsqueeze(-1).expand(*batch_size, self.num_candidates).to_tensordict()
+        expanded_original_tensordict = (
+            tensordict.unsqueeze(-1).expand(*batch_size, self.num_candidates).to_tensordict()
+        )
         _action_means = torch.zeros(
             *action_stats_shape,
             device=tensordict.device,
@@ -88,20 +90,28 @@ class MyCEMPlanner(CEMPlanner):
             actions = self.env.action_spec.project(actions)
             optim_tensordict = container.get("tensordict").clone()
             policy = _PrecomputedActionsSequentialSetter(actions)
-            optim_tensordict = self.reward_truncated_rollout(policy=policy, tensordict=optim_tensordict)
+            optim_tensordict = self.reward_truncated_rollout(
+                policy=policy, tensordict=optim_tensordict
+            )
 
             sum_rewards = optim_tensordict.get(self.reward_key).sum(dim=TIME_DIM, keepdim=True)
             _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
             top_k = top_k.expand(action_topk_shape)
             best_actions = actions.gather(K_DIM, top_k)
-            self.update_stats(best_actions.mean(dim=K_DIM, keepdim=True), best_actions.std(dim=K_DIM, keepdim=True), container)
+            self.update_stats(
+                best_actions.mean(dim=K_DIM, keepdim=True),
+                best_actions.std(dim=K_DIM, keepdim=True),
+                container,
+            )
         action_means = container.get(("stats", "_action_means"))
         return action_means[..., 0, 0, :]
 
     def update_stats(self, means, stds, container):
         self.alpha = 0.1  # should in __init__
 
-        new_means = self.alpha * container.get(("stats", "_action_means")) + (1 - self.alpha) * means
+        new_means = (
+            self.alpha * container.get(("stats", "_action_means")) + (1 - self.alpha) * means
+        )
         new_stds = self.alpha * container.get(("stats", "_action_stds")) + (1 - self.alpha) * stds
         container.set_(("stats", "_action_means"), new_means)
         container.set_(("stats", "_action_stds"), new_stds)

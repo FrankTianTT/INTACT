@@ -1,14 +1,9 @@
-from functools import reduce
-from copy import deepcopy
-from abc import abstractmethod
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from intact.modules.utils import build_mlp
 from intact.modules.models.base_world_model import BaseWorldModel
+from intact.modules.utils import build_mlp
 
 
 class PlainMDPWorldModel(BaseWorldModel):

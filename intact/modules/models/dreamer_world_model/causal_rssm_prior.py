@@ -4,10 +4,10 @@ import torch
 from torch import nn
 from torchrl.modules.distributions import NormalParamWrapper
 
-from intact.modules.utils import build_mlp
-from intact.modules.models.layers import ParallelGRUCell
 from intact.modules.models.causal_mask import CausalMask
 from intact.modules.models.dreamer_world_model import PlainRSSMPrior
+from intact.modules.models.layers import ParallelGRUCell
+from intact.modules.utils import build_mlp
 
 
 class CausalRSSMPrior(PlainRSSMPrior):
@@ -78,7 +78,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
         mask_dim_list = []
         for i in range(self.variable_num):
             mask_dim_list.extend([i] * self.state_dim_per_variable)
-        mask_dim_list.extend(torch.arange(self.variable_num, self.causal_mask.mask_input_dim).tolist())
+        mask_dim_list.extend(
+            torch.arange(self.variable_num, self.causal_mask.mask_input_dim).tolist()
+        )
         self.mask_dim_map = torch.Tensor(mask_dim_list).long()
 
         if using_cross_belief:
@@ -90,13 +92,13 @@ class CausalRSSMPrior(PlainRSSMPrior):
             self.belief_mask_dim_map = None
 
     def build_nets(self):
-        action_state_to_middle_projector = build_mlp(
+        as2middle = build_mlp(
             input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
             output_dim=self.belief_dim_per_variable,
             extra_dims=[self.variable_num],
             last_activate_name="ELU",
         )
-        middle_to_prior_projector = NormalParamWrapper(
+        middle2s = NormalParamWrapper(
             build_mlp(
                 input_dim=self.belief_dim_per_variable,
                 output_dim=self.state_dim_per_variable * 2,
@@ -108,12 +110,7 @@ class CausalRSSMPrior(PlainRSSMPrior):
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        module_dict = nn.ModuleDict(
-            dict(
-                as2middle=action_state_to_middle_projector,
-                middle2s=middle_to_prior_projector,
-            )
-        )
+        module_dict = nn.ModuleDict(dict(as2middle=as2middle, middle2s=middle2s))
         if not self.disable_belief:
             rnn = ParallelGRUCell(
                 input_size=self.belief_dim_per_variable,
@@ -126,9 +123,6 @@ class CausalRSSMPrior(PlainRSSMPrior):
                     input_dim=self.total_belief_dim,
                     output_dim=self.belief_dim_per_variable,
                     extra_dims=[self.variable_num],
-                    # hidden_dims=[self.hidden_dim] * 2,
-                    # activate_name="ELU",
-                    # last_activate_name="ELU",
                 )
                 module_dict["b2b"] = cross_belief_projector
 
@@ -166,7 +160,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
                 )  # (variable_num, prod(batch_size), belief_dim_per_variable)
                 input_belief = self.nets["b2b"](masked_belief)
             else:
-                reshaped_belief = belief.reshape(prod(batch_shape), self.variable_num, self.belief_dim_per_variable)
+                reshaped_belief = belief.reshape(
+                    prod(batch_shape), self.variable_num, self.belief_dim_per_variable
+                )
                 input_belief = reshaped_belief.permute(1, 0, 2)
             next_belief = self.nets["rnn"](middle, input_belief)
             prior_mean, prior_std = self.nets["middle2s"](next_belief)

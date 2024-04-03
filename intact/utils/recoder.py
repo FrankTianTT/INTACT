@@ -5,18 +5,11 @@
 
 from __future__ import annotations
 
-import abc
-import pathlib
-import warnings
-from collections import defaultdict, OrderedDict
-from copy import deepcopy
-from textwrap import indent
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch.nn
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import pad, TensorDictBase
+from tensordict.tensordict import TensorDictBase
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.trainers import Recorder as BaseRecorder
@@ -39,6 +32,22 @@ class Recorder(BaseRecorder):
         log_pbar: bool = False,
         recorder: EnvBase = None,
     ) -> None:
+        """Recorder for MDP environments.
+
+        Args:
+            record_interval:
+            env_max_steps:
+            eval_repeat_times:
+            frame_skip:
+            policy_exploration:
+            environment:
+            exploration_type:
+            log_keys:
+            out_keys:
+            suffix:
+            log_pbar:
+            recorder:
+        """
         self.env_max_steps = env_max_steps
         self.eval_repeat_times = eval_repeat_times
         super().__init__(
@@ -67,7 +76,7 @@ class Recorder(BaseRecorder):
                 self.environment.eval()
 
                 out = {"r_evaluation": 0, "total_r_evaluation": 0}
-                for i in range(self.eval_repeat_times):
+                for _ in range(self.eval_repeat_times):
                     td_record = self.environment.rollout(
                         policy=self.policy_exploration,
                         max_steps=self.env_max_steps,

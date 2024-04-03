@@ -1,6 +1,5 @@
 from typing import List, Optional, Union
 
-import torch
 from torch import nn
 
 from intact.modules.models.layers import ParallelLinear
@@ -60,7 +59,14 @@ def build_mlp(
         if extra_dims is None:
             layers += [nn.Linear(in_features=all_dims[i], out_features=all_dims[i + 1], bias=bias)]
         else:
-            layers += [ParallelLinear(in_features=all_dims[i], out_features=all_dims[i + 1], extra_dims=extra_dims, bias=bias)]
+            layers += [
+                ParallelLinear(
+                    in_features=all_dims[i],
+                    out_features=all_dims[i + 1],
+                    extra_dims=extra_dims,
+                    bias=bias,
+                )
+            ]
         if batch_norm:
             layers += [nn.BatchNorm1d(all_dims[i + 1])]
         if drop_out is not None:

@@ -1,7 +1,9 @@
 import os
 import tempfile
 
-from intact.record.logger import CSVLogger, TensorboardLogger, MultipleLoggerWrapper, MeanScalarWrapper
+from torchrl.record.loggers import CSVLogger, TensorboardLogger
+
+from intact.record.logger import MultipleLoggerWrapper, MeanScalarWrapper
 
 tmp_dir = tempfile.gettempdir()
 

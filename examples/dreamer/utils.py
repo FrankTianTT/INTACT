@@ -52,7 +52,9 @@ def train_model(
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.using_reinforce
     if train_logits_by_reinforce:
-        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
+        assert (
+            logits_opt is not None
+        ), "logits_opt should not be None when train logits by reinforce"
 
     if cfg.model_type == "causal":
         causal_mask = world_model.causal_mask
@@ -68,7 +70,10 @@ def train_model(
         if reward_normalizer:
             reward_normalizer.normalize_reward(sampled_tensordict)
 
-        if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+        if (
+            train_logits_by_reinforce
+            and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
+        ):
             grad, sampling_loss = world_model_loss.reinforce_forward(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
@@ -96,7 +101,9 @@ def train_model(
                     in_name = f"i{in_dim}"
                 else:
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.add_scaler(f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim])
+                logger.add_scaler(
+                    f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim]
+                )
 
         iters += 1
     return iters
@@ -143,7 +150,10 @@ def train_agent(
         logger.add_scaler("value/grad", grad_norm(value_opt))
         logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
         logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
-        logger.add_scaler("value/mean_continue", (sampled_tensordict[("next", "pred_continue")] > 0).float().mean())
+        logger.add_scaler(
+            "value/mean_continue",
+            (sampled_tensordict[("next", "pred_continue")] > 0).float().mean(),
+        )
         value_opt.zero_grad()
 
 
@@ -160,7 +170,16 @@ def reset_module(policy, world_model, new_domain_task_num):
     return new_policy, new_world_model
 
 
-def meta_test(cfg, make_env_list, oracle_context, policy, world_model, logger, frames_per_task, adapt_threshold=-3.0):
+def meta_test(
+    cfg,
+    make_env_list,
+    oracle_context,
+    policy,
+    world_model,
+    logger,
+    frames_per_task,
+    adapt_threshold=-3.0,
+):
     logger.dump_scaler(frames_per_task)
 
     task_num = len(make_env_list)
@@ -218,7 +237,14 @@ def meta_test(cfg, make_env_list, oracle_context, policy, world_model, logger, f
             log_prefix=f"meta_test_model_{frames_per_task}",
         )
 
-        plot_context(cfg, world_model, oracle_context, logger, frame, log_prefix=f"meta_test_model_{frames_per_task}")
+        plot_context(
+            cfg,
+            world_model,
+            oracle_context,
+            logger,
+            frame,
+            log_prefix=f"meta_test_model_{frames_per_task}",
+        )
         logger.dump_scaler(frame)
 
     evaluate_policy(

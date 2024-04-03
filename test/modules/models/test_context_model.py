@@ -29,7 +29,9 @@ def test_fix():
     max_context_dim = 2
     task_num = 5
 
-    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num).to(device)
+    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num).to(
+        device
+    )
     context_model.set_context(torch.ones_like(context_model.context_hat) * 0.25)
     context_model.fix([1])
     optim = SGD(context_model.parameters(), lr=0.1)

@@ -2,24 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
-import math
+from typing import Tuple
 
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
-
-from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
-    distance_loss,
     hold_out_net,
     ValueEstimators,
 )
@@ -126,7 +122,11 @@ class DreamActorLoss(LossModule):
             discount = (1.0 - terminated.float()) * gamma
             # discount = gamma.expand(lambda_target.shape).clone()
             discount = torch.cat(
-                [torch.ones_like(discount[..., :1, :]).to(tensordict.device), discount[..., :-1, :] * gamma], dim=-2
+                [
+                    torch.ones_like(discount[..., :1, :]).to(tensordict.device),
+                    discount[..., :-1, :] * gamma,
+                ],
+                dim=-2,
             )
             discount = discount.cumprod(dim=-2)
             fake_data.set("discount", discount)
@@ -137,7 +137,9 @@ class DreamActorLoss(LossModule):
         loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
         return loss_tensordict, fake_data.detach()
 
-    def lambda_target(self, reward: torch.Tensor, value: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
+    def lambda_target(
+        self, reward: torch.Tensor, value: torch.Tensor, terminated: torch.Tensor
+    ) -> torch.Tensor:
         done = terminated.clone()
         input_tensordict = TensorDict(
             {
@@ -172,7 +174,9 @@ class DreamActorLoss(LossModule):
         elif value_type is ValueEstimators.GAE:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda
-            raise NotImplementedError(f"Value type {value_type} it not implemented for loss {type(self)}.")
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         elif value_type is ValueEstimators.TDLambda:
             if hasattr(self, "lmbda"):
                 hp["lmbda"] = self.lmbda

@@ -11,7 +11,10 @@ def test_causal_mask_reinforce():
     batch_size = 5
 
     causal_mask = CausalMask(
-        observed_input_dim=observed_input_dim, context_input_dim=context_input_dim, mask_output_dim=mask_output_dim, meta=True
+        observed_input_dim=observed_input_dim,
+        context_input_dim=context_input_dim,
+        mask_output_dim=mask_output_dim,
+        meta=True,
     )
 
     inputs = torch.randn(batch_size, real_input_dim)

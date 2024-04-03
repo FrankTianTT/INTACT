@@ -1,7 +1,7 @@
 import numpy as np
+from causallearn.utils.KCI.KCI import KCI_UInd
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import spearmanr
-from causallearn.utils.KCI.KCI import KCI_UInd
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.metrics import r2_score
 

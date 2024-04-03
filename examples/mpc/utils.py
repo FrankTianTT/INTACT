@@ -62,12 +62,17 @@ def train_model(
 
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
-        if train_logits_by_reinforce and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters:
+        if (
+            train_logits_by_reinforce
+            and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
+        ):
             grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
             logits_opt.step()
         else:
-            loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
+            loss_td, total_loss = world_model_loss(
+                sampled_tensordict, deterministic_mask, only_train
+            )
             # context_penalty = (world_model.context_model.context_hat ** 2).sum()
             # total_loss += context_penalty * 0.1
             total_loss.backward()
@@ -75,12 +80,16 @@ def train_model(
 
             if logger is not None:
                 for dim in range(loss_td["transition_loss"].shape[-1]):
-                    logger.add_scaler(f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean())
+                    logger.add_scaler(
+                        f"{log_prefix}/obs_{dim}", loss_td["transition_loss"][..., dim].mean()
+                    )
                 logger.add_scaler(f"{log_prefix}/all_obs_mean", loss_td["transition_loss"].mean())
                 logger.add_scaler(f"{log_prefix}/reward", loss_td["reward_loss"].mean())
                 logger.add_scaler(f"{log_prefix}/terminated", loss_td["terminated_loss"].mean())
                 if "mutual_info_loss" in loss_td.keys():
-                    logger.add_scaler(f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean())
+                    logger.add_scaler(
+                        f"{log_prefix}/mutual_info_loss", loss_td["mutual_info_loss"].mean()
+                    )
                 if "context_loss" in loss_td.keys():
                     logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
@@ -92,7 +101,9 @@ def train_model(
                     in_name = f"i{in_dim}"
                 else:
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
-                logger.add_scaler(f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim])
+                logger.add_scaler(
+                    f"{log_prefix}/mask_value({out_name},{in_name})", mask_value[out_dim, in_dim]
+                )
 
         iters += 1
     return iters
@@ -153,14 +164,23 @@ def meta_test(cfg, make_env_list, oracle_context, policy, logger, log_idx, adapt
             log_prefix=f"meta_test_model_{log_idx}",
             deterministic_mask=True,
         )
-        plot_context(cfg, world_model, oracle_context, logger, collected_frames, log_prefix=f"meta_test_model_{log_idx}")
+        plot_context(
+            cfg,
+            world_model,
+            oracle_context,
+            logger,
+            collected_frames,
+            log_prefix=f"meta_test_model_{log_idx}",
+        )
         logger.dump_scaler(collected_frames)
     pbar.close()
     collector.shutdown()
 
     if cfg.get("new_oracle_context", None):  # adapt to target domain, only for transition
         with torch.no_grad():
-            sampled_tensordict = replay_buffer.sample(len(replay_buffer)).to(device, non_blocking=True)
+            sampled_tensordict = replay_buffer.sample(len(replay_buffer)).to(
+                device, non_blocking=True
+            )
             loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=True)
         mean_transition_loss = loss_td["transition_loss"].mean(0)
         adapt_idx = torch.where(mean_transition_loss > adapt_threshold)[0].tolist()
@@ -170,15 +190,23 @@ def meta_test(cfg, make_env_list, oracle_context, policy, logger, log_idx, adapt
             world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
 
-        new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
-        new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr))
+        new_world_model_opt = torch.optim.Adam(
+            world_model.get_parameter("context"), lr=cfg.context_lr
+        )
+        new_world_model_opt.add_param_group(
+            dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr)
+        )
         if world_model.model_type == "causal" and cfg.use_reinforce:
-            logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+            logits_opt = torch.optim.Adam(
+                world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr
+            )
         else:
             logits_opt = None
 
         train_model_iters = 0
-        for frame in tqdm(range(cfg.meta_test_frames, 3 * cfg.meta_test_frames, cfg.frames_per_batch)):
+        for frame in tqdm(
+            range(cfg.meta_test_frames, 3 * cfg.meta_test_frames, cfg.frames_per_batch)
+        ):
             train_model_iters = train_model(
                 cfg,
                 replay_buffer,
@@ -194,7 +222,12 @@ def meta_test(cfg, make_env_list, oracle_context, policy, logger, log_idx, adapt
                 deterministic_mask=False,
             )
             plot_context(
-                cfg, world_model, oracle_context, logger, frame + cfg.frames_per_batch, log_prefix=f"meta_test_model_{log_idx}"
+                cfg,
+                world_model,
+                oracle_context,
+                logger,
+                frame + cfg.frames_per_batch,
+                log_prefix=f"meta_test_model_{log_idx}",
             )
             logger.dump_scaler(frame + cfg.frames_per_batch)
             if cfg.model_type == "causal":

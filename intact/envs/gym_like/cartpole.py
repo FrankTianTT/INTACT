@@ -215,7 +215,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         super().reset(seed=seed)
         # Note that if you use custom reset bounds, it may lead to out-of-bound
         # state/observations.
-        low, high = utils.maybe_parse_reset_bounds(options, -0.05, 0.05)  # default low  # default high
+        low, high = utils.maybe_parse_reset_bounds(
+            options, -0.05, 0.05
+        )  # default low  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.steps_beyond_terminated = None
 
@@ -236,7 +238,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             import pygame
             from pygame import gfxdraw
         except ImportError:
-            raise DependencyNotInstalled("pygame is not installed, run `pip install gym[classic_control]`")
+            raise DependencyNotInstalled(
+                "pygame is not installed, run `pip install gym[classic_control]`"
+            )
 
         if self.screen is None:
             pygame.init()

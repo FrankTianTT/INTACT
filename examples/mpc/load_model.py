@@ -49,8 +49,12 @@ def main(path, load_frames, train_frames_per_task):
 
     logger = build_logger(cfg, log_dir=os.path.join(path, "load_model"))
 
-    train_oracle_context = torch.load(os.path.join(path, "train_oracle_context.pt"), map_location=device)
-    test_oracle_context = torch.load(os.path.join(path, "test_oracle_context.pt"), map_location=device)
+    train_oracle_context = torch.load(
+        os.path.join(path, "train_oracle_context.pt"), map_location=device
+    )
+    test_oracle_context = torch.load(
+        os.path.join(path, "test_oracle_context.pt"), map_location=device
+    )
     train_make_env_list = build_make_env_list(cfg, train_oracle_context)
     test_make_env_list = build_make_env_list(cfg, test_oracle_context)
 
@@ -58,7 +62,9 @@ def main(path, load_frames, train_frames_per_task):
 
     proof_env = train_make_env_list[0]()
     world_model, model_env = make_mdp_model(cfg, proof_env, device=device)
-    world_model.load_state_dict(torch.load(os.path.join(path, "world_model", f"{load_frames}.pt"), map_location=device))
+    world_model.load_state_dict(
+        torch.load(os.path.join(path, "world_model", f"{load_frames}.pt"), map_location=device)
+    )
 
     world_model_loss = CausalWorldModelLoss(
         world_model,

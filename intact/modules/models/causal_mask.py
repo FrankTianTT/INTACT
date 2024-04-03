@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.distributions import Bernoulli
+from torch.nn import functional as F
 
 
 def max_sigmoid_grad(logits):
@@ -43,6 +43,24 @@ class CausalMask(nn.Module):
         context_logits_init_scale=0.5,
         alpha=10.0,
     ):
+        """
+        Initialize the CausalMask.
+
+        Args:
+            observed_input_dim (int): The number of observed input dimensions.
+            mask_output_dim (int): The number of mask output dimensions.
+            using_reinforce (bool, optional): Whether to use REINFORCE for gradient estimation. Defaults to True.
+            latent (bool, optional): Whether to use latent variables. Defaults to False.
+            gumbel_softmax (bool, optional): Whether to use Gumbel-Softmax for relaxation. Defaults to False.
+            meta (bool, optional): Whether to use meta-learning. Defaults to False.
+            context_input_dim (int, optional): The number of context input dimensions. Defaults to 10.
+            logits_clip (float, optional): The value to clip the logits at. Defaults to 3.0.
+            observed_logits_init_bias (float, optional): The initial bias for the observed logits. Defaults to 0.3.
+            context_logits_init_bias (float, optional): The initial bias for the context logits. Defaults to 0.5.
+            observed_logits_init_scale (float, optional): The initial scale for the observed logits. Defaults to 0.05.
+            context_logits_init_scale (float, optional): The initial scale for the context logits. Defaults to 0.5.
+            alpha (float, optional): The temperature parameter for the sigmoid function. Defaults to 10.0.
+        """
         super().__init__()
 
         self.observed_input_dim = observed_input_dim
@@ -77,15 +95,39 @@ class CausalMask(nn.Module):
         )
 
     def extra_repr(self):
+        """
+        Return a string representation of the CausalMask.
+
+        Returns:
+            str: A string representation of the CausalMask.
+        """
         return "observed_input_dim={}, mask_output_dim={}, context_input_dim={}".format(
             self.observed_input_dim, self.mask_output_dim, self.context_input_dim
         )
 
     @property
     def mask_input_dim(self):
+        """
+        Get the total mask input dimension.
+
+        Returns:
+            int: The total mask input dimension.
+        """
         return self.observed_input_dim + self.context_input_dim
 
     def get_parameter(self, target: str):
+        """
+        Get the parameters of the specified target.
+
+        Args:
+            target (str): The target to get the parameters of.
+
+        Returns:
+            list: A list containing the parameters of the target.
+
+        Raises:
+            NotImplementedError: If the target is not recognized.
+        """
         if target == "observed_logits":
             return [self._observed_logits]
         elif target == "context_logits":
@@ -103,18 +145,42 @@ class CausalMask(nn.Module):
 
     @property
     def observed_logits(self):
+        """
+        Get the observed logits.
+
+        Returns:
+            Tensor: The observed logits.
+        """
         return torch.clamp(self._observed_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def context_logits(self):
+        """
+        Get the context logits.
+
+        Returns:
+           Tensor: The context logits.
+        """
         return torch.clamp(self._context_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def valid_context_idx(self):
+        """
+        Get the valid context indices.
+
+        Returns:
+            Tensor: The valid context indices.
+        """
         non_zero = self.mask[:, self.observed_input_dim :].any(dim=0)
         return torch.where(non_zero)[0]
 
     def reset(self, line_idx=None):
+        """
+        Reset the context logits.
+
+        Args:
+          line_idx (list, optional): The indices of the lines to reset. Defaults to None.
+        """
         if line_idx is None:
             line_idx = list(range(self.mask_output_dim))
 
@@ -126,17 +192,18 @@ class CausalMask(nn.Module):
         reset_matrix = line_matrix * column_matrix
 
         self._context_logits.data[reset_matrix] = get_init(
-            shape=(len(line_idx) * len(column_idx)), bias=self.context_logits_init_bias, scale=self.context_logits_init_scale
+            shape=(len(line_idx) * len(column_idx)),
+            bias=self.context_logits_init_bias,
+            scale=self.context_logits_init_scale,
         ).to(self._context_logits.device)
 
     def forward(self, inputs, dim_map=None, deterministic=False):
         assert len(inputs.shape) == 2, "inputs should be 2D tensor: batch_size x input_dim"
         batch_size, input_dim = inputs.shape
         if dim_map is None:
-            assert (
-                input_dim == self.mask_input_dim
-            ), "dimension of inputs should be equal to mask_input_dim if dim_map is None," "got {} and {} instead".format(
-                input_dim, self.mask_input_dim
+            assert input_dim == self.mask_input_dim, (
+                "dimension of inputs should be equal to mask_input_dim if dim_map is None,"
+                "got {} and {} instead".format(input_dim, self.mask_input_dim)
             )
 
         # shape: mask_output_dim * batch_size * input_dim
@@ -160,7 +227,12 @@ class CausalMask(nn.Module):
         return masked_inputs, original_mask
 
     def total_mask_grad(
-        self, sampling_mask, sampling_loss, sparse_weight=0.05, context_sparse_weight=0.05, context_max_weight=0.2
+        self,
+        sampling_mask,
+        sampling_loss,
+        sparse_weight=0.05,
+        context_sparse_weight=0.05,
+        context_max_weight=0.2,
     ):
         num_pos = sampling_mask.sum(dim=0)
         num_neg = sampling_mask.shape[0] - num_pos
@@ -169,8 +241,12 @@ class CausalMask(nn.Module):
         is_valid = ((num_pos > 0) * (num_neg > 0)).float()
 
         # calculate the gradient of the sampling loss w.r.t. the logits
-        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (num_pos + 1e-6)
-        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (num_neg + 1e-6)
+        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (
+            num_pos + 1e-6
+        )
+        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (
+            num_neg + 1e-6
+        )
 
         g = self.mask_logits.sigmoid() * (1 - self.mask_logits.sigmoid())
 

@@ -54,7 +54,11 @@ def test_causal_mdp_wrapper():
     assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
     assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
     assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
-    assert "causal_mask" in td.keys() and td["causal_mask"].shape == (batch_size, obs_dim + 2, obs_dim + action_dim)
+    assert "causal_mask" in td.keys() and td["causal_mask"].shape == (
+        batch_size,
+        obs_dim + 2,
+        obs_dim + action_dim,
+    )
 
     causal_mdp_wrapper.causal_mask
     causal_mdp_wrapper.context_model

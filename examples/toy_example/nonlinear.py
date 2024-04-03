@@ -71,7 +71,9 @@ def train(
 
             loss, mask = get_model_loss(model, x_theta, y, mask_logits)
             if lambda_mutual_info > 0:
-                mi_loss = mutual_info_estimation(theta_hat[idx][:, (mask_logits > 0)[:, x_size:].any(dim=0)])
+                mi_loss = mutual_info_estimation(
+                    theta_hat[idx][:, (mask_logits > 0)[:, x_size:].any(dim=0)]
+                )
             else:
                 mi_loss = 0
             mi_losses.append(mi_loss.item())
@@ -85,7 +87,9 @@ def train(
             mask_optimizer.zero_grad()
 
             new_batch_size = batch_size * sampling_times
-            repeated_x_theta = x_theta.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
+            repeated_x_theta = (
+                x_theta.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
+            )
             repeated_y = y.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
 
             loss, mask = get_model_loss(model, repeated_x_theta, repeated_y, mask_logits)
@@ -131,7 +135,14 @@ def identify_theta(x, y, theta_size):
     steps = 0
     for epoch in range(1000):
         steps, predictor_losses, reinforce_losses, mi_losses = train(
-            model, mask_logits, theta_hat, loader, model_optimizer, theta_optimizer, mask_optimizer, steps
+            model,
+            mask_logits,
+            theta_hat,
+            loader,
+            model_optimizer,
+            theta_optimizer,
+            mask_optimizer,
+            steps,
         )
 
         print((mask_logits > 0).int())
@@ -159,7 +170,9 @@ if __name__ == "__main__":
     np.random.seed(seed)
     torch.random.manual_seed(seed)
 
-    x, y, theta, graph = gen_nonlinear_data(task_num, sample_per_task, x_size, y_size, real_theta_size)
+    x, y, theta, graph = gen_nonlinear_data(
+        task_num, sample_per_task, x_size, y_size, real_theta_size
+    )
 
     print(graph)
     # [[1 0 0 1 1 1 0]

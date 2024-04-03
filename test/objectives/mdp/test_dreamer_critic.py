@@ -11,7 +11,9 @@ def test_dreamer_actor():
     env = make_mdp_env("MyCartPole-v0")
     world_model, model_based_env, actor, critic = make_mdp_dreamer(config, env)
 
-    actor_loss = DreamActorLoss(actor_model=actor, value_model=critic, model_based_env=model_based_env)
+    actor_loss = DreamActorLoss(
+        actor_model=actor, value_model=critic, model_based_env=model_based_env
+    )
 
     critic_loss = DreamCriticLoss(
         value_model=critic,

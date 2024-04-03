@@ -44,8 +44,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         state_dim_per_variable=cfg.state_dim_per_variable,
         hidden_dim_per_variable=cfg.belief_dim_per_variable,
     )
-    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_train")
-    test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_test")
+    train_make_env_list, train_oracle_context = create_make_env_list(
+        cfg, make_env_fn, mode="meta_train"
+    )
+    test_make_env_list, test_oracle_context = create_make_env_list(
+        cfg, make_env_fn, mode="meta_test"
+    )
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
 
@@ -116,17 +120,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # optimizers
     world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
-    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
+    world_model_opt.add_param_group(
+        dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
+    )
     if cfg.model_type == "causal" and cfg.using_reinforce:
-        logits_opt = torch.optim.Adam(world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
-        logits_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
+        logits_opt = torch.optim.Adam(
+            world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr
+        )
+        logits_opt.add_param_group(
+            dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+        )
     else:
         logits_opt = None
         if cfg.model_type == "causal":
             world_model_opt.add_param_group(
                 dict(params=world_model.get_parameter("observed_logits"), lr=cfg.observed_logits_lr)
             )
-            world_model_opt.add_param_group(dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr))
+            world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+            )
 
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
@@ -207,7 +219,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         if cfg.meta and (i + 1) % cfg.meta_test_interval == 0:
-            meta_test(cfg, test_make_env_list, test_oracle_context, exploration_policy, world_model, logger, collected_frames)
+            meta_test(
+                cfg,
+                test_make_env_list,
+                test_oracle_context,
+                exploration_policy,
+                world_model,
+                logger,
+                collected_frames,
+            )
 
         if cfg.meta:
             plot_context(cfg, world_model, train_oracle_context, logger, collected_frames)
@@ -218,9 +238,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         if (i + 1) % 10 == 0:
             os.makedirs(os.path.join("checkpoints", str(i)), exist_ok=True)
-            torch.save(world_model.state_dict(), os.path.join("checkpoints", str(i), f"world_model.pt"))
-            torch.save(actor_model.state_dict(), os.path.join("checkpoints", str(i), f"actor_model.pt"))
-            torch.save(value_model.state_dict(), os.path.join("checkpoints", str(i), f"value_model.pt"))
+            torch.save(
+                world_model.state_dict(), os.path.join("checkpoints", str(i), f"world_model.pt")
+            )
+            torch.save(
+                actor_model.state_dict(), os.path.join("checkpoints", str(i), f"actor_model.pt")
+            )
+            torch.save(
+                value_model.state_dict(), os.path.join("checkpoints", str(i), f"value_model.pt")
+            )
 
     collector.shutdown()
 

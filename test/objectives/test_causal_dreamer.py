@@ -13,7 +13,9 @@ def test_make_causal_dreamer():
     make_env_fn = partial(make_dreamer_env, env_name="MyCartPole-v0")
     env = make_env_fn()
 
-    world_model, model_based_env, actor_simulator, value_model, actor_realworld = make_dreamer(cfg, env)
+    world_model, model_based_env, actor_simulator, value_model, actor_realworld = make_dreamer(
+        cfg, env
+    )
     model_loss = CausalDreamerModelLoss(world_model=world_model)
 
     td = env.rollout(10, auto_reset=True)
