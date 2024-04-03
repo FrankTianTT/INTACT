@@ -28,6 +28,24 @@ class CausalRSSMPrior(PlainRSSMPrior):
         logits_clip=3.0,
         scale_lb=0.1,
     ):
+        """Class for the Causal RSSM prior.
+
+        Args:
+            action_dim (int): the action dimension
+            using_reinforce (bool): whether to use reinforce
+            variable_num (int): the number of variables
+            state_dim_per_variable (int): the state dimension per variable
+            belief_dim_per_variable (int): the belief dimension per variable
+            hidden_dim (int): the hidden dimension
+            disable_belief (bool): whether to disable belief
+            using_cross_belief (bool): whether to use cross belief
+            meta (bool): whether to use meta
+            max_context_dim (int): the maximum context dimension
+            task_num (int): the task number
+            residual (bool): whether to use residual
+            logits_clip (float): the logits clip
+            scale_lb (float): the scale lower bound
+        """
         self.logits_clip = logits_clip
         self.hidden_dim = hidden_dim
         self.using_cross_belief = using_cross_belief

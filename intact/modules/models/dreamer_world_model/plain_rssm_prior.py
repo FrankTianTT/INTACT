@@ -23,6 +23,22 @@ class PlainRSSMPrior(BaseWorldModel):
         residual=True,
         scale_lb=0.1,
     ):
+        """
+        Class for the Plain RSSM prior.
+
+        Args:
+            action_dim (int): the action dimension
+            variable_num (int): the number of variables
+            state_dim_per_variable (int): the state dimension per variable
+            belief_dim_per_variable (int): the belief dimension per variable
+            hidden_dim (int): the hidden dimension
+            disable_belief (bool): whether to disable belief
+            meta (bool): whether to use meta
+            max_context_dim (int): the maximum context dimension
+            task_num (int): the task number
+            residual (bool): whether to use residual
+            scale_lb (float): the scale lower bound
+        """
         self.variable_num = variable_num
         self.state_dim_per_variable = state_dim_per_variable
         self.belief_dim_per_variable = belief_dim_per_variable

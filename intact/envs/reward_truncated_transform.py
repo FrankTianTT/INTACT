@@ -14,6 +14,11 @@ class RewardTruncatedTransform(Transform):
         in_keys: Sequence[NestedKey] = None,
         out_keys: Sequence[NestedKey] = None,
     ):
+        """
+        Args:
+            in_keys (Sequence[NestedKey], optional): the input keys. Defaults to None.
+            out_keys (Sequence[NestedKey], optional): the output keys. Defaults to None.
+        """
         self.reset_key = "_reset"
         self.ever_reset: Optional[torch.Tensor] = None
 

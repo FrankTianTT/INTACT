@@ -11,6 +11,15 @@ class MDPEnv(ModelBasedEnvBase):
     def __init__(
         self, world_model: TensorDictModuleBase, device="cpu", dtype=None, batch_size=None, termination_fns="", reward_fns=""
     ):
+        """
+        Args:
+            world_model (TensorDictModuleBase): the world model
+            device (str, optional): the device to use. Defaults to "cpu".
+            dtype (torch.dtype, optional): the data type to use. Defaults to None.
+            batch_size (int, optional): the batch size to use. Defaults to None.
+            termination_fns (str, optional): the termination function to use. Defaults to "".
+            reward_fns (str, optional): the reward function to use. Defaults to "".
+        """
         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         self.termination_fns = termination_fns_dict[termination_fns] if termination_fns != "" else None
         self.reward_fns = reward_fns_dict[reward_fns] if reward_fns != "" else None

@@ -9,6 +9,11 @@ from torchrl.data.tensor_specs import TensorSpec, CompositeSpec, DiscreteTensorS
 
 class MetaIdxTransform(Transform):
     def __init__(self, task_idx: int, task_num: int):
+        """
+        Args:
+            task_idx (int): the index of the task
+            task_num (int): the number of tasks
+        """
         super().__init__(in_keys=None, out_keys=None)
         self.idx = torch.tensor(task_idx).to(torch.long)
         self.task_num = task_num

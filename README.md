@@ -27,6 +27,23 @@ cd intact
 pip install -e .
 ```
 
+## Using
+
+Dreamer in POMDP:
 ```shell
 xvfb-run --auto-servernum --server-num=1 python examples/dreamer/train.py
 ```
+
+Dreamer in MDP:
+```shell
+python examples/dreamer_mdp/train.py
+```
+
+MPC in MDP:
+```shell
+python examples/mdp/train.py
+```
+
+## Design
+
+![Design](images/model-uml.png)
