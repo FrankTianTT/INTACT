@@ -7,7 +7,7 @@
 <a href="https://pre-commit.com/"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white"></a>
 <a href="https://www.python.org/downloads/release/python-311/"><img src="https://img.shields.io/badge/python-3.11-brightgreen"></a>
 
-INTACT stands for *Identifiable aNd TrAnsferable Causal meTa World Model*. This framework is introduced to address limitations by enabling the acquisition of fully identifiable contextual representations under relatively mild conditions, while promoting rapid adaptation to new contexts without compromising the original semantics.
+INTACT stands for *recognizable aNd TrAnsferable Causal meTa world model*, aiming to address the context decoupling issue in meta reinforcement learning. Its goal is to restore fully recognizable context representations using observed data while ensuring swift adaptation to new contexts within the target environment distribution without sacrificing the original semantics.
 
 ## Installation
 
