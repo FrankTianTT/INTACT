@@ -26,5 +26,7 @@ def test_mdp_env():
     td = proof_env.reset()
 
     mdp_env.reset()
-    td = mdp_env.rollout(10, auto_reset=False, tensordict=td, break_when_any_done=False)
+    td = mdp_env.rollout(
+        10, auto_reset=False, tensordict=td, break_when_any_done=False
+    )
     # print(td)

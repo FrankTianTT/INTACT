@@ -1,5 +1,11 @@
 from torchrl.envs.libs import GymEnv
-from torchrl.envs.transforms import TransformedEnv, Compose, RewardSum, DoubleToFloat, StepCounter
+from torchrl.envs.transforms import (
+    TransformedEnv,
+    Compose,
+    RewardSum,
+    DoubleToFloat,
+    StepCounter,
+)
 from intact.envs.meta_transform import MetaIdxTransform
 
 

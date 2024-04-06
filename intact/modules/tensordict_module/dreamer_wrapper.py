@@ -2,8 +2,12 @@ from itertools import chain
 
 from tensordict.nn import TensorDictSequential, TensorDictModule
 
-from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
-from intact.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
+from intact.modules.models.dreamer_world_model.causal_rssm_prior import (
+    CausalRSSMPrior,
+)
+from intact.modules.models.dreamer_world_model.plain_rssm_prior import (
+    PlainRSSMPrior,
+)
 
 
 class DreamerWrapper(TensorDictSequential):
@@ -33,8 +37,12 @@ class DreamerWrapper(TensorDictSequential):
             continue_model (TensorDictModule, optional): The continue model module. Defaults to None.
         """
         self.variable_num = rssm_rollout.rssm_prior.variable_num
-        self.state_dim_per_variable = rssm_rollout.rssm_prior.state_dim_per_variable
-        self.hidden_dim_per_variable = rssm_rollout.rssm_prior.belief_dim_per_variable
+        self.state_dim_per_variable = (
+            rssm_rollout.rssm_prior.state_dim_per_variable
+        )
+        self.hidden_dim_per_variable = (
+            rssm_rollout.rssm_prior.belief_dim_per_variable
+        )
         self.action_dim = rssm_rollout.rssm_prior.action_dim
 
         models = [obs_encoder, rssm_rollout, obs_decoder, reward_model]
@@ -191,12 +199,16 @@ class DreamerWrapper(TensorDictSequential):
         batch_size, batch_len = tensordict.batch_size
 
         tensordict = self._run_module(self.obs_encoder, tensordict)
-        tensordict = tensordict.select(*self.rssm_rollout.in_keys, strict=False)
-
-        repeat_tensordict = tensordict.expand(sampling_times, *tensordict.batch_size).reshape(
-            -1, batch_len
+        tensordict = tensordict.select(
+            *self.rssm_rollout.in_keys, strict=False
         )
+
+        repeat_tensordict = tensordict.expand(
+            sampling_times, *tensordict.batch_size
+        ).reshape(-1, batch_len)
         out_tensordict = self._run_module(self.rssm_rollout, repeat_tensordict)
-        out_tensordict = out_tensordict.reshape(sampling_times, batch_size, batch_len)
+        out_tensordict = out_tensordict.reshape(
+            sampling_times, batch_size, batch_len
+        )
 
         return out_tensordict

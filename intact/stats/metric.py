@@ -3,7 +3,9 @@ import torch
 from intact.stats.kernel import kernel_classes
 
 
-def mutual_info_estimation(values, bandwidth=1.0, kernel_type="gaussian", reduction="mean"):
+def mutual_info_estimation(
+    values, bandwidth=1.0, kernel_type="gaussian", reduction="mean"
+):
     # values: batch * dim
     kernel_class = kernel_classes[kernel_type]
 

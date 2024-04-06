@@ -1,8 +1,8 @@
-from intact.envs.gym_like.heating import HeatingEnv
+from intact.envs.gym_like.multi_node import MultiNodeEnv
 
 
 def test_heating_env():
-    env = HeatingEnv()
+    env = MultiNodeEnv()
     obs, _ = env.reset()
     assert obs is not None
 

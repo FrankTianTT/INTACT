@@ -102,7 +102,9 @@ class CausalMask(nn.Module):
             str: A string representation of the CausalMask.
         """
         return "observed_input_dim={}, mask_output_dim={}, context_input_dim={}".format(
-            self.observed_input_dim, self.mask_output_dim, self.context_input_dim
+            self.observed_input_dim,
+            self.mask_output_dim,
+            self.context_input_dim,
         )
 
     @property
@@ -151,7 +153,9 @@ class CausalMask(nn.Module):
         Returns:
             Tensor: The observed logits.
         """
-        return torch.clamp(self._observed_logits, -self.logits_clip, self.logits_clip)
+        return torch.clamp(
+            self._observed_logits, -self.logits_clip, self.logits_clip
+        )
 
     @property
     def context_logits(self):
@@ -161,7 +165,9 @@ class CausalMask(nn.Module):
         Returns:
            Tensor: The context logits.
         """
-        return torch.clamp(self._context_logits, -self.logits_clip, self.logits_clip)
+        return torch.clamp(
+            self._context_logits, -self.logits_clip, self.logits_clip
+        )
 
     @property
     def valid_context_idx(self):
@@ -184,7 +190,10 @@ class CausalMask(nn.Module):
         if line_idx is None:
             line_idx = list(range(self.mask_output_dim))
 
-        column_idx = list(set(range(self.context_input_dim)) - set(self.valid_context_idx.tolist()))
+        column_idx = list(
+            set(range(self.context_input_dim))
+            - set(self.valid_context_idx.tolist())
+        )
         line_matrix = torch.zeros_like(self._context_logits).to(bool)
         column_matrix = torch.zeros_like(self._context_logits).to(bool)
         line_matrix[line_idx] = 1
@@ -198,31 +207,45 @@ class CausalMask(nn.Module):
         ).to(self._context_logits.device)
 
     def forward(self, inputs, dim_map=None, deterministic=False):
-        assert len(inputs.shape) == 2, "inputs should be 2D tensor: batch_size x input_dim"
+        assert (
+            len(inputs.shape) == 2
+        ), "inputs should be 2D tensor: batch_size x input_dim"
         batch_size, input_dim = inputs.shape
         if dim_map is None:
             assert input_dim == self.mask_input_dim, (
-                "dimension of inputs should be equal to mask_input_dim if dim_map is None,"
-                "got {} and {} instead".format(input_dim, self.mask_input_dim)
+                f"dimension of inputs should be equal to mask_input_dim if dim_map"
+                f" is None, got {input_dim} and {self.mask_input_dim} instead"
             )
 
         # shape: mask_output_dim * batch_size * input_dim
-        repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
+        repeated_inputs = inputs.unsqueeze(0).expand(
+            self.mask_output_dim, -1, -1
+        )
 
         if self.using_reinforce:
             if deterministic:
                 original_mask = self.mask.float().expand(batch_size, -1, -1)
             else:
-                original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
+                original_mask = Bernoulli(logits=self.mask_logits).sample(
+                    torch.Size([batch_size])
+                )
         else:
             if self.gumbel_softmax:
                 original_mask = F.gumbel_softmax(
-                    logits=torch.stack((self.mask_logits, 1 - self.mask_logits)), hard=True, dim=0
+                    logits=torch.stack(
+                        (self.mask_logits, 1 - self.mask_logits)
+                    ),
+                    hard=True,
+                    dim=0,
                 )[0]
             else:
                 original_mask = torch.sigmoid(self.alpha * self.mask_logits)
             original_mask = original_mask.expand(batch_size, -1, -1)
-        mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
+        mask = (
+            original_mask[:, :, dim_map]
+            if dim_map is not None
+            else original_mask
+        )
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
         return masked_inputs, original_mask
 
@@ -241,12 +264,12 @@ class CausalMask(nn.Module):
         is_valid = ((num_pos > 0) * (num_neg > 0)).float()
 
         # calculate the gradient of the sampling loss w.r.t. the logits
-        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (
-            num_pos + 1e-6
-        )
-        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (
-            num_neg + 1e-6
-        )
+        pos_grads = torch.einsum(
+            "sbo,sboi->sboi", sampling_loss, sampling_mask
+        ).sum(dim=0) / (num_pos + 1e-6)
+        neg_grads = torch.einsum(
+            "sbo,sboi->sboi", sampling_loss, 1 - sampling_mask
+        ).sum(dim=0) / (num_neg + 1e-6)
 
         g = self.mask_logits.sigmoid() * (1 - self.mask_logits.sigmoid())
 
@@ -257,7 +280,9 @@ class CausalMask(nn.Module):
         #     max_idx = self.mask_logits[:, :self.observed_input_dim].argmax(dim=1)
         #     reg_grad[torch.arange(self.mask_output_dim), max_idx] = 0
         reg_grad[:, self.observed_input_dim :] *= context_sparse_weight
-        reg_grad[:, self.observed_input_dim :] += context_max_weight * max_sigmoid_grad(
+        reg_grad[
+            :, self.observed_input_dim :
+        ] += context_max_weight * max_sigmoid_grad(
             self.mask_logits[:, self.observed_input_dim :]
         )
         grad = is_valid * (sampling_grad + reg_grad)

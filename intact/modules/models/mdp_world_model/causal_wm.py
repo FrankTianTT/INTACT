@@ -24,23 +24,23 @@ class CausalWorldModel(PlainMDPWorldModel):
         context_logits_init_bias=0.5,
         logits_init_scale=0.0,
     ):
-        """World-model class for environment learning with causal discovery.
+        """Initializes the CausalWorldModel class.
 
-        :param obs_dim: number of observation dimensions
-        :param action_dim: number of action dimensions
-        :param meta: whether to use envs-RL
-        :param max_context_dim: number of context dimensions, used for envs-RL, set to 0 if normal RL
-        :param task_num: number of tasks, used for envs-RL, set to 0 if normal RL
-        :param residual: whether to use residual connection for transition model
-        :param hidden_dims: hidden dimensions for transition model
-        :param log_var_bounds: bounds for log_var of gaussian nll loss
-        :param logits_clip: clip value for mask logits, default to 3.0 (sigmoid(3.0) = 0.95).
-        :param observed_logits_init_bias: bias for mask logits for observed variables initialization,
-            default to 0.5 (sigmoid(0.5) = 0.62).
-        :param context_logits_init_bias: bias for mask logits for context variables initialization,
-            default to 0.5 (sigmoid(0.5) = 0.62).
-        :param logits_init_scale: scale for mask logits initialization, default to 0.05
-        :param log_var_bounds: bounds for log_var of gaussian nll loss
+        Args:
+            obs_dim (int): Number of observation dimensions.
+            action_dim (int): Number of action dimensions.
+            meta (bool, optional): Whether to use envs-RL. Defaults to False.
+            using_reinforce (bool, optional): Whether to use REINFORCE for learning. Defaults to True.
+            alpha (float, optional): Alpha parameter for the CausalMask class. Defaults to 10.0.
+            max_context_dim (int, optional): Number of context dimensions, used for envs-RL. Defaults to 10.
+            task_num (int, optional): Number of tasks, used for envs-RL. Defaults to 100.
+            residual (bool, optional): Whether to use residual connection for transition model. Defaults to True.
+            hidden_dims (list, optional): Hidden dimensions for transition model. Defaults to None.
+            log_var_bounds (tuple, optional): Bounds for log_var of gaussian nll loss. Defaults to (-10.0, 0.5).
+            logits_clip (float, optional): Clip value for mask logits. Defaults to 3.0.
+            observed_logits_init_bias (float, optional): Bias for mask logits for observed variables initialization. Defaults to 0.5.
+            context_logits_init_bias (float, optional): Bias for mask logits for context variables initialization. Defaults to 0.5.
+            logits_init_scale (float, optional): Scale for mask logits initialization. Defaults to 0.0.
         """
         self.using_reinforce = using_reinforce
         self.logits_clip = logits_clip
@@ -66,13 +66,15 @@ class CausalWorldModel(PlainMDPWorldModel):
             meta=self.meta,
             context_input_dim=self.max_context_dim,
             logits_clip=self.logits_clip,
-            alpha=alpha
-            # observed_logits_init_bias=observed_logits_init_bias,
-            # context_logits_init_bias=context_logits_init_bias,
-            # logits_init_scale=logits_init_scale,
+            alpha=alpha,
         )
 
     def build_nets(self):
+        """Builds the neural networks for the model.
+
+        Returns:
+            ModuleDict: A dictionary of the neural networks.
+        """
         para_mlp = build_mlp(
             input_dim=self.all_input_dim,
             output_dim=2,
@@ -82,25 +84,13 @@ class CausalWorldModel(PlainMDPWorldModel):
         )
         return ModuleDict(dict(para_mlp=para_mlp))
 
-    # def build_nets(self):
-    #     para_mlp1 = build_mlp(
-    #         input_dim=self.obs_dim + self.action_dim ,
-    #         output_dim=self.hidden_dims[-2],
-    #         hidden_dims=self.hidden_dims[:-2],
-    #         extra_dims=[self.output_dim],
-    #         activate_name="ReLU",
-    #     )
-    #     para_mlp2 = build_mlp(
-    #         input_dim=self.hidden_dims[-2] + self.max_context_dim,
-    #         output_dim=2,
-    #         hidden_dims=[self.hidden_dims[-1]],
-    #         extra_dims=[self.output_dim],
-    #         activate_name="SiLU",
-    #     )
-    #     return ModuleDict(dict(para_mlp1=para_mlp1, para_mlp2=para_mlp2))
-
     @property
     def params_dict(self):
+        """Gets the parameters of the model.
+
+        Returns:
+            dict: A dictionary of the parameters.
+        """
         return dict(
             nets=self.nets.parameters(),
             context=self.context_model.parameters(),
@@ -109,21 +99,31 @@ class CausalWorldModel(PlainMDPWorldModel):
         )
 
     def forward(self, observation, action, idx=None, deterministic_mask=False):
-        inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
+        """Performs a forward pass through the model.
+
+        Args:
+            observation (Tensor): The observations.
+            action (Tensor): The actions.
+            idx (int, optional): The index. Defaults to None.
+            deterministic_mask (bool, optional): Whether to use a deterministic mask. Defaults to False.
+
+        Returns:
+            tuple: The outputs of the forward pass.
+        """
+        inputs = torch.cat(
+            [observation, action, self.context_model(idx)], dim=-1
+        )
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
         masked_inputs, mask = self.causal_mask(
             inputs.reshape(-1, dim), deterministic=deterministic_mask
         )
-        # first_inputs = masked_inputs[:, :, :self.obs_dim + self.action_dim]
-        # hidden = self.nets["para_mlp1"](first_inputs)
-        #
-        # second_inputs = torch.cat([hidden, masked_inputs[:, :, self.obs_dim + self.action_dim:]], dim=-1)
-        # mean, log_var = self.nets["para_mlp2"](second_inputs).permute(2, 1, 0)
 
         mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
 
         mask = mask.reshape(
-            *batch_shape, self.causal_mask.mask_output_dim, self.causal_mask.mask_input_dim
+            *batch_shape,
+            self.causal_mask.mask_output_dim,
+            self.causal_mask.mask_input_dim,
         )
         return *self.get_outputs(mean, log_var, observation, batch_shape), mask

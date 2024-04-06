@@ -30,5 +30,10 @@ register(
     id="Heating53L-v0",
     entry_point="intact.envs.gym_like.heating:HeatingEnv",
     max_episode_steps=200,
-    kwargs=dict(num_rooms=5, context_dim=3, sparsity=0.5, context_influence_type="linear"),
+    kwargs=dict(
+        num_rooms=5,
+        context_dim=3,
+        sparsity=0.5,
+        context_influence_type="linear",
+    ),
 )

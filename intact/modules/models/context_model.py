@@ -22,7 +22,9 @@ class ContextModel(nn.Module):
         self.context_clip = context_clip
 
         init_context_hat = torch.randn(task_num, max_context_dim) * init_scale
-        self._context_hat: torch.nn.Parameter = torch.nn.Parameter(init_context_hat)
+        self._context_hat: torch.nn.Parameter = torch.nn.Parameter(
+            init_context_hat
+        )
 
         self.fixed_idx = None
 
@@ -37,7 +39,9 @@ class ContextModel(nn.Module):
     def set_context(self, context):
         assert context.shape == self._context_hat.shape
         if self.context_clip > 0:
-            context = torch.clamp(context, -self.context_clip, self.context_clip)
+            context = torch.clamp(
+                context, -self.context_clip, self.context_clip
+            )
         self._context_hat.data = context.to(self.device)
 
     def fix(self, idx=None):
@@ -56,9 +60,12 @@ class ContextModel(nn.Module):
             context_hat = self._context_hat
         else:
             context_hat = torch.zeros_like(self._context_hat).to(self.device)
-            context_hat[:, self.fixed_idx] += self._context_hat.detach()[:, self.fixed_idx]
+            context_hat[:, self.fixed_idx] += self._context_hat.detach()[
+                :, self.fixed_idx
+            ]
             unfixed_idx = ~torch.isin(
-                torch.arange(self.max_context_dim).to(self.device), self.fixed_idx
+                torch.arange(self.max_context_dim).to(self.device),
+                self.fixed_idx,
             )
             context_hat[:, unfixed_idx] += self._context_hat[:, unfixed_idx]
         return torch.clamp(context_hat, -self.context_clip, self.context_clip)
@@ -66,7 +73,9 @@ class ContextModel(nn.Module):
     def reset(self, task_num=None):
         self.task_num = task_num or self.task_num
 
-        init_context_hat = torch.randn(self.task_num, self.max_context_dim) * self.init_scale
+        init_context_hat = (
+            torch.randn(self.task_num, self.max_context_dim) * self.init_scale
+        )
         self._context_hat.data = init_context_hat.to(self.device)
 
     def extra_repr(self):
@@ -83,7 +92,9 @@ class ContextModel(nn.Module):
             assert not self.meta, "idx should not be None when meta is True"
             return torch.empty(0).to(self.device)
 
-        assert idx.shape[-1] == 1, "last dim of idx should be 1, got {}".format(idx.shape)
+        assert (
+            idx.shape[-1] == 1
+        ), f"last dim of idx should be 1, got {idx.shape}"
         return self.context_hat[idx[..., 0]]
 
     def get_mutual_info(self, idx, valid_context_idx=None, reduction="mean"):
@@ -92,7 +103,13 @@ class ContextModel(nn.Module):
             context_hat = context_hat[:, valid_context_idx]
         return mutual_info_estimation(context_hat, reduction=reduction)
 
-    def get_mcc(self, context_gt, valid_idx=None, return_permutation=True, method="pearson"):
+    def get_mcc(
+        self,
+        context_gt,
+        valid_idx=None,
+        return_permutation=True,
+        method="pearson",
+    ):
         if isinstance(context_gt, torch.Tensor):
             context_gt = context_gt.detach().cpu().numpy()
 

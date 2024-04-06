@@ -5,19 +5,32 @@ import argparse
 from tqdm import tqdm
 from omegaconf import OmegaConf
 import torch
-from torchrl.envs import TransformedEnv, SerialEnv, RewardSum, DoubleToFloat, Compose
+from torchrl.envs import (
+    TransformedEnv,
+    SerialEnv,
+    RewardSum,
+    DoubleToFloat,
+    Compose,
+)
 from torchrl.envs.libs import GymEnv
 from torchrl.trainers.helpers.collectors import SyncDataCollector
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
+from torchrl.modules.tensordict_module.exploration import (
+    AdditiveGaussianWrapper,
+)
 
 from intact.utils import make_mdp_model, build_logger
 from intact.objectives.mdp.causal_mdp import CausalWorldModelLoss
 from intact.envs.meta_transform import MetaIdxTransform
 from intact.modules.planners.cem import MyCEMPlanner as CEMPlanner
 
-from utils import build_make_env_list, evaluate_policy, plot_context, MultiOptimizer
+from utils import (
+    build_make_env_list,
+    evaluate_policy,
+    plot_context,
+    MultiOptimizer,
+)
 
 
 def restore_make_env_list(cfg, oracle_context):
@@ -32,7 +45,9 @@ def restore_make_env_list(cfg, oracle_context):
 
     make_env_list = []
     for idx in range(oracle_context.shape[0]):
-        gym_kwargs = dict([(key, value.item()) for key, value in oracle_context[idx].items()])
+        gym_kwargs = dict(
+            [(key, value.item()) for key, value in oracle_context[idx].items()]
+        )
         make_env_list.append(partial(make_env, gym_kwargs=gym_kwargs, idx=idx))
     return make_env_list
 
@@ -63,7 +78,10 @@ def main(path, load_frames, train_frames_per_task):
     proof_env = train_make_env_list[0]()
     world_model, model_env = make_mdp_model(cfg, proof_env, device=device)
     world_model.load_state_dict(
-        torch.load(os.path.join(path, "world_model", f"{load_frames}.pt"), map_location=device)
+        torch.load(
+            os.path.join(path, "world_model", f"{load_frames}.pt"),
+            map_location=device,
+        )
     )
 
     world_model_loss = CausalWorldModelLoss(
@@ -98,7 +116,9 @@ def main(path, load_frames, train_frames_per_task):
         train_frames_per_task = cfg.meta_task_adjust_frames_per_task
 
     collector = SyncDataCollector(
-        create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
+        create_env_fn=SerialEnv(
+            task_num, train_make_env_list, shared_memory=False
+        ),
         policy=explore_policy,
         total_frames=train_frames_per_task * task_num,
         frames_per_batch=task_num,
@@ -106,10 +126,16 @@ def main(path, load_frames, train_frames_per_task):
     )
 
     replay_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(max_size=cfg.train_frames_per_task * task_num),
+        storage=LazyMemmapStorage(
+            max_size=cfg.train_frames_per_task * task_num
+        ),
     )
-    context_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
-    module_opt = torch.optim.Adam(world_model.get_parameter("module"), lr=cfg.world_model_lr)
+    context_opt = torch.optim.Adam(
+        world_model.get_parameter("context"), lr=cfg.context_lr
+    )
+    module_opt = torch.optim.Adam(
+        world_model.get_parameter("module"), lr=cfg.world_model_lr
+    )
     model_opt = MultiOptimizer(module=module_opt, context=context_opt)
 
     cfg.eval_repeat_nums = 10
@@ -141,8 +167,12 @@ def main(path, load_frames, train_frames_per_task):
     for frames_per_task, tensordict in enumerate(collector):
         pbar.update(task_num)
         if tensordict["next", "done"].any():
-            episode_reward = tensordict["next", "episode_reward"][tensordict["next", "done"]]
-            logger.log_scalar("meta_train/rollout_episode_reward", episode_reward.mean())
+            episode_reward = tensordict["next", "episode_reward"][
+                tensordict["next", "done"]
+            ]
+            logger.log_scalar(
+                "meta_train/rollout_episode_reward", episode_reward.mean()
+            )
 
         replay_buffer.extend(tensordict.reshape(-1))
 

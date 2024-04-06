@@ -41,16 +41,27 @@ def evaluate_policy(
     else:
         device = "cpu"
 
-    pbar = tqdm(total=cfg.eval_repeat_nums * cfg.env_max_steps, desc="{}_eval".format(log_prefix))
+    pbar = tqdm(
+        total=cfg.eval_repeat_nums * cfg.env_max_steps,
+        desc="{}_eval".format(log_prefix),
+    )
     repeat_rewards = []
     repeat_lengths = []
     for repeat in range(cfg.eval_repeat_nums):
         if disable_pixel_if_possible:
-            make_env_fn = partial(make_env_fn, pixel=repeat < cfg.eval_record_nums)
-        make_env_list = build_make_env_list(cfg.env_name, make_env_fn, oracle_context)
-        eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
+            make_env_fn = partial(
+                make_env_fn, pixel=repeat < cfg.eval_record_nums
+            )
+        make_env_list = build_make_env_list(
+            cfg.env_name, make_env_fn, oracle_context
+        )
+        eval_env = SerialEnv(
+            len(make_env_list), make_env_list, shared_memory=False
+        )
         if repeat < cfg.eval_record_nums:
-            eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
+            eval_env = TransformedEnv(
+                eval_env, VideoRecorder(logger, log_prefix)
+            )
 
         rewards = torch.zeros(len(make_env_list))
         lengths = torch.zeros(len(make_env_list))
@@ -85,10 +96,12 @@ def evaluate_policy(
 
     if logger is not None:
         logger.add_scaler(
-            "{}/eval_episode_reward".format(log_prefix), torch.stack(repeat_rewards).mean()
+            "{}/eval_episode_reward".format(log_prefix),
+            torch.stack(repeat_rewards).mean(),
         )
         logger.add_scaler(
-            "{}/eval_episode_length".format(log_prefix), torch.stack(repeat_lengths).mean()
+            "{}/eval_episode_length".format(log_prefix),
+            torch.stack(repeat_lengths).mean(),
         )
         logger.dump_scaler(log_idx)
 

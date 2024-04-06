@@ -14,7 +14,9 @@ def test_context_model():
     x = torch.cat([x, context_model(None)], dim=-1)
     assert x.shape == (batch_size, x_size)
 
-    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num)
+    context_model = ContextModel(
+        meta=True, max_context_dim=max_context_dim, task_num=task_num
+    )
     idx = torch.randint(0, task_num, (batch_size, 1))
     x = torch.randn(batch_size, x_size)
     x = torch.cat([x, context_model(idx)], dim=-1)
@@ -29,10 +31,12 @@ def test_fix():
     max_context_dim = 2
     task_num = 5
 
-    context_model = ContextModel(meta=True, max_context_dim=max_context_dim, task_num=task_num).to(
-        device
+    context_model = ContextModel(
+        meta=True, max_context_dim=max_context_dim, task_num=task_num
+    ).to(device)
+    context_model.set_context(
+        torch.ones_like(context_model.context_hat) * 0.25
     )
-    context_model.set_context(torch.ones_like(context_model.context_hat) * 0.25)
     context_model.fix([1])
     optim = SGD(context_model.parameters(), lr=0.1)
 

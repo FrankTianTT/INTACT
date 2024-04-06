@@ -19,7 +19,11 @@ from torchrl.objectives.utils import (
     hold_out_net,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import (
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+)
 
 from intact.envs.mdp_env import MDPEnv
 
@@ -59,10 +63,14 @@ class DreamActorLoss(LossModule):
         self.lambda_entropy = lambda_entropy
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
+            warnings.warn(
+                _GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning
+            )
             self.gamma = gamma
         if lmbda is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
+            warnings.warn(
+                _GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning
+            )
             self.lmbda = lmbda
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
@@ -73,13 +81,17 @@ class DreamActorLoss(LossModule):
 
     def rollout(self, tensordict):
         tensordicts = []
-        ever_done = torch.zeros(*tensordict.batch_size, 1, dtype=bool).to(tensordict.device)
+        ever_done = torch.zeros(*tensordict.batch_size, 1, dtype=bool).to(
+            tensordict.device
+        )
         for i in range(self.imagination_horizon):
             tensordict = self.actor_model(tensordict)
             tensordict = self.model_based_env.step(tensordict)
             next_tensordict = step_mdp(tensordict, exclude_action=False)
 
-            entropy = 0.5 * torch.log(2 * math.pi * math.e * tensordict["scale"] ** 2)
+            entropy = 0.5 * torch.log(
+                2 * math.pi * math.e * tensordict["scale"] ** 2
+            )
             tensordict.set("entropy", entropy)
             tensordicts.append(tensordict)
 
@@ -88,7 +100,9 @@ class DreamActorLoss(LossModule):
                 break
             else:
                 tensordict = next_tensordict
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+        batch_size = (
+            self.batch_size if tensordict is None else tensordict.batch_size
+        )
         out_td = torch.stack(tensordicts, len(batch_size)).contiguous()
         out_td.refine_names(..., "time")
 
@@ -99,7 +113,9 @@ class DreamActorLoss(LossModule):
             mask = tensordict.get(("collector", "mask")).clone()
             tensordict = tensordict[mask]
 
-        with hold_out_net(self.model_based_env), set_exploration_type(ExplorationType.RANDOM):
+        with hold_out_net(self.model_based_env), set_exploration_type(
+            ExplorationType.RANDOM
+        ):
             fake_data = self.rollout(tensordict.clone())
 
             next_tensordict = step_mdp(
@@ -115,7 +131,9 @@ class DreamActorLoss(LossModule):
         lambda_target = self.lambda_target(reward, next_value, terminated)
         fake_data.set("lambda_target", lambda_target)
 
-        actor_target = lambda_target + self.lambda_entropy * fake_data.get("entropy")
+        actor_target = lambda_target + self.lambda_entropy * fake_data.get(
+            "entropy"
+        )
 
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
@@ -123,7 +141,9 @@ class DreamActorLoss(LossModule):
             # discount = gamma.expand(lambda_target.shape).clone()
             discount = torch.cat(
                 [
-                    torch.ones_like(discount[..., :1, :]).to(tensordict.device),
+                    torch.ones_like(discount[..., :1, :]).to(
+                        tensordict.device
+                    ),
                     discount[..., :-1, :] * gamma,
                 ],
                 dim=-2,
@@ -138,7 +158,10 @@ class DreamActorLoss(LossModule):
         return loss_tensordict, fake_data.detach()
 
     def lambda_target(
-        self, reward: torch.Tensor, value: torch.Tensor, terminated: torch.Tensor
+        self,
+        reward: torch.Tensor,
+        value: torch.Tensor,
+        terminated: torch.Tensor,
     ) -> torch.Tensor:
         done = terminated.clone()
         input_tensordict = TensorDict(
@@ -152,7 +175,9 @@ class DreamActorLoss(LossModule):
         )
         return self.value_estimator.value_estimate(input_tensordict)
 
-    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+    def make_value_estimator(
+        self, value_type: ValueEstimators = None, **hyperparams
+    ):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type

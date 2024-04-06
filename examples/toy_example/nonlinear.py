@@ -65,7 +65,10 @@ def train(
         _, y_size = y.shape
         _, theta_size = theta_hat.shape
         x_theta = torch.cat([x, theta_hat[idx]], dim=1)
-        if steps % (train_mask_iters + train_predictor_iters) < train_predictor_iters:
+        if (
+            steps % (train_mask_iters + train_predictor_iters)
+            < train_predictor_iters
+        ):
             model_optimizer.zero_grad()
             theta_optimizer.zero_grad()
 
@@ -88,14 +91,24 @@ def train(
 
             new_batch_size = batch_size * sampling_times
             repeated_x_theta = (
-                x_theta.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
+                x_theta.unsqueeze(0)
+                .expand(sampling_times, -1, -1)
+                .reshape(new_batch_size, -1)
             )
-            repeated_y = y.unsqueeze(0).expand(sampling_times, -1, -1).reshape(new_batch_size, -1)
+            repeated_y = (
+                y.unsqueeze(0)
+                .expand(sampling_times, -1, -1)
+                .reshape(new_batch_size, -1)
+            )
 
-            loss, mask = get_model_loss(model, repeated_x_theta, repeated_y, mask_logits)
+            loss, mask = get_model_loss(
+                model, repeated_x_theta, repeated_y, mask_logits
+            )
             reinforce_losses.append(loss.mean().item())
             sampling_loss = loss.reshape(sampling_times, batch_size, y_size)
-            sampling_mask = mask.reshape(sampling_times, batch_size, y_size, x_size + theta_size)
+            sampling_mask = mask.reshape(
+                sampling_times, batch_size, y_size, x_size + theta_size
+            )
 
             grad = total_mask_grad(
                 logits=mask_logits,
@@ -149,9 +162,13 @@ def identify_theta(x, y, theta_size):
 
         print(np.mean(predictor_losses), np.mean(mi_losses))
 
-        valid_context_idx = torch.where((mask_logits > 0)[:, x_size:].any(dim=0))[0]
+        valid_context_idx = torch.where(
+            (mask_logits > 0)[:, x_size:].any(dim=0)
+        )[0]
         valid_theta_hat = theta_hat[:, valid_context_idx].detach().numpy()
-        mcc, (_, permutation) = mean_corr_coef(valid_theta_hat, theta, return_permutation=True)
+        mcc, (_, permutation) = mean_corr_coef(
+            valid_theta_hat, theta, return_permutation=True
+        )
 
         print("valid context num:", len(valid_context_idx), "mcc:", mcc)
         print("permutation:", valid_context_idx[permutation])

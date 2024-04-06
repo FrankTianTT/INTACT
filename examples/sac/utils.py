@@ -8,7 +8,10 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torchrl.data import (
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import (
     CatTensors,
@@ -44,7 +47,10 @@ def env_maker(cfg, device="cpu"):
     elif lib == "dm_control":
         env = DMControlEnv(cfg.env.name, cfg.env.task)
         return TransformedEnv(
-            env, CatTensors(in_keys=env.observation_spec.keys(), out_key="observation")
+            env,
+            CatTensors(
+                in_keys=env.observation_spec.keys(), out_key="observation"
+            ),
         )
     else:
         raise NotImplementedError(f"Unknown lib {lib}.")
@@ -239,7 +245,9 @@ def make_loss_module(cfg, model):
     loss_module.make_value_estimator(gamma=cfg.optim.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
+    target_net_updater = SoftUpdate(
+        loss_module, eps=cfg.optim.target_update_polyak
+    )
     return loss_module, target_net_updater
 
 
@@ -255,8 +263,12 @@ def split_critic_params(critic_params):
 
 
 def make_sac_optimizer(cfg, loss_module):
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+    critic_params = list(
+        loss_module.qvalue_network_params.flatten_keys().values()
+    )
+    actor_params = list(
+        loss_module.actor_network_params.flatten_keys().values()
+    )
 
     optimizer_actor = optim.Adam(
         actor_params,

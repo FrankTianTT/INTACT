@@ -15,7 +15,9 @@ def test_env_constructor():
             "task_num": 50,
         }
     )
-    make_env_list, oracle_context = create_make_env_list(cfg, make_mdp_env, mode="meta_train")
+    make_env_list, oracle_context = create_make_env_list(
+        cfg, make_mdp_env, mode="meta_train"
+    )
     env = make_env_list[0]()
 
     assert oracle_context.shape == (50,)

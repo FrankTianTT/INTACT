@@ -29,7 +29,9 @@ def env_constructor(
             # oracle_context = dict(gravity=(1, 10))
             oracle_context = dict(x_dot_bias=(-2, 2))
         else:
-            raise NotImplementedError("oracle_context is None, but env_name is {}".format(env_name))
+            raise NotImplementedError(
+                "oracle_context is None, but env_name is {}".format(env_name)
+            )
 
     def make_env(gym_kwargs, idx):
         if gym_kwargs is None:
@@ -43,12 +45,16 @@ def env_constructor(
 
     make_env_list = []
     for idx in range(task_num):
-        gym_kwargs = dict([(key, value[idx].item()) for key, value in context_dict.items()])
+        gym_kwargs = dict(
+            [(key, value[idx].item()) for key, value in context_dict.items()]
+        )
         make_env_list.append(partial(make_env, gym_kwargs=gym_kwargs, idx=idx))
     return make_env_list, context_dict
 
 
-def gen_meta_mdp_data(env_name="CartPoleContinuous-v0", task_num=100, sample_num=10000):
+def gen_meta_mdp_data(
+    env_name="CartPoleContinuous-v0", task_num=100, sample_num=10000
+):
     if env_name == "toy":
         context_dict = {"p0": torch.rand(task_num), "p1": torch.rand(task_num)}
 
@@ -56,12 +62,18 @@ def gen_meta_mdp_data(env_name="CartPoleContinuous-v0", task_num=100, sample_num
         action = torch.randn(sample_num, 1)
         idx = torch.randint(0, task_num, (sample_num, 1))
         next_obs = obs.clone()
-        next_obs[:, 0] += +torch.sin(context_dict["p0"][idx.squeeze()] * 2 * torch.pi)
-        next_obs[:, 1] += +torch.cos(context_dict["p1"][idx.squeeze()] * 2 * torch.pi)
+        next_obs[:, 0] += +torch.sin(
+            context_dict["p0"][idx.squeeze()] * 2 * torch.pi
+        )
+        next_obs[:, 1] += +torch.cos(
+            context_dict["p1"][idx.squeeze()] * 2 * torch.pi
+        )
 
         return obs, action, next_obs, idx, context_dict
 
-    make_env_list, context_dict = env_constructor(env_name=env_name, task_num=task_num)
+    make_env_list, context_dict = env_constructor(
+        env_name=env_name, task_num=task_num
+    )
     env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
 
     par = tqdm(range(sample_num), desc="Generating data")
@@ -70,7 +82,10 @@ def gen_meta_mdp_data(env_name="CartPoleContinuous-v0", task_num=100, sample_num
         par.update(tensor_dict.numel())
 
     td = env.rollout(
-        sample_num // task_num, auto_reset=True, break_when_any_done=False, callback=callback
+        sample_num // task_num,
+        auto_reset=True,
+        break_when_any_done=False,
+        callback=callback,
     )
 
     td = td.reshape(-1)

@@ -23,7 +23,9 @@ def get_activate(name: str = "ReLU"):
     elif name == "SiLU":
         return nn.SiLU()
     else:
-        raise NotImplementedError("{} is not supported as an activate function".format(name))
+        raise NotImplementedError(
+            "{} is not supported as an activate function".format(name)
+        )
 
 
 def check_dims(dims: Union[int, List[int]], name: str = "dims"):
@@ -33,7 +35,9 @@ def check_dims(dims: Union[int, List[int]], name: str = "dims"):
         elif isinstance(dims, int):
             dims = [dims]
         else:
-            raise NotImplementedError("{} should be None or int or list[int]".format(name))
+            raise NotImplementedError(
+                "{} should be None or int or list[int]".format(name)
+            )
     return dims
 
 
@@ -57,7 +61,13 @@ def build_mlp(
     layers = []
     for i in range(len(all_dims) - 1):
         if extra_dims is None:
-            layers += [nn.Linear(in_features=all_dims[i], out_features=all_dims[i + 1], bias=bias)]
+            layers += [
+                nn.Linear(
+                    in_features=all_dims[i],
+                    out_features=all_dims[i + 1],
+                    bias=bias,
+                )
+            ]
         else:
             layers += [
                 ParallelLinear(

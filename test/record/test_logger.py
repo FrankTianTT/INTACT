@@ -10,7 +10,9 @@ tmp_dir = tempfile.gettempdir()
 
 def test_multiple_logger():
     log_dir = os.path.join(tmp_dir, "test_multiple_logger")
-    logger = MultipleLoggerWrapper([CSVLogger("test", log_dir), TensorboardLogger("test", log_dir)])
+    logger = MultipleLoggerWrapper(
+        [CSVLogger("test", log_dir), TensorboardLogger("test", log_dir)]
+    )
 
     logger.log_scalar("t1", 1)
 

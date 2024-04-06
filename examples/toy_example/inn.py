@@ -9,7 +9,13 @@ from torch.func import jacrev, vmap
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-from FrEIA.framework import Node, InputNode, GraphINN, ConditionNode, OutputNode
+from FrEIA.framework import (
+    Node,
+    InputNode,
+    GraphINN,
+    ConditionNode,
+    OutputNode,
+)
 from FrEIA.modules import PermuteRandom, RNVPCouplingBlock
 from FrEIA.modules.coupling_layers import _BaseCouplingBlock
 from tqdm import tqdm
@@ -30,7 +36,9 @@ class GINCouplingBlock(_BaseCouplingBlock):
         split_len: Union[float, int] = 0.5,
     ):
 
-        super().__init__(dims_in, dims_c, clamp, clamp_activation, split_len=split_len)
+        super().__init__(
+            dims_in, dims_c, clamp, clamp_activation, split_len=split_len
+        )
 
         self.subnet1 = subnet_constructor(
             self.split_len1 + self.condition_length, self.split_len2 * 2
@@ -68,7 +76,9 @@ class GINCouplingBlock(_BaseCouplingBlock):
 
 
 def subnet_fc(dims_in, dims_out):
-    return nn.Sequential(nn.Linear(dims_in, 256), nn.ReLU(), nn.Linear(256, dims_out))
+    return nn.Sequential(
+        nn.Linear(dims_in, 256), nn.ReLU(), nn.Linear(256, dims_out)
+    )
 
 
 class InvWorldModel(nn.Module):
@@ -94,15 +104,25 @@ class InvWorldModel(nn.Module):
                     name=f"Coupling_{k}",
                 )
             )
-            nodes.append(Node(nodes[-1], PermuteRandom, {"seed": k}, name=f"Permute_{k}"))
+            nodes.append(
+                Node(
+                    nodes[-1], PermuteRandom, {"seed": k}, name=f"Permute_{k}"
+                )
+            )
         nodes.append(OutputNode(nodes[-1], name="Output"))
 
         self.module = GraphINN(nodes)
-        self.mu = nn.Parameter(torch.randn(task_num, obs_dim) * 0.05, requires_grad=True)
-        self.log_sig = nn.Parameter(torch.zeros(task_num, obs_dim), requires_grad=True)
+        self.mu = nn.Parameter(
+            torch.randn(task_num, obs_dim) * 0.05, requires_grad=True
+        )
+        self.log_sig = nn.Parameter(
+            torch.zeros(task_num, obs_dim), requires_grad=True
+        )
 
     def forward(self, obs, action, context, return_det=False):
-        next_obs, log_jac_det = self.module(context, c=torch.cat([obs, action], dim=-1), rev=False)
+        next_obs, log_jac_det = self.module(
+            context, c=torch.cat([obs, action], dim=-1), rev=False
+        )
         if self.residual:
             next_obs += obs
         if return_det:
@@ -113,7 +133,9 @@ class InvWorldModel(nn.Module):
     def inv_forward(self, obs, action, next_obs, return_det=False):
         if self.residual:
             next_obs = next_obs - obs
-        context, log_jac_det = self.module(next_obs, c=torch.cat([obs, action], dim=-1), rev=True)
+        context, log_jac_det = self.module(
+            next_obs, c=torch.cat([obs, action], dim=-1), rev=True
+        )
         if return_det:
             return context, log_jac_det
         else:
@@ -130,8 +152,12 @@ class InvWorldModel(nn.Module):
         )
         idx = idx.squeeze()
 
-        z, log_jac_det = self.module(next_obs, c=torch.cat([obs, action], dim=-1), rev=True)
-        self.mu.data = torch.stack([z[idx == i].mean(0) for i in range(self.task_num)])
+        z, log_jac_det = self.module(
+            next_obs, c=torch.cat([obs, action], dim=-1), rev=True
+        )
+        self.mu.data = torch.stack(
+            [z[idx == i].mean(0) for i in range(self.task_num)]
+        )
         self.log_sig.data = torch.stack(
             [z[idx == i].std(0, unbiased=False) for i in range(self.task_num)]
         ).log()
@@ -163,7 +189,9 @@ def inn_world_model(
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     dataset = TensorDataset(obs, action, next_obs, idx)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=True, drop_last=True
+    )
 
     # model.init_by_data(dataloader)
 
@@ -182,10 +210,17 @@ def inn_world_model(
             idx = idx.squeeze()
             model.zero_grad()
 
-            z, log_jac_det = model.inv_forward(obs, action, next_obs, return_det=True)
+            z, log_jac_det = model.inv_forward(
+                obs, action, next_obs, return_det=True
+            )
 
             if empirical_vars:
-                sig = torch.stack([z[idx == i].std(0, unbiased=False) for i in range(task_num)])
+                sig = torch.stack(
+                    [
+                        z[idx == i].std(0, unbiased=False)
+                        for i in range(task_num)
+                    ]
+                )
                 loss = sig[idx].log().mean(1) - log_jac_det
             else:
                 m = model.mu[idx]
@@ -194,11 +229,15 @@ def inn_world_model(
 
                 with torch.no_grad():
                     pred_next_state = model(obs, action, m)
-                    recon_loss = nn.functional.mse_loss(pred_next_state, next_obs)
+                    recon_loss = nn.functional.mse_loss(
+                        pred_next_state, next_obs
+                    )
                     recon_losses.append(recon_loss.item())
 
             if sparsity_reg > 0:
-                jac = jacrev(f, argnums=2)(obs, action, next_obs).permute(1, 0, 2)
+                jac = jacrev(f, argnums=2)(obs, action, next_obs).permute(
+                    1, 0, 2
+                )
                 loss += jac.abs().mean((1, 2))
                 jac_losses.append(jac.abs().mean((1, 2)).mean().item())
 
@@ -212,7 +251,12 @@ def inn_world_model(
         print(f"Epoch {epoch}, recon_loss: {np.mean(recon_losses)}")
         print(f"Epoch {epoch}, jac_loss: {np.mean(jac_losses)}")
 
-        context_gt = torch.stack(list(context_dict.values()), dim=-1).detach().cpu().numpy()
+        context_gt = (
+            torch.stack(list(context_dict.values()), dim=-1)
+            .detach()
+            .cpu()
+            .numpy()
+        )
         context_hat = model.mu.detach().cpu().numpy()
         mcc, permutation = mean_corr_coef(
             context_gt, context_hat, return_permutation=True, method="spearman"
@@ -223,7 +267,9 @@ def inn_world_model(
         idxes_gt, idxes_hat = permutation
 
         if len(idxes_gt) == 1:
-            plt.scatter(context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]])
+            plt.scatter(
+                context_gt[:, idxes_gt[0]], context_hat[:, idxes_hat[0]]
+            )
         else:
             num_cols = math.isqrt(len(idxes_gt))
             num_rows = math.ceil(len(idxes_gt) / num_cols)
@@ -258,7 +304,9 @@ def mlp(
     obs, action, next_obs, idx, context_dict = gen_meta_mdp_data(
         env_name=env_name, task_num=task_num, sample_num=sample_num
     )
-    context = nn.Parameter(torch.zeros(task_num, context_dim), requires_grad=True)
+    context = nn.Parameter(
+        torch.zeros(task_num, context_dim), requires_grad=True
+    )
 
     model = nn.Sequential(
         nn.Linear(obs.shape[1] + action.shape[1] + context_dim, 256),
@@ -271,7 +319,9 @@ def mlp(
     optimizer = torch.optim.Adam(list(model.parameters()) + [context], lr=lr)
 
     dataset = TensorDataset(obs, action, next_obs, idx)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=True, drop_last=True
+    )
 
     for epoch in range(1000):
         losses = []
@@ -285,7 +335,9 @@ def mlp(
             )
             model.zero_grad()
 
-            pred_next_obs = model(torch.cat([obs, action, context[idx[:, 0]]], dim=-1))
+            pred_next_obs = model(
+                torch.cat([obs, action, context[idx[:, 0]]], dim=-1)
+            )
 
             loss = nn.functional.mse_loss(next_obs, pred_next_obs + obs)
             loss.backward()
@@ -294,7 +346,12 @@ def mlp(
         print(f"Epoch {epoch}, loss: {np.mean(losses)}")
 
         if epoch % 50 == 0:
-            context_gt = torch.stack(list(context_dict.values()), dim=-1).detach().cpu().numpy()
+            context_gt = (
+                torch.stack(list(context_dict.values()), dim=-1)
+                .detach()
+                .cpu()
+                .numpy()
+            )
             context_hat = context.detach().numpy()
             plt.scatter(context_gt.reshape(-1), context_hat.reshape(-1))
             plt.show()

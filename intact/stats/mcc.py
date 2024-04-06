@@ -14,7 +14,9 @@ def kernel_independence_test(x, y):
     result_matrix = np.zeros((x_dim, y_dim))
     for i in range(x_dim):
         for j in range(y_dim):
-            p_value, test_stat = ci_test.compute_pvalue(x[:, i : i + 1], y[:, j : j + 1])
+            p_value, test_stat = ci_test.compute_pvalue(
+                x[:, i : i + 1], y[:, j : j + 1]
+            )
             result_matrix[i, j] = 1 - min(0.05, p_value) * 20
     return result_matrix
 

@@ -1,7 +1,10 @@
 import torch
 from tensordict import TensorDict
 
-from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
+from intact.modules.models.mdp_world_model import (
+    PlainMDPWorldModel,
+    CausalWorldModel,
+)
 from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
 
 
@@ -23,11 +26,26 @@ def test_plain_mdp_wrapper():
     mdp_wrapper = MDPWrapper(world_model)
 
     td = mdp_wrapper(td)
-    assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
-    assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
-    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
-    assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
+    assert (
+        "obs_mean" in td.keys()
+        and td["obs_mean"].shape == td["observation"].shape
+    )
+    assert (
+        "obs_log_var" in td.keys()
+        and td["obs_log_var"].shape == td["observation"].shape
+    )
+    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (
+        batch_size,
+        1,
+    )
+    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (
+        batch_size,
+        1,
+    )
+    assert "terminated" in td.keys() and td["terminated"].shape == (
+        batch_size,
+        1,
+    )
 
 
 def test_causal_mdp_wrapper():
@@ -49,11 +67,26 @@ def test_causal_mdp_wrapper():
 
     td = causal_mdp_wrapper(td)
 
-    assert "obs_mean" in td.keys() and td["obs_mean"].shape == td["observation"].shape
-    assert "obs_log_var" in td.keys() and td["obs_log_var"].shape == td["observation"].shape
-    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (batch_size, 1)
-    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (batch_size, 1)
-    assert "terminated" in td.keys() and td["terminated"].shape == (batch_size, 1)
+    assert (
+        "obs_mean" in td.keys()
+        and td["obs_mean"].shape == td["observation"].shape
+    )
+    assert (
+        "obs_log_var" in td.keys()
+        and td["obs_log_var"].shape == td["observation"].shape
+    )
+    assert "reward_mean" in td.keys() and td["reward_mean"].shape == (
+        batch_size,
+        1,
+    )
+    assert "reward_log_var" in td.keys() and td["reward_log_var"].shape == (
+        batch_size,
+        1,
+    )
+    assert "terminated" in td.keys() and td["terminated"].shape == (
+        batch_size,
+        1,
+    )
     assert "causal_mask" in td.keys() and td["causal_mask"].shape == (
         batch_size,
         obs_dim + 2,

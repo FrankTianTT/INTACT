@@ -9,11 +9,17 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.modules import SafeModule
-from torchrl.modules import SafeProbabilisticTensorDictSequential, SafeProbabilisticModule
+from torchrl.modules import (
+    SafeProbabilisticTensorDictSequential,
+    SafeProbabilisticModule,
+)
 from torchrl.modules.distributions import TanhNormal
 
 from intact.envs.mdp_env import MDPEnv
-from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
+from intact.modules.models.mdp_world_model import (
+    PlainMDPWorldModel,
+    CausalWorldModel,
+)
 from intact.modules.models.policy.actor import Actor
 from intact.modules.models.policy.critic import Critic
 from intact.modules.tensordict_module.mdp_wrapper import MDPWrapper
@@ -35,7 +41,11 @@ def make_mdp_model(
     action_dim = proof_env.action_spec.shape[0]
 
     if cfg.model_type == "causal":
-        wm_class = partial(CausalWorldModel, using_reinforce=cfg.using_reinforce, alpha=cfg.alpha)
+        wm_class = partial(
+            CausalWorldModel,
+            using_reinforce=cfg.using_reinforce,
+            alpha=cfg.alpha,
+        )
     elif cfg.model_type == "plain":
         wm_class = PlainMDPWorldModel
     # elif cfg.model_type == "inn":
@@ -53,7 +63,9 @@ def make_mdp_model(
     world_model = MDPWrapper(world_model).to(device)
 
     model_based_env = MDPEnv(
-        world_model, termination_fns=cfg.termination_fns, reward_fns=cfg.reward_fns
+        world_model,
+        termination_fns=cfg.termination_fns,
+        reward_fns=cfg.reward_fns,
     ).to(device)
     model_based_env.set_specs_from_env(proof_env)
 
@@ -85,7 +97,9 @@ def make_mdp_dreamer(
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    world_model, model_based_env = make_mdp_model(cfg, proof_env, device=device)
+    world_model, model_based_env = make_mdp_model(
+        cfg, proof_env, device=device
+    )
 
     actor_module = Actor(
         action_dim=action_dim,

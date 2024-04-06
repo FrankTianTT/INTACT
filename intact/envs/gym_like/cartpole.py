@@ -3,6 +3,7 @@ Classic cart-pole system implemented by Rich Sutton et al.
 Copied from http://incompleteideas.net/sutton/book/code/pole.c
 permalink: https://perma.cc/C9ZM-652R
 """
+
 import math
 from typing import Optional, Union
 
@@ -112,7 +113,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.pole_vel_bias = pole_vel_bias
 
         # Angle at which to fail the episode
-        self.theta_threshold_radians = theta_threshold_degree * 2 * math.pi / 360
+        self.theta_threshold_radians = (
+            theta_threshold_degree * 2 * math.pi / 360
+        )
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -152,11 +155,16 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
+        temp = (
+            force + self.polemass_length * theta_dot**2 * sintheta
+        ) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
+            self.length
+            * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
         )
-        xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
+        xacc = (
+            temp - self.polemass_length * thetaacc * costheta / self.total_mass
+        )
 
         if self.kinematics_integrator == "euler":
             x = x + self.tau * x_dot
@@ -246,9 +254,13 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.init()
             if self.render_mode == "human":
                 pygame.display.init()
-                self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+                self.screen = pygame.display.set_mode(
+                    (self.screen_width, self.screen_height)
+                )
             else:  # mode == "rgb_array"
-                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+                self.screen = pygame.Surface(
+                    (self.screen_width, self.screen_height)
+                )
         if self.clock is None:
             self.clock = pygame.time.Clock()
 
@@ -267,7 +279,12 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.surf = pygame.Surface((self.screen_width, self.screen_height))
         self.surf.fill((255, 255, 255))
 
-        l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
+        l, r, t, b = (
+            -cartwidth / 2,
+            cartwidth / 2,
+            cartheight / 2,
+            -cartheight / 2,
+        )
         axleoffset = cartheight / 4.0
         cartx = x[0] * scale + self.screen_width / 2.0  # MIDDLE OF CART
         carty = 100  # TOP OF CART
@@ -316,7 +333,10 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.display.flip()
 
         elif self.render_mode == "rgb_array":
-            return np.transpose(np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2))
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)),
+                axes=(1, 0, 2),
+            )
 
     def close(self):
         if self.screen is not None:

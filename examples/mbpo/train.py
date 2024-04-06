@@ -96,17 +96,23 @@ def main(cfg):
 
     stats = None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
+        proof_env = transformed_env_constructor(
+            cfg=cfg, use_env_creator=False
+        )()
         stats = get_stats_random_rollout(
             cfg,
             proof_env,
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
+            key="next_pixels"
+            if cfg.from_pixels
+            else "next_observation_vector",
         )
         # make sure proof_env is closed
         proof_env.close()
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False, stats=stats)()
+    proof_env = transformed_env_constructor(
+        cfg=cfg, use_env_creator=False, stats=stats
+    )()
 
     # MBPO models
 
@@ -135,7 +141,9 @@ def main(cfg):
     imagination_horizon_planner = ImaginationStepsPlanner(cfg)
     sac_loss, target_net_updater = make_sac_loss(sac_model, cfg)
     # optimizers
-    world_model_opt = torch.optim.Adam(world_model_loss.parameters(), lr=cfg.world_model_lr)
+    world_model_opt = torch.optim.Adam(
+        world_model_loss.parameters(), lr=cfg.world_model_lr
+    )
     sac_opt = torch.optim.Adam(sac_loss.parameters(), lr=cfg.sac_lr)
 
     # Recorder
@@ -268,32 +276,55 @@ def main(cfg):
                     without_replacement_data_buffer._sampler.reset(
                         without_replacement_data_buffer._storage
                     )
-                    num_model_steps = len(without_replacement_data_buffer) // cfg.model_batch_size
-                    num_model_train_steps = int(num_model_steps * cfg.model_holdout_ratio)
-                    num_model_test_steps = num_model_steps - num_model_train_steps
+                    num_model_steps = (
+                        len(without_replacement_data_buffer)
+                        // cfg.model_batch_size
+                    )
+                    num_model_train_steps = int(
+                        num_model_steps * cfg.model_holdout_ratio
+                    )
+                    num_model_test_steps = (
+                        num_model_steps - num_model_train_steps
+                    )
 
                     for _ in range(num_model_train_steps):
                         (
                             model_sampled_tensordict,
                             _,
-                        ) = without_replacement_data_buffer.sample(cfg.model_batch_size)
-                        model_sampled_tensordict = model_sampled_tensordict.to(device)
+                        ) = without_replacement_data_buffer.sample(
+                            cfg.model_batch_size
+                        )
+                        model_sampled_tensordict = model_sampled_tensordict.to(
+                            device
+                        )
 
                         with autocast(dtype=torch.float16):
-                            model_loss_td = world_model_loss(model_sampled_tensordict)
-                        scaler1.scale(model_loss_td["loss_world_model"]).backward()
+                            model_loss_td = world_model_loss(
+                                model_sampled_tensordict
+                            )
+                        scaler1.scale(
+                            model_loss_td["loss_world_model"]
+                        ).backward()
                         scaler1.unscale_(world_model_opt)
-                        clip_grad_norm_(world_model_loss.parameters(), cfg.grad_clip)
+                        clip_grad_norm_(
+                            world_model_loss.parameters(), cfg.grad_clip
+                        )
                         scaler1.step(world_model_opt)
                         world_model_opt.zero_grad()
                         scaler1.update()
                         world_model_train_losses.append(model_loss_td.detach())
-                    world_model_train_losses = torch.stack(world_model_train_losses, dim=0)
-                    loss_world_model_train = world_model_train_losses["loss_world_model"].mean()
+                    world_model_train_losses = torch.stack(
+                        world_model_train_losses, dim=0
+                    )
+                    loss_world_model_train = world_model_train_losses[
+                        "loss_world_model"
+                    ].mean()
 
-                    per_network_world_model_loss_train = world_model_train_losses[
-                        "per_network_world_model_loss"
-                    ].mean(dim=0)
+                    per_network_world_model_loss_train = (
+                        world_model_train_losses[
+                            "per_network_world_model_loss"
+                        ].mean(dim=0)
+                    )
 
                     if j == 0:
                         logger.log_scalar(
@@ -302,7 +333,9 @@ def main(cfg):
                             step=collected_frames,
                         )
 
-                        for i, loss in enumerate(per_network_world_model_loss_train):
+                        for i, loss in enumerate(
+                            per_network_world_model_loss_train
+                        ):
                             logger.log_scalar(
                                 f"loss_world_model_train_network_{i}",
                                 loss,
@@ -315,17 +348,31 @@ def main(cfg):
                             (
                                 model_sampled_tensordict,
                                 _,
-                            ) = without_replacement_data_buffer.sample(cfg.model_batch_size)
-                            model_sampled_tensordict = model_sampled_tensordict.to(device)
+                            ) = without_replacement_data_buffer.sample(
+                                cfg.model_batch_size
+                            )
+                            model_sampled_tensordict = (
+                                model_sampled_tensordict.to(device)
+                            )
                             with autocast(dtype=torch.float16):
-                                model_loss_td = world_model_loss(model_sampled_tensordict)
-                            world_model_test_losses.append(model_loss_td.detach())
+                                model_loss_td = world_model_loss(
+                                    model_sampled_tensordict
+                                )
+                            world_model_test_losses.append(
+                                model_loss_td.detach()
+                            )
 
-                        world_model_test_losses = torch.stack(world_model_test_losses, dim=0)
-                        loss_world_model_test = world_model_test_losses["loss_world_model"].mean()
-                        per_network_world_model_loss_test = world_model_test_losses[
-                            "per_network_world_model_loss"
-                        ].mean(dim=0)
+                        world_model_test_losses = torch.stack(
+                            world_model_test_losses, dim=0
+                        )
+                        loss_world_model_test = world_model_test_losses[
+                            "loss_world_model"
+                        ].mean()
+                        per_network_world_model_loss_test = (
+                            world_model_test_losses[
+                                "per_network_world_model_loss"
+                            ].mean(dim=0)
+                        )
 
                         if j == 0:
                             logger.log_scalar(
@@ -333,13 +380,17 @@ def main(cfg):
                                 loss_world_model_test,
                                 step=collected_frames,
                             )
-                            for i, loss in enumerate(per_network_world_model_loss_test):
+                            for i, loss in enumerate(
+                                per_network_world_model_loss_test
+                            ):
                                 logger.log_scalar(
                                     f"loss_world_model_test_network_{i}",
                                     loss,
                                     step=collected_frames,
                                 )
-                        elites = torch.argsort(per_network_world_model_loss_test)[: cfg.num_elites]
+                        elites = torch.argsort(
+                            per_network_world_model_loss_test
+                        )[: cfg.num_elites]
                         model_based_env.elites = elites
 
                     with torch.no_grad(), set_exploration_mode("random"):
@@ -347,31 +398,47 @@ def main(cfg):
                             (
                                 model_sampled_tensordict,
                                 _,
-                            ) = with_replacement_data_buffer.sample(cfg.num_model_rollouts)
-                            model_sampled_tensordict = model_sampled_tensordict.to(device)
+                            ) = with_replacement_data_buffer.sample(
+                                cfg.num_model_rollouts
+                            )
+                            model_sampled_tensordict = (
+                                model_sampled_tensordict.to(device)
+                            )
                             fake_traj_tensordict = model_based_env.rollout(
                                 max_steps=imagination_horizon,
                                 policy=policy,
                                 auto_reset=False,
                                 tensordict=model_sampled_tensordict,
                             )
-                            fake_traj_tensordict = fake_traj_tensordict.select(*original_keys)
-                            model_buffer.extend(fake_traj_tensordict.view(-1).cpu())
+                            fake_traj_tensordict = fake_traj_tensordict.select(
+                                *original_keys
+                            )
+                            model_buffer.extend(
+                                fake_traj_tensordict.view(-1).cpu()
+                            )
                 if len(model_buffer) > cfg.init_random_frames:
                     sac_losses_list = []
                     for _ in range(cfg.num_sac_training_steps_per_optim_step):
-                        num_real_samples = int(cfg.sac_batch_size * cfg.real_data_ratio)
+                        num_real_samples = int(
+                            cfg.sac_batch_size * cfg.real_data_ratio
+                        )
 
-                        num_fake_samples = cfg.sac_batch_size - num_real_samples
+                        num_fake_samples = (
+                            cfg.sac_batch_size - num_real_samples
+                        )
 
                         # agent_sampled_tensordict = fake_replay_buffer.sample(cfg.sac_batch_size)
 
-                        fake_sampled_tensordict, _ = model_buffer.sample(num_fake_samples)
+                        fake_sampled_tensordict, _ = model_buffer.sample(
+                            num_fake_samples
+                        )
 
                         (
                             real_sampled_tensordict,
                             _,
-                        ) = with_replacement_data_buffer.sample(num_real_samples)
+                        ) = with_replacement_data_buffer.sample(
+                            num_real_samples
+                        )
 
                         agent_sampled_tensordict = torch.cat(
                             [

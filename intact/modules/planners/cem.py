@@ -57,7 +57,9 @@ class MyCEMPlanner(CEMPlanner):
         TIME_DIM = len(self.action_spec.shape) - 3
         K_DIM = len(self.action_spec.shape) - 4
         expanded_original_tensordict = (
-            tensordict.unsqueeze(-1).expand(*batch_size, self.num_candidates).to_tensordict()
+            tensordict.unsqueeze(-1)
+            .expand(*batch_size, self.num_candidates)
+            .to_tensordict()
         )
         _action_means = torch.zeros(
             *action_stats_shape,
@@ -94,7 +96,9 @@ class MyCEMPlanner(CEMPlanner):
                 policy=policy, tensordict=optim_tensordict
             )
 
-            sum_rewards = optim_tensordict.get(self.reward_key).sum(dim=TIME_DIM, keepdim=True)
+            sum_rewards = optim_tensordict.get(self.reward_key).sum(
+                dim=TIME_DIM, keepdim=True
+            )
             _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
             top_k = top_k.expand(action_topk_shape)
             best_actions = actions.gather(K_DIM, top_k)
@@ -110,15 +114,21 @@ class MyCEMPlanner(CEMPlanner):
         self.alpha = 0.1  # should in __init__
 
         new_means = (
-            self.alpha * container.get(("stats", "_action_means")) + (1 - self.alpha) * means
+            self.alpha * container.get(("stats", "_action_means"))
+            + (1 - self.alpha) * means
         )
-        new_stds = self.alpha * container.get(("stats", "_action_stds")) + (1 - self.alpha) * stds
+        new_stds = (
+            self.alpha * container.get(("stats", "_action_stds"))
+            + (1 - self.alpha) * stds
+        )
         container.set_(("stats", "_action_means"), new_means)
         container.set_(("stats", "_action_stds"), new_stds)
 
     def reward_truncated_rollout(self, policy, tensordict):
         tensordicts = []
-        ever_done = torch.zeros(*tensordict.batch_size, 1, dtype=bool).to(self.device)
+        ever_done = torch.zeros(*tensordict.batch_size, 1, dtype=bool).to(
+            self.device
+        )
         with torch.no_grad():
             for i in range(self.planning_horizon):
                 tensordict = policy(tensordict)
@@ -133,7 +143,9 @@ class MyCEMPlanner(CEMPlanner):
                     break
                 else:
                     tensordict = next_tensordict
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+        batch_size = (
+            self.batch_size if tensordict is None else tensordict.batch_size
+        )
         out_td = torch.stack(tensordicts, len(batch_size)).contiguous()
         out_td.refine_names(..., "time")
 

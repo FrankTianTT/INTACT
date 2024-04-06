@@ -81,7 +81,10 @@ class BaseWorldModel(nn.Module):
         Returns:
             dict: A dictionary of the parameters.
         """
-        return dict(nets=self.nets.parameters(), context=self.context_model.parameters())
+        return dict(
+            nets=self.nets.parameters(),
+            context=self.context_model.parameters(),
+        )
 
     def get_parameter(self, target: str):
         """
@@ -119,7 +122,11 @@ class BaseWorldModel(nn.Module):
         Returns:
             int: The output dimension.
         """
-        return self.obs_dim + int(self.learned_reward) + int(self.learned_termination)
+        return (
+            self.obs_dim
+            + int(self.learned_reward)
+            + int(self.learned_termination)
+        )
 
     def reset(self, task_num=None):
         """

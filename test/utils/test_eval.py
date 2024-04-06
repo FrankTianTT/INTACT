@@ -20,7 +20,13 @@ def test_evaluate_policy():
             "task_num": 5,
         }
     )
-    make_env_list, oracle_context = create_make_env_list(env_cfg, make_mdp_env, mode="meta_train")
-    proof_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
+    make_env_list, oracle_context = create_make_env_list(
+        env_cfg, make_mdp_env, mode="meta_train"
+    )
+    proof_env = SerialEnv(
+        len(make_env_list), make_env_list, shared_memory=False
+    )
 
-    evaluate_policy(eval_cfg, oracle_context, policy=RandomPolicy(proof_env.action_spec))
+    evaluate_policy(
+        eval_cfg, oracle_context, policy=RandomPolicy(proof_env.action_spec)
+    )

@@ -30,7 +30,13 @@ def generate_graph_between_room_and_context(num_rooms, context_dim, sparsity):
 
 
 def generate_influence_function(num_rooms, context_dim):
-    func = build_mlp(num_rooms + 1 + context_dim, 1, [32, 32], num_rooms, activate_name="Tanh")
+    func = build_mlp(
+        num_rooms + 1 + context_dim,
+        1,
+        [32, 32],
+        num_rooms,
+        activate_name="Tanh",
+    )
 
     for name, p in func.named_parameters():
         if "weight" in name:
@@ -39,7 +45,7 @@ def generate_influence_function(num_rooms, context_dim):
     return func
 
 
-class HeatingEnv(gym.Env):
+class MultiNodeEnv(gym.Env):
     def __init__(
         self,
         num_rooms=5,
@@ -54,7 +60,9 @@ class HeatingEnv(gym.Env):
         render_mode="rgb_array",
         **context_kwargs,
     ):
-        assert context_dim <= num_rooms, "source variables should be less than observed variables"
+        assert (
+            context_dim <= num_rooms
+        ), "source variables should be less than observed variables"
         self.num_rooms = num_rooms
         self.context_dim = context_dim
         self.sparsity = sparsity
@@ -72,20 +80,30 @@ class HeatingEnv(gym.Env):
         # assert len(context_kwargs) == 0, f"Unknown context variables: {context_kwargs}"
 
         torch.manual_seed(self.seed)
-        self.room_graph = generate_graph_cross_rooms(self.num_rooms, self.sparsity)
+        self.room_graph = generate_graph_cross_rooms(
+            self.num_rooms, self.sparsity
+        )
         self.context_graph = generate_graph_between_room_and_context(
             self.num_rooms, self.context_dim, self.context_sparsity
         )
 
-        self.masked_context = self.context_graph * self.contexts.expand(self.num_rooms, -1)
+        self.masked_context = self.context_graph * self.contexts.expand(
+            self.num_rooms, -1
+        )
 
         self.inf_func = generate_influence_function(
             num_rooms=self.num_rooms,
-            context_dim=self.context_dim if self.context_influence_type == "neural" else 0,
+            context_dim=(
+                self.context_dim
+                if self.context_influence_type == "neural"
+                else 0
+            ),
         )
         self.influence = None
 
-        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(num_rooms,), dtype=np.float32)
+        self.action_space = gym.spaces.Box(
+            low=-1, high=1, shape=(num_rooms,), dtype=np.float32
+        )
         self.observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=(num_rooms,), dtype=np.float32
         )
@@ -94,11 +112,17 @@ class HeatingEnv(gym.Env):
     @property
     def total_graph(self):
         action_graph = torch.eye(self.num_rooms).int()
-        return torch.cat([self.room_graph, action_graph, self.context_graph], dim=-1)
+        return torch.cat(
+            [self.room_graph, action_graph, self.context_graph], dim=-1
+        )
 
     def calculate_influence(self, action):
         control = torch.from_numpy(action).float().reshape(self.num_rooms, 1)
-        temp = torch.from_numpy(self.temperature).float().reshape(1, self.num_rooms)
+        temp = (
+            torch.from_numpy(self.temperature)
+            .float()
+            .reshape(1, self.num_rooms)
+        )
         temp = (temp - 20) / 20
         temp = self.room_graph * temp.expand(self.num_rooms, -1)
         if self.context_influence_type == "neural":
@@ -113,14 +137,18 @@ class HeatingEnv(gym.Env):
         if self.context_influence_type == "linear":
             self.influence += self.masked_context.mean(dim=-1).numpy() * 5.0
         elif self.context_influence_type == "tanh":
-            self.influence += torch.tanh(self.masked_context.mean(dim=-1)).numpy()
+            self.influence += torch.tanh(
+                self.masked_context.mean(dim=-1)
+            ).numpy()
         elif self.context_influence_type == "neural":
             pass
         else:
             raise NotImplementedError
 
     def get_obs(self):
-        obs_temp = self.temperature.copy()  # + np.random.normal(0, 0.05, size=(self.num_rooms,))
+        obs_temp = (
+            self.temperature.copy()
+        )  # + np.random.normal(0, 0.05, size=(self.num_rooms,))
         return (obs_temp - 20) / 20  # normalize
 
     def step(self, action):
@@ -145,7 +173,9 @@ class HeatingEnv(gym.Env):
     def printing_total_graph(self):
         string = ""
         for i, out_dim in enumerate(range(self.total_graph.shape[0])):
-            string += " ".join([str(int(ele.item())) for ele in self.total_graph[out_dim]])
+            string += " ".join(
+                [str(int(ele.item())) for ele in self.total_graph[out_dim]]
+            )
             if i != self.total_graph.shape[0] - 1:
                 string += "\n"
         return string

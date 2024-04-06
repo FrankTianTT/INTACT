@@ -36,7 +36,9 @@ def test_only_train():
                 "reward": torch.randn(batch_size, batch_len, 1),
                 "observation": torch.randn(batch_size, batch_len, obs_dim),
             },
-            "collector": {"mask": torch.ones(batch_size, batch_len, dtype=torch.bool)},
+            "collector": {
+                "mask": torch.ones(batch_size, batch_len, dtype=torch.bool)
+            },
         },
         batch_size=(batch_size, batch_len),
     )
@@ -86,7 +88,9 @@ def test_reinforce_forward():
                 "reward": torch.randn(batch_size, batch_len, 1),
                 "observation": torch.randn(batch_size, batch_len, obs_dim),
             },
-            "collector": {"mask": torch.ones(batch_size, batch_len, dtype=torch.bool)},
+            "collector": {
+                "mask": torch.ones(batch_size, batch_len, dtype=torch.bool)
+            },
         },
         batch_size=(batch_size, batch_len),
     )

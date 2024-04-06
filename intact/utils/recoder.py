@@ -1,8 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple, Union
@@ -16,6 +11,12 @@ from torchrl.trainers import Recorder as BaseRecorder
 
 
 class Recorder(BaseRecorder):
+    """
+    A class that extends the BaseRecorder for recording environment rollouts.
+
+    This class is used to record the environment rollouts at a specified interval and evaluate the policy.
+    """
+
     def __init__(
         self,
         *,
@@ -32,21 +33,22 @@ class Recorder(BaseRecorder):
         log_pbar: bool = False,
         recorder: EnvBase = None,
     ) -> None:
-        """Recorder for MDP environments.
+        """
+        Initialize the Recorder.
 
         Args:
-            record_interval:
-            env_max_steps:
-            eval_repeat_times:
-            frame_skip:
-            policy_exploration:
-            environment:
-            exploration_type:
-            log_keys:
-            out_keys:
-            suffix:
-            log_pbar:
-            recorder:
+            record_interval (int): The interval at which to record the environment rollouts.
+            env_max_steps (int, optional): The maximum number of steps in the environment. Defaults to 1000.
+            eval_repeat_times (int, optional): The number of times to repeat the evaluation. Defaults to 3.
+            frame_skip (int, optional): The number of frames to skip. Defaults to 1.
+            policy_exploration (TensorDictModule, optional): The policy exploration type. Defaults to ExplorationType.MODE.
+            environment (EnvBase, optional): The environment to use. Defaults to None.
+            exploration_type (ExplorationType, optional): The exploration type. Defaults to ExplorationType.RANDOM.
+            log_keys (Optional[List[Union[str, Tuple[str]]]], optional): The keys to log. Defaults to None.
+            out_keys (Optional[Dict[Union[str, Tuple[str]], str]], optional): The output keys. Defaults to None.
+            suffix (Optional[str], optional): The suffix to use. Defaults to None.
+            log_pbar (bool, optional): Whether to log the progress bar. Defaults to False.
+            recorder (EnvBase, optional): The recorder to use. Defaults to None.
         """
         self.env_max_steps = env_max_steps
         self.eval_repeat_times = eval_repeat_times
@@ -68,6 +70,18 @@ class Recorder(BaseRecorder):
 
     @torch.inference_mode()
     def __call__(self, batch: TensorDictBase) -> Dict:
+        """
+        Call the Recorder.
+
+        This method is called when the Recorder instance is called. It records the environment rollouts at the specified interval
+        and evaluates the policy.
+
+        Args:
+            batch (TensorDictBase): The input batch.
+
+        Returns:
+            Dict: A dictionary containing the evaluation results.
+        """
         out = None
         if self._count % self.record_interval == 0:
             with set_exploration_type(self.exploration_type):
@@ -87,7 +101,9 @@ class Recorder(BaseRecorder):
 
                     rewards = td_record[("next", "reward")].float()
                     out["r_evaluation"] += rewards.mean() / self.frame_skip
-                    out["total_r_evaluation"] += rewards.sum(dim=td_record.ndim - 1).mean()
+                    out["total_r_evaluation"] += rewards.sum(
+                        dim=td_record.ndim - 1
+                    ).mean()
                 out["r_evaluation"] /= self.eval_repeat_times
                 out["total_r_evaluation"] /= self.eval_repeat_times
 
@@ -102,6 +118,12 @@ class Recorder(BaseRecorder):
         return out
 
     def state_dict(self) -> Dict:
+        """
+        Get the state dictionary of the Recorder.
+
+        Returns:
+            Dict: A dictionary containing the state of the Recorder.
+        """
         return {
             "_count": self._count,
             "recorder_state_dict": self.environment.state_dict(),

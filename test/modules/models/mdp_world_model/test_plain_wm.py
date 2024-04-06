@@ -9,18 +9,33 @@ def test_plain_world_model():
     batch_size = 32
     env_num = 5
 
-    world_model = PlainMDPWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=False)
+    world_model = PlainMDPWorldModel(
+        obs_dim=obs_dim, action_dim=action_dim, meta=False
+    )
 
     for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
         observation = torch.randn(*batch_shape, obs_dim)
         action = torch.randn(*batch_shape, action_dim)
 
-        next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated = world_model(
-            observation, action
-        )
+        (
+            next_obs_mean,
+            next_obs_log_var,
+            reward_mean,
+            reward_log_var,
+            terminated,
+        ) = world_model(observation, action)
 
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
-        assert reward_mean.shape == reward_log_var.shape == terminated.shape == (*batch_shape, 1)
+        assert (
+            next_obs_mean.shape
+            == next_obs_log_var.shape
+            == (*batch_shape, obs_dim)
+        )
+        assert (
+            reward_mean.shape
+            == reward_log_var.shape
+            == terminated.shape
+            == (*batch_shape, 1)
+        )
 
 
 def test_reset():

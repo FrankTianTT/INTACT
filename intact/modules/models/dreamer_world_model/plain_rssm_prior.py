@@ -65,7 +65,9 @@ class PlainRSSMPrior(BaseWorldModel):
 
     def build_nets(self):
         as2middle = build_mlp(
-            input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
+            input_dim=self.action_dim
+            + self.total_state_dim
+            + self.max_context_dim,
             output_dim=self.total_belief_dim,
             last_activate_name="ELU",
         )
@@ -80,7 +82,9 @@ class PlainRSSMPrior(BaseWorldModel):
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        module_dict = nn.ModuleDict(dict(as2middle=as2middle, middle2s=middle2s))
+        module_dict = nn.ModuleDict(
+            dict(as2middle=as2middle, middle2s=middle2s)
+        )
         if not self.disable_belief:
             rnn = nn.GRUCell(
                 input_size=self.total_belief_dim,
@@ -90,16 +94,24 @@ class PlainRSSMPrior(BaseWorldModel):
 
         return module_dict
 
-    def forward(self, state, belief, action, idx=None, deterministic_mask=False):
-        projector_inputs = torch.cat([state, action, self.context_model(idx)], dim=-1)
+    def forward(
+        self, state, belief, action, idx=None, deterministic_mask=False
+    ):
+        projector_inputs = torch.cat(
+            [state, action, self.context_model(idx)], dim=-1
+        )
         batch_shape = projector_inputs.shape[:-1]
 
-        middle = self.nets["as2middle"](projector_inputs.reshape(prod(batch_shape), -1))
+        middle = self.nets["as2middle"](
+            projector_inputs.reshape(prod(batch_shape), -1)
+        )
         if self.disable_belief:
             next_belief = belief.clone()
             prior_mean, prior_std = self.nets["middle2s"](middle)
         else:
-            next_belief = self.nets["rnn"](middle, belief.reshape(prod(batch_shape), -1))
+            next_belief = self.nets["rnn"](
+                middle, belief.reshape(prod(batch_shape), -1)
+            )
             prior_mean, prior_std = self.nets["middle2s"](next_belief)
             next_belief = next_belief.reshape(*batch_shape, -1)
 

@@ -39,10 +39,18 @@ class CausalDreamerModelLoss(DreamerModelLoss):
             delayed_clamp (bool, optional): If True, use delayed clamp. Defaults to False.
         """
         self.model_type = world_model.model_type
-        assert not global_average, "global_average is not supported in CausalDreamerModelLoss"
-        assert not delayed_clamp, "delayed_clamp is not supported in CausalDreamerModelLoss"
+        assert (
+            not global_average
+        ), "global_average is not supported in CausalDreamerModelLoss"
+        assert (
+            not delayed_clamp
+        ), "delayed_clamp is not supported in CausalDreamerModelLoss"
         super().__init__(
-            world_model, free_nats=free_nats, global_average=False, delayed_clamp=False, **kwargs
+            world_model,
+            free_nats=free_nats,
+            global_average=False,
+            delayed_clamp=False,
+            **kwargs
         )
 
         self.sparse_weight = sparse_weight
@@ -73,7 +81,8 @@ class CausalDreamerModelLoss(DreamerModelLoss):
         if self.model_type == "causal" and not self.using_reinforce:
             model_loss_td.set(
                 "sparse_loss",
-                torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight,
+                torch.sigmoid(self.causal_mask.observed_logits).sum()
+                * self.sparse_weight,
             )
             if self.causal_mask.context_input_dim > 0:
                 model_loss_td.set(
@@ -83,7 +92,9 @@ class CausalDreamerModelLoss(DreamerModelLoss):
                 )
                 model_loss_td.set(
                     "context_max_loss",
-                    torch.sigmoid(self.causal_mask.context_logits).max(dim=1).sum()
+                    torch.sigmoid(self.causal_mask.context_logits)
+                    .max(dim=1)
+                    .sum()
                     * self.context_max_weight,
                 )
         return model_loss_td, sampled_tensordict
@@ -101,7 +112,9 @@ class CausalDreamerModelLoss(DreamerModelLoss):
         tensordict = tensordict.clone(recurse=False)
         mask = tensordict.get(self.tensor_keys.collector_mask).clone()
 
-        tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
+        tensordict = self.world_model.parallel_forward(
+            tensordict, self.sampling_times
+        )
 
         sampling_loss = self.kl_loss(
             tensordict.get(("next", self.tensor_keys.prior_mean))[:, mask],
@@ -146,11 +159,14 @@ class CausalDreamerModelLoss(DreamerModelLoss):
         """
         kl = (
             torch.log(prior_std / posterior_std)
-            + (posterior_std**2 + (prior_mean - posterior_mean) ** 2) / (2 * prior_std**2)
+            + (posterior_std**2 + (prior_mean - posterior_mean) ** 2)
+            / (2 * prior_std**2)
             - 0.5
         )
         if self.model_type == "causal":
-            kl = kl.reshape(*kl.shape[:-1], self.variable_num, self.state_dim_per_variable)
+            kl = kl.reshape(
+                *kl.shape[:-1], self.variable_num, self.state_dim_per_variable
+            )
             kl = kl.sum(-1)
 
             free_nats_every_variable = self.free_nats / self.variable_num

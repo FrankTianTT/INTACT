@@ -20,13 +20,24 @@ from torchrl.modules import (
     SafeSequential,
 )
 from torchrl.modules.distributions import TanhNormal, TruncatedNormal
-from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
+from torchrl.modules.models.model_based import (
+    ObsDecoder,
+    ObsEncoder,
+    RSSMPosterior,
+    RSSMRollout,
+)
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.world_models import DreamerWrapper as OriginalDreamerWrapper
+from torchrl.modules.tensordict_module.world_models import (
+    DreamerWrapper as OriginalDreamerWrapper,
+)
 from torchrl.trainers.helpers.models import _dreamer_make_mbenv
 
-from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
-from intact.modules.models.dreamer_world_model.plain_rssm_prior import PlainRSSMPrior
+from intact.modules.models.dreamer_world_model.causal_rssm_prior import (
+    CausalRSSMPrior,
+)
+from intact.modules.models.dreamer_world_model.plain_rssm_prior import (
+    PlainRSSMPrior,
+)
 from intact.modules.models.policy.actor import Actor
 from intact.modules.models.policy.critic import Critic
 from intact.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
@@ -40,7 +51,8 @@ def make_dreamer(
     value_key: str = "state_value",
     use_decoder_in_env: bool = True,
 ):
-    """Make Dreamer model.
+    """
+    Make Dreamer model.
 
     Args:
         cfg: Configuration.
@@ -81,17 +93,30 @@ def make_dreamer(
         hidden_dim=cfg.belief_dim_per_variable * cfg.variable_num,
         state_dim=cfg.state_dim_per_variable * cfg.variable_num,
     )
-    reward_module = MLP(out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU)
+    reward_module = MLP(
+        out_features=1,
+        depth=2,
+        num_cells=cfg.hidden_size,
+        activation_class=nn.ELU,
+    )
 
     if cfg.pred_continue:
         continue_module = MLP(
-            out_features=1, depth=2, num_cells=cfg.hidden_size, activation_class=nn.ELU
+            out_features=1,
+            depth=2,
+            num_cells=cfg.hidden_size,
+            activation_class=nn.ELU,
         )
     else:
         continue_module = None
 
     world_model = _dreamer_make_world_model(
-        obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module
+        obs_encoder,
+        obs_decoder,
+        rssm_prior,
+        rssm_posterior,
+        reward_module,
+        continue_module,
     ).to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         tensordict = proof_environment.fake_tensordict().unsqueeze(-1)
@@ -142,12 +167,42 @@ def make_dreamer(
     actor_realworld = actor_realworld.to(device)
 
     del tensordict
-    return world_model, model_based_env, actor_simulator, value_model, actor_realworld
+    return (
+        world_model,
+        model_based_env,
+        actor_simulator,
+        value_model,
+        actor_realworld,
+    )
 
 
 def _dreamer_make_world_model(
-    obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module, continue_module
+    obs_encoder,
+    obs_decoder,
+    rssm_prior,
+    rssm_posterior,
+    reward_module,
+    continue_module,
 ):
+    """
+    Create a world model for the Dreamer model.
+
+    This function creates a world model for the Dreamer model.
+    The world model is created using the provided
+        observation encoder, observation decoder, RSSM prior,
+        RSSM posterior, reward module, and continue module.
+
+    Args:
+        obs_encoder (nn.Module): The observation encoder of the Dreamer model.
+        obs_decoder (nn.Module): The observation decoder of the Dreamer model.
+        rssm_prior (nn.Module): The RSSM prior of the Dreamer model.
+        rssm_posterior (nn.Module): The RSSM posterior of the Dreamer model.
+        reward_module (nn.Module): The reward module of the Dreamer model.
+        continue_module (nn.Module): The continue module of the Dreamer model.
+
+    Returns:
+        DreamerWrapper: The created world model.
+    """
     # World Model and reward model
     rssm_rollout = RSSMRollout(
         SafeModule(
@@ -218,7 +273,28 @@ def _dreamer_make_mbenv(
     state_dim,
     rssm_hidden_dim,
 ):
-    # MB environment
+    """
+    Create a model-based environment for the Dreamer model.
+
+    This function creates a model-based environment for the Dreamer model.
+    The environment is created using the provided
+        reward module, continue module, RSSM prior,
+        observation decoder, and proof environment.
+    The environment can be configured to use the observation decoder.
+
+    Args:
+        reward_module (nn.Module): The reward module of the Dreamer model.
+        continue_module (nn.Module): The continue module of the Dreamer model.
+        rssm_prior (nn.Module): The RSSM prior of the Dreamer model.
+        obs_decoder (nn.Module): The observation decoder of the Dreamer model.
+        proof_environment (EnvBase): The proof environment to use.
+        use_decoder_in_env (bool): Whether to use the observation decoder in the environment.
+        state_dim (int): The dimension of the state space.
+        rssm_hidden_dim (int): The dimension of the hidden state space in the RSSM.
+
+    Returns:
+        DreamerEnv: The created model-based environment.
+    """
     if use_decoder_in_env:
         mb_env_obs_decoder = SafeModule(
             obs_decoder,
@@ -255,7 +331,9 @@ def _dreamer_make_mbenv(
         continue_model = None
 
     model_based_env = DreamerEnv(
-        world_model=OriginalDreamerWrapper(transition_model, reward_model, continue_model),
+        world_model=OriginalDreamerWrapper(
+            transition_model, reward_model, continue_model
+        ),
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([rssm_hidden_dim]),
         obs_decoder=mb_env_obs_decoder,
@@ -313,10 +391,13 @@ def _dreamer_make_actors(
     return actor_simulator, actor_realworld
 
 
-def _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type):
-    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[
-        actor_dist_type
-    ]
+def _dreamer_make_actor_sim(
+    action_key, proof_environment, actor_module, actor_dist_type
+):
+    distribution_class = {
+        "truncated_normal": TruncatedNormal,
+        "tanh_normal": TanhNormal,
+    }[actor_dist_type]
     actor_simulator = SafeProbabilisticTensorDictSequential(
         SafeModule(
             actor_module,
@@ -356,9 +437,10 @@ def _dreamer_make_actor_real(
     proof_environment,
     actor_dist_type,
 ):
-    distribution_class = {"truncated_normal": TruncatedNormal, "tanh_normal": TanhNormal}[
-        actor_dist_type
-    ]
+    distribution_class = {
+        "truncated_normal": TruncatedNormal,
+        "tanh_normal": TanhNormal,
+    }[actor_dist_type]
     # actor for real world: interacts with states ~ posterior
     # Out actor differs from the original paper where first they compute prior and posterior and then act on it
     # but we found that this approach worked better.
@@ -399,7 +481,9 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.MODE,
                 distribution_class=distribution_class,
                 distribution_kwargs={"tanh_loc": True},
-                spec=CompositeSpec(**{action_key: proof_environment.action_spec.to("cpu")}),
+                spec=CompositeSpec(
+                    **{action_key: proof_environment.action_spec.to("cpu")}
+                ),
             ),
         ),
         SafeModule(
@@ -416,7 +500,9 @@ def _dreamer_make_actor_real(
     return actor_realworld
 
 
-def _dreamer_make_value_model(state_dim, belief_dim, context_model, mlp_num_units, value_key):
+def _dreamer_make_value_model(
+    state_dim, belief_dim, context_model, mlp_num_units, value_key
+):
     # actor for simulator: interacts with states ~ prior
     critic = Critic(
         state_or_obs_dim=state_dim,

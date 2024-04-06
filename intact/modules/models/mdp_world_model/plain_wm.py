@@ -66,7 +66,11 @@ class PlainMDPWorldModel(BaseWorldModel):
         return log_var
 
     def get_outputs(self, mean, log_var, observation, batch_size):
-        next_obs_mean, reward_mean, terminated = mean[:, :-2], mean[:, -2:-1], mean[:, -1:]
+        next_obs_mean, reward_mean, terminated = (
+            mean[:, :-2],
+            mean[:, -2:-1],
+            mean[:, -1:],
+        )
         if self.learn_obs_var:
             next_obs_log_var = self.get_log_var(log_var[:, :-2])
             reward_log_var = self.get_log_var(log_var[:, -2:-1])
@@ -82,7 +86,13 @@ class PlainMDPWorldModel(BaseWorldModel):
         reward_log_var = reward_log_var.reshape(*batch_size, 1)
         terminated = terminated.reshape(*batch_size, 1)
 
-        return next_obs_mean, next_obs_log_var, reward_mean, reward_log_var, terminated
+        return (
+            next_obs_mean,
+            next_obs_log_var,
+            reward_mean,
+            reward_log_var,
+            terminated,
+        )
 
     def forward(self, observation, action, idx=None):
         context = self.context_model(idx)
@@ -90,5 +100,7 @@ class PlainMDPWorldModel(BaseWorldModel):
         inputs = torch.cat([observation, action, context], dim=-1)
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
-        mean, log_var = self.nets["mlp"](inputs.reshape(-1, dim)).chunk(2, dim=-1)
+        mean, log_var = self.nets["mlp"](inputs.reshape(-1, dim)).chunk(
+            2, dim=-1
+        )
         return self.get_outputs(mean, log_var, observation, batch_shape)

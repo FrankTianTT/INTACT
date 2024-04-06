@@ -29,7 +29,9 @@ class RewardTruncatedTransform(Transform):
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
         reward = torch.where(
-            self.ever_reset.reshape(reward.shape), torch.zeros_like(reward), reward
+            self.ever_reset.reshape(reward.shape),
+            torch.zeros_like(reward),
+            reward,
         )
         return reward
 
@@ -38,8 +40,12 @@ class RewardTruncatedTransform(Transform):
     ) -> TensorDictBase:
         if self.reset_key not in tensordict.keys():  # external reset call
             self.ever_reset = torch.zeros(
-                tensordict.batch_size, dtype=torch.bool, device=tensordict.device
+                tensordict.batch_size,
+                dtype=torch.bool,
+                device=tensordict.device,
             )
         else:
-            self.ever_reset = torch.logical_or(self.ever_reset, tensordict[self.reset_key])
+            self.ever_reset = torch.logical_or(
+                self.ever_reset, tensordict[self.reset_key]
+            )
         return tensordict_reset

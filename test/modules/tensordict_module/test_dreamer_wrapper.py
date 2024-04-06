@@ -1,9 +1,16 @@
 import torch
 from torchrl.modules import SafeModule
-from torchrl.modules.models.model_based import ObsDecoder, ObsEncoder, RSSMPosterior, RSSMRollout
+from torchrl.modules.models.model_based import (
+    ObsDecoder,
+    ObsEncoder,
+    RSSMPosterior,
+    RSSMRollout,
+)
 from torchrl.modules.models.models import MLP
 
-from intact.modules.models.dreamer_world_model.causal_rssm_prior import CausalRSSMPrior
+from intact.modules.models.dreamer_world_model.causal_rssm_prior import (
+    CausalRSSMPrior,
+)
 from intact.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
 
 
@@ -33,9 +40,19 @@ def build_example_causal_dreamer_wrapper(meta=False):
         hidden_dim=hidden_dim_per_variable * variable_num,
         state_dim=state_dim_per_variable * variable_num,
     )
-    reward_module = MLP(out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU)
+    reward_module = MLP(
+        out_features=1,
+        depth=2,
+        num_cells=mlp_num_units,
+        activation_class=nn.ELU,
+    )
 
-    continue_module = MLP(out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU)
+    continue_module = MLP(
+        out_features=1,
+        depth=2,
+        num_cells=mlp_num_units,
+        activation_class=nn.ELU,
+    )
 
     rssm_rollout = RSSMRollout(
         SafeModule(
@@ -111,14 +128,24 @@ def get_example_data(meta=False):
 
     input_td = TensorDict(
         {
-            "state": torch.randn(batch_size, batch_len, variable_num * state_dim_per_variable),
-            "belief": torch.randn(batch_size, batch_len, variable_num * hidden_dim_per_variable),
+            "state": torch.randn(
+                batch_size, batch_len, variable_num * state_dim_per_variable
+            ),
+            "belief": torch.randn(
+                batch_size, batch_len, variable_num * hidden_dim_per_variable
+            ),
             "action": torch.randn(batch_size, batch_len, action_dim),
             "next": {
                 "pixels": torch.randn(batch_size, batch_len, 3, 64, 64),
-                "state": torch.randn(batch_size, batch_len, variable_num * state_dim_per_variable),
+                "state": torch.randn(
+                    batch_size,
+                    batch_len,
+                    variable_num * state_dim_per_variable,
+                ),
                 "belief": torch.randn(
-                    batch_size, batch_len, variable_num * hidden_dim_per_variable
+                    batch_size,
+                    batch_len,
+                    variable_num * hidden_dim_per_variable,
                 ),
             },
         },

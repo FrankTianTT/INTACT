@@ -4,7 +4,14 @@ import torch
 from intact.modules.utils import build_mlp
 
 
-def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False):
+def gen_linear_data(
+    task_num,
+    sample_per_task,
+    x_size,
+    y_size,
+    theta_size,
+    theta_is_gaussian=False,
+):
     # y = xA^T + \thetaB^T + \epsilon
 
     # static parameters
@@ -26,11 +33,15 @@ def gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size, theta
 
 
 def gen_causal_graph(x_size, y_size, theta_size, sparse_p=0.5):
-    graph = np.random.choice([0, 1], size=(y_size, x_size + theta_size), p=[sparse_p, 1 - sparse_p])
+    graph = np.random.choice(
+        [0, 1], size=(y_size, x_size + theta_size), p=[sparse_p, 1 - sparse_p]
+    )
 
     while not is_sparse(graph):
         graph = np.random.choice(
-            [0, 1], size=(y_size, x_size + theta_size), p=[sparse_p, 1 - sparse_p]
+            [0, 1],
+            size=(y_size, x_size + theta_size),
+            p=[sparse_p, 1 - sparse_p],
         )
 
     return graph
@@ -49,9 +60,16 @@ def is_sparse(graph):
 
 
 def gen_nonlinear_data(
-    task_num, sample_per_task, x_size, y_size, theta_size, theta_is_gaussian=False
+    task_num,
+    sample_per_task,
+    x_size,
+    y_size,
+    theta_size,
+    theta_is_gaussian=False,
 ):
-    model = build_mlp(x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name="Tanh")
+    model = build_mlp(
+        x_size + theta_size, 1, [32], extra_dims=[y_size], activate_name="Tanh"
+    )
 
     for name, p in model.named_parameters():
         if "weight" in name:
@@ -59,17 +77,30 @@ def gen_nonlinear_data(
 
     x = torch.randn(task_num, sample_per_task, x_size)
     theta = torch.distributions.Laplace(0, 1).sample((task_num, theta_size))
-    x_theta = torch.cat([x, theta.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1)
+    x_theta = torch.cat(
+        [x, theta.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1
+    )
 
     graph = gen_causal_graph(x_size, y_size, theta_size)  # out-size * in-size
     mask = torch.from_numpy(graph).float()
     repeated_x_theta = (
-        x_theta.unsqueeze(0).expand(y_size, -1, -1, -1).reshape(y_size, -1, x_size + theta_size)
+        x_theta.unsqueeze(0)
+        .expand(y_size, -1, -1, -1)
+        .reshape(y_size, -1, x_size + theta_size)
     )
     masked_x_theta = torch.einsum("oi,obi->obi", mask, repeated_x_theta)
 
-    y = model(masked_x_theta).permute(2, 1, 0)[0].reshape(task_num, sample_per_task, y_size)
-    return x.detach().numpy(), y.detach().numpy(), theta.detach().numpy(), graph
+    y = (
+        model(masked_x_theta)
+        .permute(2, 1, 0)[0]
+        .reshape(task_num, sample_per_task, y_size)
+    )
+    return (
+        x.detach().numpy(),
+        y.detach().numpy(),
+        theta.detach().numpy(),
+        graph,
+    )
 
 
 if __name__ == "__main__":

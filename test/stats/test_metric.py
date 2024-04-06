@@ -23,7 +23,9 @@ def test_mutual_info_estimation():
         dist = MultivariateNormal(loc, covariance_matrix)
         values = dist.sample((batch_size,))
 
-        mi = mutual_info_estimation(values, kernel_type="gaussian", reduction="mean")
+        mi = mutual_info_estimation(
+            values, kernel_type="gaussian", reduction="mean"
+        )
         return mi
 
     independent_result = [single_test(True) for i in range(test_num)]

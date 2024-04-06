@@ -2,7 +2,10 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 
 from intact.modules.models.base_world_model import BaseWorldModel
-from intact.modules.models.mdp_world_model import PlainMDPWorldModel, CausalWorldModel
+from intact.modules.models.mdp_world_model import (
+    PlainMDPWorldModel,
+    CausalWorldModel,
+)
 
 
 class MDPWrapper(TensorDictModule):
@@ -11,7 +14,13 @@ class MDPWrapper(TensorDictModule):
         mdp_world_model: BaseWorldModel,
     ):
         if isinstance(mdp_world_model, PlainMDPWorldModel):
-            out_keys = ["obs_mean", "obs_log_var", "reward_mean", "reward_log_var", "terminated"]
+            out_keys = [
+                "obs_mean",
+                "obs_log_var",
+                "reward_mean",
+                "reward_log_var",
+                "terminated",
+            ]
             self.model_type = "plain"
             if isinstance(mdp_world_model, CausalWorldModel):
                 out_keys.append("causal_mask")
@@ -40,7 +49,9 @@ class MDPWrapper(TensorDictModule):
 
     @property
     def causal_mask(self):
-        assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"
+        assert (
+            self.model_type == "causal"
+        ), "causal_mask is only available for CausalWorldModel"
         return self.world_model.causal_mask
 
     @property
@@ -51,14 +62,22 @@ class MDPWrapper(TensorDictModule):
         self.world_model.reset(task_num)
 
     def parallel_forward(self, tensordict, sampling_times=50):
-        assert self.model_type == "causal", "causal_mask is only available for CausalWorldModel"
-        assert self.causal_mask.using_reinforce, "causal_mask should be learned by reinforce"
+        assert (
+            self.model_type == "causal"
+        ), "causal_mask is only available for CausalWorldModel"
+        assert (
+            self.causal_mask.using_reinforce
+        ), "causal_mask should be learned by reinforce"
 
         assert len(tensordict.batch_size) == 1, "batch_size should be 1-d"
         batch_size = tensordict.batch_size[0]
 
-        repeat_tensordict = tensordict.expand(sampling_times, batch_size).reshape(-1)
-        out_tensordict = self.forward(repeat_tensordict, deterministic_mask=False)
+        repeat_tensordict = tensordict.expand(
+            sampling_times, batch_size
+        ).reshape(-1)
+        out_tensordict = self.forward(
+            repeat_tensordict, deterministic_mask=False
+        )
         out_tensordict = out_tensordict.reshape(sampling_times, batch_size)
 
         return out_tensordict
@@ -77,11 +96,15 @@ class MDPWrapper(TensorDictModule):
         tensors = tuple(tensordict.get(in_key, None) for in_key in in_keys)
         tensors = self.world_model.inv_forward(*tensors)
 
-        tensordict_out = self._write_to_tensordict(tensordict, tensors, out_keys=out_keys)
+        tensordict_out = self._write_to_tensordict(
+            tensordict, tensors, out_keys=out_keys
+        )
         return tensordict_out
 
     def forward(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
+        tensors = tuple(
+            tensordict.get(in_key, None) for in_key in self.in_keys
+        )
         tensors = self.world_model(*tensors, **kwargs)
         tensordict_out = self._write_to_tensordict(tensordict, tensors)
         return tensordict_out

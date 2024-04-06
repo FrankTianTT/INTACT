@@ -3,7 +3,8 @@ import torch
 
 
 def match_length(batch_td: tensordict.TensorDict, length: int):
-    """Match the length of the sequence to the specified length.
+    """
+    Match the length of the sequence to the specified length.
 
     Args:
         batch_td (tensordict.TensorDict): the batch of sequences.
@@ -20,7 +21,8 @@ def match_length(batch_td: tensordict.TensorDict, length: int):
     # pad the sequence to the new length, add 0 to the end
     matched_td = torch.stack(
         tensors=[
-            tensordict.pad(tensordict=td, pad_size=[0, new_seq_len - seq_len]) for td in batch_td
+            tensordict.pad(tensordict=td, pad_size=[0, new_seq_len - seq_len])
+            for td in batch_td
         ],
         dim=0,
     ).contiguous()

@@ -32,7 +32,9 @@ def identify_theta(x, y, theta_size):
 
     # get mse
     hat_b = theta_hat @ ica.mixing_.T + ica.mean_
-    hat_y = np.einsum("tsx,tyx->tsy", x, w) + hat_b.reshape(task_num, 1, y_size)
+    hat_y = np.einsum("tsx,tyx->tsy", x, w) + hat_b.reshape(
+        task_num, 1, y_size
+    )
     mse = np.mean((hat_y - y) ** 2)
     print(mse)
 
@@ -52,7 +54,9 @@ if __name__ == "__main__":
 
     np.random.seed(seed)
 
-    x, y, theta, A, B = gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size)
+    x, y, theta, A, B = gen_linear_data(
+        task_num, sample_per_task, x_size, y_size, theta_size
+    )
     theta_hat = identify_theta(x, y, theta_size)
     print(mean_corr_coef(theta_hat, theta))
     # 0.9993887945704704

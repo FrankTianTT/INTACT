@@ -51,7 +51,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
         self.using_cross_belief = using_cross_belief
         self.using_reinforce = using_reinforce
         if disable_belief:
-            assert not using_cross_belief, "Cannot use cross belief when disable belief"
+            assert (
+                not using_cross_belief
+            ), "Cannot use cross belief when disable belief"
 
         super().__init__(
             action_dim=action_dim,
@@ -79,7 +81,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
         for i in range(self.variable_num):
             mask_dim_list.extend([i] * self.state_dim_per_variable)
         mask_dim_list.extend(
-            torch.arange(self.variable_num, self.causal_mask.mask_input_dim).tolist()
+            torch.arange(
+                self.variable_num, self.causal_mask.mask_input_dim
+            ).tolist()
         )
         self.mask_dim_map = torch.Tensor(mask_dim_list).long()
 
@@ -87,13 +91,17 @@ class CausalRSSMPrior(PlainRSSMPrior):
             belief_mask_dim_list = []
             for i in range(self.variable_num):
                 belief_mask_dim_list.extend([i] * self.belief_dim_per_variable)
-            self.belief_mask_dim_map = torch.Tensor(belief_mask_dim_list).long()
+            self.belief_mask_dim_map = torch.Tensor(
+                belief_mask_dim_list
+            ).long()
         else:
             self.belief_mask_dim_map = None
 
     def build_nets(self):
         as2middle = build_mlp(
-            input_dim=self.action_dim + self.total_state_dim + self.max_context_dim,
+            input_dim=self.action_dim
+            + self.total_state_dim
+            + self.max_context_dim,
             output_dim=self.belief_dim_per_variable,
             extra_dims=[self.variable_num],
             last_activate_name="ELU",
@@ -110,7 +118,9 @@ class CausalRSSMPrior(PlainRSSMPrior):
             scale_lb=self.scale_lb,
             scale_mapping="softplus",
         )
-        module_dict = nn.ModuleDict(dict(as2middle=as2middle, middle2s=middle2s))
+        module_dict = nn.ModuleDict(
+            dict(as2middle=as2middle, middle2s=middle2s)
+        )
         if not self.disable_belief:
             rnn = ParallelGRUCell(
                 input_size=self.belief_dim_per_variable,
@@ -137,12 +147,21 @@ class CausalRSSMPrior(PlainRSSMPrior):
             context_logits=self.causal_mask.get_parameter("context_logits"),
         )
 
-    def forward(self, state, belief, action, idx=None, deterministic_mask=False):
-        projector_inputs = torch.cat([state, action, self.context_model(idx)], dim=-1)
-        batch_shape, dim = projector_inputs.shape[:-1], projector_inputs.shape[-1]
+    def forward(
+        self, state, belief, action, idx=None, deterministic_mask=False
+    ):
+        projector_inputs = torch.cat(
+            [state, action, self.context_model(idx)], dim=-1
+        )
+        batch_shape, dim = (
+            projector_inputs.shape[:-1],
+            projector_inputs.shape[-1],
+        )
 
         masked_projector_inputs, mask = self.causal_mask(
-            inputs=projector_inputs.reshape(prod(batch_shape), -1),  # (prod(batch_size), input_dim)
+            inputs=projector_inputs.reshape(
+                prod(batch_shape), -1
+            ),  # (prod(batch_size), input_dim)
             dim_map=self.mask_dim_map,  # input_dim
             deterministic=deterministic_mask,
         )  # (variable_num, prod(batch_size), input_dim)
@@ -161,12 +180,16 @@ class CausalRSSMPrior(PlainRSSMPrior):
                 input_belief = self.nets["b2b"](masked_belief)
             else:
                 reshaped_belief = belief.reshape(
-                    prod(batch_shape), self.variable_num, self.belief_dim_per_variable
+                    prod(batch_shape),
+                    self.variable_num,
+                    self.belief_dim_per_variable,
                 )
                 input_belief = reshaped_belief.permute(1, 0, 2)
             next_belief = self.nets["rnn"](middle, input_belief)
             prior_mean, prior_std = self.nets["middle2s"](next_belief)
-            next_belief = next_belief.permute(1, 0, 2).reshape(*batch_shape, -1)
+            next_belief = next_belief.permute(1, 0, 2).reshape(
+                *batch_shape, -1
+            )
 
         prior_mean = prior_mean.permute(1, 0, 2).reshape(*batch_shape, -1)
         prior_std = prior_std.permute(1, 0, 2).reshape(*batch_shape, -1)

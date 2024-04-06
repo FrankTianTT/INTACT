@@ -50,7 +50,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     train_env, eval_env = make_environment(cfg)
 
     # Create agent
-    model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
+    model, exploration_policy = make_sac_agent(
+        cfg, train_env, eval_env, device
+    )
 
     # Create SAC loss
     loss_module, target_net_updater = make_loss_module(cfg, model)
@@ -81,7 +83,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     init_random_frames = cfg.collector.init_random_frames
     num_updates = int(
-        cfg.collector.env_per_collector * cfg.collector.frames_per_batch * cfg.optim.utd_ratio
+        cfg.collector.env_per_collector
+        * cfg.collector.frames_per_batch
+        * cfg.optim.utd_ratio
     )
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.eval_iter
@@ -111,7 +115,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample()
                 if sampled_tensordict.device != device:
-                    sampled_tensordict = sampled_tensordict.to(device, non_blocking=True)
+                    sampled_tensordict = sampled_tensordict.to(
+                        device, non_blocking=True
+                    )
                 else:
                     sampled_tensordict = sampled_tensordict.clone()
 
@@ -137,7 +143,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 alpha_loss.backward()
                 optimizer_alpha.step()
 
-                losses[i] = loss_td.select("loss_actor", "loss_qvalue", "loss_alpha").detach()
+                losses[i] = loss_td.select(
+                    "loss_actor", "loss_qvalue", "loss_alpha"
+                ).detach()
 
                 # Update qnet_target params
                 target_net_updater.step()
@@ -159,13 +167,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][episode_end]
             metrics_to_log["train/reward"] = episode_rewards.mean().item()
-            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
-                episode_length
-            )
+            metrics_to_log[
+                "train/episode_length"
+            ] = episode_length.sum().item() / len(episode_length)
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = losses.get("loss_qvalue").mean().item()
-            metrics_to_log["train/actor_loss"] = losses.get("loss_actor").mean().item()
-            metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha").mean().item()
+            metrics_to_log["train/q_loss"] = (
+                losses.get("loss_qvalue").mean().item()
+            )
+            metrics_to_log["train/actor_loss"] = (
+                losses.get("loss_actor").mean().item()
+            )
+            metrics_to_log["train/alpha_loss"] = (
+                losses.get("loss_alpha").mean().item()
+            )
             metrics_to_log["train/alpha"] = loss_td["alpha"].item()
             metrics_to_log["train/entropy"] = loss_td["entropy"].item()
             metrics_to_log["train/sampling_time"] = sampling_time
@@ -176,14 +190,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
             eval_start = time.time()
             eval_reward = 0
             for i in range(cfg.eval_repeat_nums):
-                with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                with set_exploration_type(
+                    ExplorationType.MODE
+                ), torch.no_grad():
                     eval_rollout = eval_env.rollout(
                         eval_rollout_steps,
                         model[0],
                         auto_cast_to_device=True,
                         break_when_any_done=True,
                     )
-                eval_reward += eval_rollout["next", "reward"].sum(-2).mean().item()
+                eval_reward += (
+                    eval_rollout["next", "reward"].sum(-2).mean().item()
+                )
             metrics_to_log["eval/reward"] = eval_reward / cfg.eval_repeat_nums
             metrics_to_log["eval/time"] = time.time() - eval_start
 

@@ -20,7 +20,9 @@ def test_plot_context1():
     config.meta = True
     config.task_num = task_num
 
-    make_env_list, oracle_context = create_make_env_list(config, make_mdp_env, mode="meta_train")
+    make_env_list, oracle_context = create_make_env_list(
+        config, make_mdp_env, mode="meta_train"
+    )
 
     env = make_mdp_env(config.env_name)
     world_model, model_based_env = make_mdp_model(config, env)
@@ -34,11 +36,16 @@ def test_plot_context2():
 
     config = MDPConfig()
     config.env_name = "MyCartPole-v0"
-    config.oracle_context = {"gravity": (5.0, 20.0), "cart_vel_bias": (-1.0, 1.0)}
+    config.oracle_context = {
+        "gravity": (5.0, 20.0),
+        "cart_vel_bias": (-1.0, 1.0),
+    }
     config.meta = True
     config.task_num = task_num
 
-    make_env_list, oracle_context = create_make_env_list(config, make_mdp_env, mode="meta_train")
+    make_env_list, oracle_context = create_make_env_list(
+        config, make_mdp_env, mode="meta_train"
+    )
 
     env = make_mdp_env(config.env_name)
     world_model, model_based_env = make_mdp_model(config, env)

@@ -9,7 +9,9 @@ def test_causal_world_model_without_meta():
     batch_size = 32
     env_num = 5
 
-    world_model = CausalWorldModel(obs_dim=obs_dim, action_dim=action_dim, meta=False)
+    world_model = CausalWorldModel(
+        obs_dim=obs_dim, action_dim=action_dim, meta=False
+    )
 
     for batch_shape in [(), (batch_size,), (env_num, batch_size)]:
         observation = torch.randn(*batch_shape, obs_dim)
@@ -24,7 +26,11 @@ def test_causal_world_model_without_meta():
             mask,
         ) = world_model(observation, action)
 
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
+        assert (
+            next_obs_mean.shape
+            == next_obs_log_var.shape
+            == (*batch_shape, obs_dim)
+        )
         assert reward_mean.shape == terminated.shape == (*batch_shape, 1)
         assert mask.shape == (*batch_shape, obs_dim + 2, obs_dim + action_dim)
 
@@ -59,9 +65,22 @@ def test_causal_world_model_with_meta():
             mask,
         ) = world_model(observation, action, idx)
 
-        assert next_obs_mean.shape == next_obs_log_var.shape == (*batch_shape, obs_dim)
-        assert reward_mean.shape == reward_log_var.shape == terminated.shape == (*batch_shape, 1)
-        assert mask.shape == (*batch_shape, obs_dim + 2, obs_dim + action_dim + max_context_dim)
+        assert (
+            next_obs_mean.shape
+            == next_obs_log_var.shape
+            == (*batch_shape, obs_dim)
+        )
+        assert (
+            reward_mean.shape
+            == reward_log_var.shape
+            == terminated.shape
+            == (*batch_shape, 1)
+        )
+        assert mask.shape == (
+            *batch_shape,
+            obs_dim + 2,
+            obs_dim + action_dim + max_context_dim,
+        )
 
 
 def test_reset():

@@ -5,11 +5,15 @@
 import torch
 
 
-def ones(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
+def ones(
+    obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor
+) -> torch.Tensor:
     return torch.ones(*next_obs.shape[:-1], 1).to(next_obs.device)
 
 
-def heating(obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor) -> torch.Tensor:
+def heating(
+    obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor
+) -> torch.Tensor:
     temp = next_obs * 10 + 20
     return -(temp - 20).abs().sum(dim=-1, keepdim=True)
 

@@ -59,13 +59,30 @@ def test_parallel_data():
     last_activate_name = "Sigmoid"
 
     plain_mlp = build_mlp(
-        input_dim, output_dim, hidden_dims, None, bias, None, activate_name, last_activate_name
+        input_dim,
+        output_dim,
+        hidden_dims,
+        None,
+        bias,
+        None,
+        activate_name,
+        last_activate_name,
     )
     parallel_mlp = build_mlp(
-        input_dim, 1, hidden_dims, output_dim, bias, None, activate_name, last_activate_name
+        input_dim,
+        1,
+        hidden_dims,
+        output_dim,
+        bias,
+        None,
+        activate_name,
+        last_activate_name,
     )
     causal_mask = CausalMask(
-        input_dim, output_dim, context_input_dim=0, observed_logits_init_bias=0.0
+        input_dim,
+        output_dim,
+        context_input_dim=0,
+        observed_logits_init_bias=0.0,
     )
     inputs = torch.randn(batch_size, input_dim)
 

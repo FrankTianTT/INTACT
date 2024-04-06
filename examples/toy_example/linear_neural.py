@@ -24,7 +24,9 @@ def identify_theta(x, y, theta_size):
 
     mse_list, mi_list = [], []
     for epoch in range(100):
-        x_theta = torch.cat([x, theta_hat.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1)
+        x_theta = torch.cat(
+            [x, theta_hat.unsqueeze(1).expand(-1, sample_per_task, -1)], dim=-1
+        )
         y_hat = model(x_theta)
 
         reg = mutual_info_estimation(theta_hat) * 5
@@ -63,7 +65,9 @@ if __name__ == "__main__":
     np.random.seed(seed)
     torch.random.manual_seed(seed)
 
-    x, y, theta, *_ = gen_linear_data(task_num, sample_per_task, x_size, y_size, theta_size)
+    x, y, theta, *_ = gen_linear_data(
+        task_num, sample_per_task, x_size, y_size, theta_size
+    )
     theta_hat = identify_theta(x, y, theta_size)
     print(mean_corr_coef(theta_hat, theta))
     # 0.7452454792009036

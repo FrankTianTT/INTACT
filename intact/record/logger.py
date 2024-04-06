@@ -21,7 +21,9 @@ class MultipleLoggerWrapper(Logger):
             loggers (list): A list of Logger instances.
         """
         assert len(loggers) > 0
-        super().__init__(exp_name=loggers[0].exp_name, log_dir=loggers[0].log_dir)
+        super().__init__(
+            exp_name=loggers[0].exp_name, log_dir=loggers[0].log_dir
+        )
 
         self.loggers = loggers
 
@@ -40,7 +42,9 @@ class MultipleLoggerWrapper(Logger):
         for logger in self.loggers:
             logger.log_scalar(name=name, value=value, step=step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int = None, **kwargs
+    ) -> None:
         """
         Log a video.
 
@@ -52,7 +56,9 @@ class MultipleLoggerWrapper(Logger):
         for logger in self.loggers:
             logger.log_video(name=name, video=video, step=step)
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(
+        self, cfg: Union["DictConfig", Dict]
+    ) -> None:  # noqa: F821
         """
         Log hyperparameters.
 
@@ -157,7 +163,9 @@ class MeanScalarWrapper(Logger):
         """
         self.logger.log_scalar(name, value, step)
 
-    def log_video(self, name: str, video: Tensor, step: int = None, **kwargs) -> None:
+    def log_video(
+        self, name: str, video: Tensor, step: int = None, **kwargs
+    ) -> None:
         """
         Log a video.
 
@@ -168,7 +176,9 @@ class MeanScalarWrapper(Logger):
         """
         self.logger.log_video(name, video, step, **kwargs)
 
-    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
+    def log_hparams(
+        self, cfg: Union["DictConfig", Dict]
+    ) -> None:  # noqa: F821
         """
         Log hyperparameters.
 
@@ -226,9 +236,14 @@ def get_logger(
     **kwargs,
 ) -> Logger:
     if isinstance(logger_type, str):
-        logger = _get_logger(logger_type, logger_name, experiment_name, **kwargs)
+        logger = _get_logger(
+            logger_type, logger_name, experiment_name, **kwargs
+        )
     else:
-        loggers = [_get_logger(t, logger_name, experiment_name, **kwargs) for t in logger_type]
+        loggers = [
+            _get_logger(t, logger_name, experiment_name, **kwargs)
+            for t in logger_type
+        ]
         logger = MultipleLoggerWrapper(loggers)
 
     if mean_scaler:

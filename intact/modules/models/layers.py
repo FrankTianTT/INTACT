@@ -46,10 +46,14 @@ class ParallelLinear(nn.Module):
         self.extra_dims = [] if extra_dims is None else extra_dims
 
         self.weight = nn.Parameter(
-            torch.empty((*extra_dims, out_features, in_features), **factory_kwargs)
+            torch.empty(
+                (*extra_dims, out_features, in_features), **factory_kwargs
+            )
         )
         if bias:
-            self.bias = nn.Parameter(torch.empty((*extra_dims, out_features), **factory_kwargs))
+            self.bias = nn.Parameter(
+                torch.empty((*extra_dims, out_features), **factory_kwargs)
+            )
         else:
             self.register_parameter("bias", None)
 
@@ -59,7 +63,9 @@ class ParallelLinear(nn.Module):
         for dims in product(*map(range, self.extra_dims)):
             nn.init.kaiming_uniform_(self.weight[dims], a=math.sqrt(5))
             if self.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight[dims])
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(
+                    self.weight[dims]
+                )
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(self.bias[dims], -bound, bound)
 
@@ -71,8 +77,13 @@ class ParallelLinear(nn.Module):
         return ret
 
     def extra_repr(self):
-        return "in_features={}, out_features={}, extra_dims={}, bias={}".format(
-            self.in_features, self.out_features, self.extra_dims, self.bias is not None
+        return (
+            "in_features={}, out_features={}, extra_dims={}, bias={}".format(
+                self.in_features,
+                self.out_features,
+                self.extra_dims,
+                self.bias is not None,
+            )
         )
 
 
@@ -93,20 +104,28 @@ class ParallelGRUCell(nn.Module):
         self.bias = bias
         self.extra_dims = [] if extra_dims is None else extra_dims
         self.weight_ih = nn.Parameter(
-            torch.empty((*self.extra_dims, 3 * self.hidden_size, self.input_size), **factory_kwargs)
+            torch.empty(
+                (*self.extra_dims, 3 * self.hidden_size, self.input_size),
+                **factory_kwargs,
+            )
         )
         self.weight_hh = nn.Parameter(
             torch.empty(
-                (*self.extra_dims, 3 * self.hidden_size, self.hidden_size), **factory_kwargs
+                (*self.extra_dims, 3 * self.hidden_size, self.hidden_size),
+                **factory_kwargs,
             )
         )
 
         if bias:
             self.bias_ih = nn.Parameter(
-                torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs)
+                torch.empty(
+                    (*self.extra_dims, 3 * self.hidden_size), **factory_kwargs
+                )
             )
             self.bias_hh = nn.Parameter(
-                torch.empty((*self.extra_dims, 3 * self.hidden_size), **factory_kwargs)
+                torch.empty(
+                    (*self.extra_dims, 3 * self.hidden_size), **factory_kwargs
+                )
             )
         else:
             self.register_parameter("bias_ih", None)
@@ -115,12 +134,16 @@ class ParallelGRUCell(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        stddev = 1.0 / math.sqrt(self.hidden_size) if self.hidden_size > 0 else 0
+        stddev = (
+            1.0 / math.sqrt(self.hidden_size) if self.hidden_size > 0 else 0
+        )
         for weight in self.parameters():
             for dims in product(*map(range, self.extra_dims)):
                 nn.init.uniform_(weight[dims], -stddev, stddev)
 
-    def forward(self, input: torch.Tensor, hx: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, input: torch.Tensor, hx: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
 
         :param input: with shape: (*extra_dims, batch_size, input_size) or (*extra_dims, input_size)
@@ -145,13 +168,21 @@ class ParallelGRUCell(nn.Module):
 
         if hx is None:
             hx = torch.zeros(
-                *input.shape[:-1], self.hidden_size, dtype=input.dtype, device=input.device
+                *input.shape[:-1],
+                self.hidden_size,
+                dtype=input.dtype,
+                device=input.device,
             )
         else:
             hx = hx.unsqueeze(-2) if not is_batched else hx
 
         ret = parallel_gru_cell(
-            input, hx, self.weight_ih, self.weight_hh, self.bias_ih, self.bias_hh
+            input,
+            hx,
+            self.weight_ih,
+            self.weight_hh,
+            self.bias_ih,
+            self.bias_hh,
         )
 
         if not is_batched:
@@ -161,16 +192,22 @@ class ParallelGRUCell(nn.Module):
 
 
 def parallel_gru_cell(input, hx, weight_ih, weight_hh, bias_ih, bias_hh):
-    """gru_cell with extra_dims
+    """
+    Perform a GRU cell operation with extra dimensions.
 
-    :param input: (*extra_dims, batch_size, input_size)
-    :param hx: (*extra_dims, batch_size, hidden_size)
-    :param weight_ih: (*extra_dims, 3 * hidden_size, input_size)
-    :param weight_hh: (*extra_dims, 3 * hidden_size, hidden_size)
-    :param bias_ih: (*extra_dims, 3 * hidden_size) or None
-    :param bias_hh: (*extra_dims, 3 * hidden_size) or None
-    :return:
-        output: (*extra_dims, batch_size, hidden_size)
+    This function performs a GRU cell operation on the input tensor with the given weights and biases.
+    The operation is performed in parallel across the extra dimensions.
+
+    Args:
+        input (torch.Tensor): The input tensor of shape (*extra_dims, batch_size, input_size).
+        hx (torch.Tensor): The hidden state tensor of shape (*extra_dims, batch_size, hidden_size).
+        weight_ih (torch.Tensor): The input-hidden weights tensor of shape (*extra_dims, 3 * hidden_size, input_size).
+        weight_hh (torch.Tensor): The hidden-hidden weights tensor of shape (*extra_dims, 3 * hidden_size, hidden_size).
+        bias_ih (torch.Tensor): The input-hidden bias tensor of shape (*extra_dims, 3 * hidden_size) or None.
+        bias_hh (torch.Tensor): The hidden-hidden bias tensor of shape (*extra_dims, 3 * hidden_size) or None.
+
+    Returns:
+        torch.Tensor: The output tensor of shape (*extra_dims, batch_size, hidden_size).
     """
 
     gi = input.matmul(weight_ih.transpose(-1, -2))
