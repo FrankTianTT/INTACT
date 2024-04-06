@@ -8,7 +8,7 @@ meta: True
 meta_train_frames: 500_000
 meta_train_init_frames: 10_000
 meta_train_logits_frames: 10_000
-meta_test_frames: 10_000
+meta_test_frames: 4_000
 frames_per_batch: 500
 
 normalize_rewards_online: False

@@ -114,7 +114,7 @@ def main(cfg):
     world_model_opt.add_param_group(
         dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
     )
-    if cfg.model_type == "causal" and cfg.use_reinforce:
+    if cfg.model_type == "causal" and cfg.using_reinforce:
         logits_opt = torch.optim.Adam(
             world_model.get_parameter("observed_logits"),
             lr=cfg.observed_logits_lr,

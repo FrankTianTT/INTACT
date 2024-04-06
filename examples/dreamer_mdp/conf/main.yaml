@@ -23,7 +23,7 @@ imagination_horizon: ${overrides.imagination_horizon}
 
 # model learning
 model_type: causal
-reinforce: True
+using_reinforce: True
 alpha: 1.
 buffer_size: 10000
 optim_steps_per_batch: ${overrides.optim_steps_per_batch}
@@ -36,13 +36,13 @@ batch_length: ${overrides.batch_length}
 world_model_lr: 5e-4
 actor_lr: 1e-4
 critic_lr: 1e-4
-context_lr: 0.005
+context_lr: 0.001
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
 
 world_model_weight_decay: 0.00001
 hidden_size: 200
-hidden_layers: 2
+hidden_layers: 4
 lambda_transition: 1.0
 lambda_reward: 1.0
 lambda_terminated: 1.0
@@ -58,8 +58,8 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-eval_interval: 10
-eval_repeat_nums: 3
+eval_interval: 20
+eval_repeat_nums: 1
 eval_record_nums: 0
 save_model_interval: 10
 

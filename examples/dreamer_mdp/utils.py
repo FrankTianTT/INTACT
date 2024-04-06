@@ -108,7 +108,7 @@ def train_model(
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = (
-        cfg.model_type == "causal" and cfg.use_reinforce and logits_opt
+        cfg.model_type == "causal" and cfg.using_reinforce and logits_opt
     )
 
     if cfg.model_type == "causal":

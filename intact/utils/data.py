@@ -20,10 +20,10 @@ def match_length(batch_td: tensordict.TensorDict, length: int):
     new_seq_len = (seq_len + length - 1) // length * length
     # pad the sequence to the new length, add 0 to the end
     matched_td = torch.stack(
-        tensors=[
+        [
             tensordict.pad(tensordict=td, pad_size=[0, new_seq_len - seq_len])
             for td in batch_td
         ],
-        dim=0,
+        0,
     ).contiguous()
     return matched_td
