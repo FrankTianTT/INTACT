@@ -1,4 +1,4 @@
-env_name: Heating53-v0
+env_name: MultiNode53-v0
 termination_fns: "no_termination"
 reward_fns: ""
 env_max_steps: 200

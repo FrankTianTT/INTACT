@@ -23,5 +23,5 @@ context_max_weight: 0.02
 oracle_context:
   cart_vel_bias: [ -1., 1. ]
   pole_vel_bias: [ -1., 1. ]
-  masscart: [ 0.8, 1.2 ]
+#  masscart: [ 0.8, 1.2 ]
 new_oracle_context:

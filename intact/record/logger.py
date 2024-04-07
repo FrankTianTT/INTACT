@@ -56,9 +56,7 @@ class MultipleLoggerWrapper(Logger):
         for logger in self.loggers:
             logger.log_video(name=name, video=video, step=step)
 
-    def log_hparams(
-        self, cfg: Union["DictConfig", Dict]
-    ) -> None:  # noqa: F821
+    def log_hparams(self, cfg: Dict) -> None:  # noqa: F821
         """
         Log hyperparameters.
 
@@ -176,9 +174,7 @@ class MeanScalarWrapper(Logger):
         """
         self.logger.log_video(name, video, step, **kwargs)
 
-    def log_hparams(
-        self, cfg: Union["DictConfig", Dict]
-    ) -> None:  # noqa: F821
+    def log_hparams(self, cfg: Dict) -> None:  # noqa: F821
         """
         Log hyperparameters.
 
