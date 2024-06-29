@@ -32,6 +32,7 @@ class CausalMask(nn.Module):
         observed_input_dim,
         mask_output_dim,
         using_reinforce=True,
+        sigmoid_threshold=0.001,
         latent=False,
         gumbel_softmax=False,
         meta=False,
@@ -66,6 +67,7 @@ class CausalMask(nn.Module):
         self.observed_input_dim = observed_input_dim
         self.mask_output_dim = mask_output_dim
         self.using_reinforce = using_reinforce
+        self.sigmoid_threshold = sigmoid_threshold
         self.latent = latent
         self.gumbel_softmax = gumbel_softmax
         self.meta = meta
@@ -139,7 +141,13 @@ class CausalMask(nn.Module):
 
     @property
     def mask(self):
-        return torch.gt(self.mask_logits, 0).int()
+        if self.using_reinforce:
+            return torch.gt(self.mask_logits, 0).int()
+        else:
+            return torch.gt(
+                torch.sigmoid(self.alpha * self.mask_logits),
+                self.sigmoid_threshold,
+            ).int()
 
     @property
     def mask_logits(self):
@@ -290,9 +298,10 @@ class CausalMask(nn.Module):
 
     @property
     def printing_mask(self):
+        mask = self.mask
         string = ""
-        for i, out_dim in enumerate(range(self.mask.shape[0])):
-            string += " ".join([str(ele.item()) for ele in self.mask[out_dim]])
-            if i != self.mask.shape[0] - 1:
+        for i, out_dim in enumerate(range(mask.shape[0])):
+            string += " ".join([str(ele.item()) for ele in mask[out_dim]])
+            if i != mask.shape[0] - 1:
                 string += "\n"
         return string

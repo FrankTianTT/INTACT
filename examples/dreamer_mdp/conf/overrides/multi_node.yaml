@@ -1,4 +1,4 @@
-env_name: MultiNode53-v0
+env_name: MultiNode53L-v0
 termination_fns: "no_termination"
 reward_fns: ""
 env_max_steps: 200
@@ -6,10 +6,11 @@ env_max_steps: 200
 meta: True
 
 meta_train_frames: 500_000
-meta_train_init_frames: 1_000
-meta_train_logits_frames: 1_000
-meta_test_frames: 5_000
-frames_per_batch: 50
+meta_train_init_frames: 10_000
+meta_train_logits_frames: 10_000
+meta_test_frames: 4_000
+frames_per_batch: 500
+
 normalize_rewards_online: True
 
 batch_size: 200
@@ -19,11 +20,11 @@ optim_steps_per_batch: 500
 imagination_horizon: 1
 
 sparse_weight: 0.02
-context_sparse_weight: 0.02
-context_max_weight: 0.1
+context_sparse_weight: 0.01
+context_max_weight: 0.02
 
 oracle_context:
   c1: [ -1., 1. ]
   c2: [ -1., 1. ]
 new_oracle_context:
-  c3: [ -1., 1. ]
+#  c3: [ -1., 1. ]

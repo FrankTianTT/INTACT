@@ -24,7 +24,7 @@ imagination_horizon: ${overrides.imagination_horizon}
 # model learning
 model_type: causal
 using_reinforce: True
-alpha: 1.
+alpha: 10.
 buffer_size: 10000
 optim_steps_per_batch: ${overrides.optim_steps_per_batch}
 train_mask_iters: 10

@@ -179,3 +179,18 @@ class MultiNodeEnv(gym.Env):
             if i != self.total_graph.shape[0] - 1:
                 string += "\n"
         return string
+
+
+if __name__ == "__main__":
+    env = MultiNodeEnv()
+    # tensor([[0, 0, 0, 1, 0],
+    #         [1, 0, 0, 1, 0],
+    #         [0, 1, 0, 0, 0],
+    #         [0, 0, 0, 0, 1],
+    #         [0, 0, 1, 0, 0]], dtype=torch.int32)
+
+    # tensor([[1, 1, 0],
+    #         [1, 0, 0],
+    #         [0, 1, 1],
+    #         [0, 0, 0],
+    #         [0, 0, 1]], dtype=torch.int32)

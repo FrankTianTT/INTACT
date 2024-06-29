@@ -37,3 +37,15 @@ register(
         context_influence_type="linear",
     ),
 )
+
+register(
+    id="MultiNode84L-v0",
+    entry_point="intact.envs.gym_like.multi_node:MultiNodeEnv",
+    max_episode_steps=200,
+    kwargs=dict(
+        num_rooms=8,
+        context_dim=4,
+        sparsity=0.5,
+        context_influence_type="linear",
+    ),
+)

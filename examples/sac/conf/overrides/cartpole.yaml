@@ -1,0 +1,2 @@
+env_name: MyCartPole-v0
+max_steps: 200

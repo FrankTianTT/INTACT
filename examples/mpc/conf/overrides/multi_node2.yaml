@@ -1,4 +1,4 @@
-env_name: MultiNode53L-v0
+env_name: MultiNode84L-v0
 termination_fns: "no_termination"
 reward_fns: ""
 env_max_steps: 200
@@ -23,5 +23,6 @@ context_max_weight: 0.02
 oracle_context:
   c1: [ -1., 1. ]
   c2: [ -1., 1. ]
+  c3: [ -1., 1. ]
 new_oracle_context:
 #  c3: [ -1., 1. ]

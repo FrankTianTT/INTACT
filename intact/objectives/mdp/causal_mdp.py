@@ -174,7 +174,7 @@ class CausalWorldModelLoss(LossModule):
                 )
                 total_loss += (
                     torch.sigmoid(self.causal_mask.context_logits)
-                    .max(dim=1)
+                    .max(dim=1)[0]
                     .sum()
                     * self.context_max_weight
                 )

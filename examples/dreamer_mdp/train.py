@@ -23,11 +23,6 @@ from intact.utils import (
     plot_context,
     match_length,
 )
-from intact.objectives.mdp import (
-    CausalWorldModelLoss,
-    DreamActorLoss,
-    DreamCriticLoss,
-)
 from intact.utils.envs import make_mdp_env, create_make_env_list
 
 from utils import meta_test, train_model, train_policy, build_loss

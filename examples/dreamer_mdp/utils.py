@@ -343,7 +343,7 @@ def meta_test(
                 params=world_model.get_parameter("nets"), lr=cfg.world_model_lr
             )
         )
-        if world_model.model_type == "causal" and cfg.use_reinforce:
+        if world_model.model_type == "causal" and cfg.using_reinforce:
             logits_opt = torch.optim.Adam(
                 world_model.get_parameter("context_logits"),
                 lr=cfg.context_logits_lr,
