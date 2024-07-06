@@ -18,9 +18,7 @@ def test_causal_mask_reinforce():
     )
 
     inputs = torch.randn(batch_size, real_input_dim)
-    dim_map = torch.randint(
-        0, observed_input_dim + context_input_dim, (real_input_dim,)
-    )
+    dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
 
     masked_inputs, mask = causal_mask(inputs, dim_map=dim_map)
 
@@ -48,13 +46,11 @@ def test_causal_mask_sigmoid():
         context_input_dim=context_input_dim,
         mask_output_dim=mask_output_dim,
         meta=True,
-        using_reinforce=False,
+        mask_type="sigmoid",
     )
 
     inputs = torch.randn(batch_size, real_input_dim)
-    dim_map = torch.randint(
-        0, observed_input_dim + context_input_dim, (real_input_dim,)
-    )
+    dim_map = torch.randint(0, observed_input_dim + context_input_dim, (real_input_dim,))
 
     masked_inputs, _ = causal_mask(inputs, dim_map=dim_map)
 

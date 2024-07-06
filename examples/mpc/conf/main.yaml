@@ -22,8 +22,9 @@ top_k: 35
 
 # model learning
 model_type: causal
-using_reinforce: False
+mask_type: direct
 alpha: 1.
+sigmoid_threshold: 0.1
 buffer_size: 10000
 optim_steps_per_batch: ${overrides.optim_steps_per_batch}
 train_mask_iters: 10
@@ -36,8 +37,7 @@ world_model_lr: 0.001
 context_lr: 0.001
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
-
-world_model_weight_decay: 0.00001
+world_model_weight_decay: 0.0001
 hidden_size: 200
 hidden_layers: 4
 lambda_transition: 1.0

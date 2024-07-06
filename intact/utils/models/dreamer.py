@@ -27,9 +27,6 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.models import MLP
-from torchrl.modules.tensordict_module.world_models import (
-    DreamerWrapper as OriginalDreamerWrapper,
-)
 from torchrl.trainers.helpers.models import _dreamer_make_mbenv
 
 from intact.modules.models.dreamer_world_model.causal_rssm_prior import (
@@ -41,6 +38,7 @@ from intact.modules.models.dreamer_world_model.plain_rssm_prior import (
 from intact.modules.models.policy.actor import Actor
 from intact.modules.models.policy.critic import Critic
 from intact.modules.tensordict_module.dreamer_wrapper import DreamerWrapper
+from intact.modules.tensordict_module.dreamer_wrapper import OriginalDreamerWrapper
 
 
 def make_dreamer(
@@ -331,9 +329,7 @@ def _dreamer_make_mbenv(
         continue_model = None
 
     model_based_env = DreamerEnv(
-        world_model=OriginalDreamerWrapper(
-            transition_model, reward_model, continue_model
-        ),
+        world_model=OriginalDreamerWrapper(transition_model, reward_model, continue_model),
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([rssm_hidden_dim]),
         obs_decoder=mb_env_obs_decoder,
@@ -346,9 +342,7 @@ def _dreamer_make_mbenv(
         "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
         # "action": proof_environment.action_spec,
     }
-    model_based_env.append_transform(
-        TensorDictPrimer(random=False, default_value=0, **default_dict)
-    )
+    model_based_env.append_transform(TensorDictPrimer(random=False, default_value=0, **default_dict))
     return model_based_env
 
 
@@ -376,9 +370,7 @@ def _dreamer_make_actors(
     )
     actor_module.set_context_model(context_model)
 
-    actor_simulator = _dreamer_make_actor_sim(
-        action_key, proof_environment, actor_module, actor_dist_type
-    )
+    actor_simulator = _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type)
     actor_realworld = _dreamer_make_actor_real(
         obs_encoder,
         rssm_prior,
@@ -391,9 +383,7 @@ def _dreamer_make_actors(
     return actor_simulator, actor_realworld
 
 
-def _dreamer_make_actor_sim(
-    action_key, proof_environment, actor_module, actor_dist_type
-):
+def _dreamer_make_actor_sim(action_key, proof_environment, actor_module, actor_dist_type):
     distribution_class = {
         "truncated_normal": TruncatedNormal,
         "tanh_normal": TanhNormal,
@@ -481,9 +471,7 @@ def _dreamer_make_actor_real(
                 default_interaction_type=InteractionType.MODE,
                 distribution_class=distribution_class,
                 distribution_kwargs={"tanh_loc": True},
-                spec=CompositeSpec(
-                    **{action_key: proof_environment.action_spec.to("cpu")}
-                ),
+                spec=CompositeSpec(**{action_key: proof_environment.action_spec.to("cpu")}),
             ),
         ),
         SafeModule(
@@ -500,9 +488,7 @@ def _dreamer_make_actor_real(
     return actor_realworld
 
 
-def _dreamer_make_value_model(
-    state_dim, belief_dim, context_model, mlp_num_units, value_key
-):
+def _dreamer_make_value_model(state_dim, belief_dim, context_model, mlp_num_units, value_key):
     # actor for simulator: interacts with states ~ prior
     critic = Critic(
         state_or_obs_dim=state_dim,

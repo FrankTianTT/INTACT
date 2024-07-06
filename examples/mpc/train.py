@@ -48,12 +48,8 @@ def main(cfg):
     logger = build_logger(cfg, name="mpc")
 
     make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
-    train_make_env_list, train_oracle_context = create_make_env_list(
-        cfg, make_env, mode="meta_train"
-    )
-    test_make_env_list, test_oracle_context = create_make_env_list(
-        cfg, make_env, mode="meta_test"
-    )
+    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
+    test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
@@ -67,9 +63,7 @@ def main(cfg):
         world_model,
         lambda_transition=cfg.lambda_transition,
         lambda_reward=cfg.lambda_reward if cfg.reward_fns == "" else 0.0,
-        lambda_terminated=cfg.lambda_terminated
-        if cfg.termination_fns == ""
-        else 0.0,
+        lambda_terminated=cfg.lambda_terminated if cfg.termination_fns == "" else 0.0,
         sparse_weight=cfg.sparse_weight,
         context_sparse_weight=cfg.context_sparse_weight,
         context_max_weight=cfg.context_max_weight,
@@ -107,9 +101,7 @@ def main(cfg):
     )
 
     # replay buffer
-    buffer_size = (
-        cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
-    )
+    buffer_size = cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -122,23 +114,20 @@ def main(cfg):
         lr=cfg.world_model_lr,
         weight_decay=cfg.world_model_weight_decay,
     )
-    world_model_opt.add_param_group(
-        dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
-    )
-    if cfg.model_type == "causal" and cfg.using_reinforce:
-        logits_opt = torch.optim.Adam(
-            world_model.get_parameter("observed_logits"),
-            lr=cfg.observed_logits_lr,
-        )
-        logits_opt.add_param_group(
-            dict(
-                params=world_model.get_parameter("context_logits"),
-                lr=cfg.context_logits_lr,
+    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
+    if cfg.model_type == "causal":
+        if cfg.mask_type == "reinforce":
+            logits_opt = torch.optim.Adam(
+                world_model.get_parameter("observed_logits"),
+                lr=cfg.observed_logits_lr,
             )
-        )
-    else:
-        logits_opt = None
-        if cfg.model_type == "causal":
+            logits_opt.add_param_group(
+                dict(
+                    params=world_model.get_parameter("context_logits"),
+                    lr=cfg.context_logits_lr,
+                )
+            )
+        else:
             world_model_opt.add_param_group(
                 dict(
                     params=world_model.get_parameter("observed_logits"),
@@ -151,6 +140,9 @@ def main(cfg):
                     lr=cfg.context_logits_lr,
                 )
             )
+            logits_opt = None
+    else:
+        logits_opt = None
 
     # Training loop
     collected_frames = 0
@@ -170,25 +162,13 @@ def main(cfg):
         episode_reward = tensordict.get(("next", "episode_reward"))[mask]
         episode_length = tensordict["next", "step_count"][mask].float()
         done = tensordict.get(("next", "done"))[mask]
-        logger.add_scaler(
-            "rollout/reward_mean", tensordict[("next", "reward")][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/reward_std", tensordict[("next", "reward")][mask].std()
-        )
+        logger.add_scaler("rollout/reward_mean", tensordict[("next", "reward")][mask].mean())
+        logger.add_scaler("rollout/reward_std", tensordict[("next", "reward")][mask].std())
         if done.any():
-            logger.add_scaler(
-                "rollout/episode_reward", episode_reward[done].mean()
-            )
-            logger.add_scaler(
-                "rollout/episode_length", episode_length[done].mean()
-            )
-        logger.add_scaler(
-            "rollout/action_mean", tensordict["action"][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/action_std", tensordict["action"][mask].std()
-        )
+            logger.add_scaler("rollout/episode_reward", episode_reward[done].mean())
+            logger.add_scaler("rollout/episode_length", episode_length[done].mean())
+        logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
+        logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
 
         if collected_frames < cfg.meta_train_init_frames:
             continue
@@ -233,8 +213,7 @@ def main(cfg):
                 collected_frames,
             )
         if cfg.model_type == "causal":
-            print()
-            print(world_model.causal_mask.printing_mask)
+            print("\n" + world_model.causal_mask.printing_mask)
 
         if (i + 1) % cfg.save_model_interval == 0:
             os.makedirs("world_model", exist_ok=True)

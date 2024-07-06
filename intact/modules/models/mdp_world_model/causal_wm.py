@@ -12,7 +12,7 @@ class CausalWorldModel(PlainMDPWorldModel):
         obs_dim,
         action_dim,
         meta=False,
-        using_reinforce=True,
+        mask_type="direct",
         alpha=10.0,
         max_context_dim=10,
         task_num=100,
@@ -23,6 +23,7 @@ class CausalWorldModel(PlainMDPWorldModel):
         observed_logits_init_bias=0.5,
         context_logits_init_bias=0.5,
         logits_init_scale=0.0,
+        sigmoid_threshold=0.1,
     ):
         """Initializes the CausalWorldModel class.
 
@@ -30,7 +31,6 @@ class CausalWorldModel(PlainMDPWorldModel):
             obs_dim (int): Number of observation dimensions.
             action_dim (int): Number of action dimensions.
             meta (bool, optional): Whether to use envs-RL. Defaults to False.
-            using_reinforce (bool, optional): Whether to use REINFORCE for learning. Defaults to True.
             alpha (float, optional): Alpha parameter for the CausalMask class. Defaults to 10.0.
             max_context_dim (int, optional): Number of context dimensions, used for envs-RL. Defaults to 10.
             task_num (int, optional): Number of tasks, used for envs-RL. Defaults to 100.
@@ -42,11 +42,12 @@ class CausalWorldModel(PlainMDPWorldModel):
             context_logits_init_bias (float, optional): Bias for mask logits for context variables initialization. Defaults to 0.5.
             logits_init_scale (float, optional): Scale for mask logits initialization. Defaults to 0.0.
         """
-        self.using_reinforce = using_reinforce
+        self.mask_type = mask_type
         self.logits_clip = logits_clip
         self.observed_logits_init_bias = observed_logits_init_bias
         self.context_logits_init_bias = context_logits_init_bias
         self.logits_init_scale = logits_init_scale
+        self.sigmoid_threshold = sigmoid_threshold
 
         super().__init__(
             obs_dim=obs_dim,
@@ -62,11 +63,12 @@ class CausalWorldModel(PlainMDPWorldModel):
         self.causal_mask = CausalMask(
             observed_input_dim=self.obs_dim + self.action_dim,
             mask_output_dim=self.output_dim,
-            using_reinforce=self.using_reinforce,
+            mask_type=self.mask_type,
             meta=self.meta,
             context_input_dim=self.max_context_dim,
             logits_clip=self.logits_clip,
             alpha=alpha,
+            sigmoid_threshold=self.sigmoid_threshold,
         )
 
     def build_nets(self):
@@ -110,14 +112,10 @@ class CausalWorldModel(PlainMDPWorldModel):
         Returns:
             tuple: The outputs of the forward pass.
         """
-        inputs = torch.cat(
-            [observation, action, self.context_model(idx)], dim=-1
-        )
+        inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
-        masked_inputs, mask = self.causal_mask(
-            inputs.reshape(-1, dim), deterministic=deterministic_mask
-        )
+        masked_inputs, mask = self.causal_mask(inputs.reshape(-1, dim), deterministic=deterministic_mask)
 
         mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
 

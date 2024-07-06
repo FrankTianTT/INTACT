@@ -10,6 +10,34 @@ from intact.modules.models.dreamer_world_model.plain_rssm_prior import (
 )
 
 
+class OriginalDreamerWrapper(TensorDictSequential):
+    """World model wrapper.
+    This module wraps together a transition model and a reward model.
+    The transition model is used to predict an imaginary world state.
+    The reward model is used to predict the reward of the imagined transition.
+    Args:
+        transition_model (TensorDictModule): a transition model that generates a new world states.
+        reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward.
+        continue_model (TensorDictModule): a continue model, that reads the world state and returns
+            a continue probability, optional.
+    """
+
+    def __init__(
+        self,
+        transition_model: TensorDictModule,
+        reward_model: TensorDictModule,
+        continue_model: TensorDictModule = None,
+    ):
+        models = [transition_model, reward_model]
+        if continue_model is not None:
+            models.append(continue_model)
+            self.pred_continue = True
+        else:
+            self.pred_continue = False
+
+        super().__init__(*models)
+
+
 class DreamerWrapper(TensorDictSequential):
     """
     A wrapper class for a sequence of TensorDictModules that represents a Dreamer model.
@@ -37,12 +65,8 @@ class DreamerWrapper(TensorDictSequential):
             continue_model (TensorDictModule, optional): The continue model module. Defaults to None.
         """
         self.variable_num = rssm_rollout.rssm_prior.variable_num
-        self.state_dim_per_variable = (
-            rssm_rollout.rssm_prior.state_dim_per_variable
-        )
-        self.hidden_dim_per_variable = (
-            rssm_rollout.rssm_prior.belief_dim_per_variable
-        )
+        self.state_dim_per_variable = rssm_rollout.rssm_prior.state_dim_per_variable
+        self.hidden_dim_per_variable = rssm_rollout.rssm_prior.belief_dim_per_variable
         self.action_dim = rssm_rollout.rssm_prior.action_dim
 
         models = [obs_encoder, rssm_rollout, obs_decoder, reward_model]
@@ -199,16 +223,10 @@ class DreamerWrapper(TensorDictSequential):
         batch_size, batch_len = tensordict.batch_size
 
         tensordict = self._run_module(self.obs_encoder, tensordict)
-        tensordict = tensordict.select(
-            *self.rssm_rollout.in_keys, strict=False
-        )
+        tensordict = tensordict.select(*self.rssm_rollout.in_keys, strict=False)
 
-        repeat_tensordict = tensordict.expand(
-            sampling_times, *tensordict.batch_size
-        ).reshape(-1, batch_len)
+        repeat_tensordict = tensordict.expand(sampling_times, *tensordict.batch_size).reshape(-1, batch_len)
         out_tensordict = self._run_module(self.rssm_rollout, repeat_tensordict)
-        out_tensordict = out_tensordict.reshape(
-            sampling_times, batch_size, batch_len
-        )
+        out_tensordict = out_tensordict.reshape(sampling_times, batch_size, batch_len)
 
         return out_tensordict

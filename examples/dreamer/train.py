@@ -55,24 +55,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         state_dim_per_variable=cfg.state_dim_per_variable,
         hidden_dim_per_variable=cfg.belief_dim_per_variable,
     )
-    train_make_env_list, train_oracle_context = create_make_env_list(
-        cfg, make_env_fn, mode="meta_train"
-    )
-    test_make_env_list, test_oracle_context = create_make_env_list(
-        cfg, make_env_fn, mode="meta_test"
-    )
+    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_train")
+    test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env_fn, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    (
-        world_model,
-        model_based_env,
-        actor_model,
-        value_model,
-        policy,
-    ) = make_dreamer(
+    (world_model, model_based_env, actor_model, value_model, policy,) = make_dreamer(
         cfg=cfg,
         proof_environment=proof_env,
         device=device,
@@ -117,9 +107,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ).to(device)
 
     collector = aSyncDataCollector(
-        create_env_fn=SerialEnv(
-            task_num, train_make_env_list, shared_memory=False
-        ),
+        create_env_fn=SerialEnv(task_num, train_make_env_list, shared_memory=False),
         policy=exploration_policy,
         total_frames=cfg.train_frames_per_task,
         frames_per_batch=cfg.frames_per_batch,
@@ -130,9 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # replay buffer
-    buffer_size = (
-        cfg.train_frames_per_task if cfg.buffer_size == -1 else cfg.buffer_size
-    )
+    buffer_size = cfg.train_frames_per_task if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -140,13 +126,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     # optimizers
-    world_model_opt = torch.optim.Adam(
-        world_model.get_parameter("nets"), lr=cfg.world_model_lr
-    )
-    world_model_opt.add_param_group(
-        dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
-    )
-    if cfg.model_type == "causal" and cfg.using_reinforce:
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("nets"), lr=cfg.world_model_lr)
+    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
+    if cfg.model_type == "causal" and cfg.mask_type == "reinforce":
         logits_opt = torch.optim.Adam(
             world_model.get_parameter("observed_logits"),
             lr=cfg.observed_logits_lr,
@@ -173,12 +155,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
             )
 
-    actor_opt = torch.optim.Adam(
-        actor_model.parameters(), lr=cfg.actor_value_lr
-    )
-    value_opt = torch.optim.Adam(
-        value_model.parameters(), lr=cfg.actor_value_lr
-    )
+    actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
+    value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
     # Training loop
     collected_frames = 0
@@ -201,19 +179,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_reward = tensordict.get(("next", "episode_reward"))[mask]
         done = tensordict.get(("next", "done"))[mask]
         mean_episode_reward = episode_reward[done].mean()
-        logger.add_scaler(
-            "rollout/reward_mean", tensordict[("next", "reward")][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/reward_std", tensordict[("next", "reward")][mask].std()
-        )
+        logger.add_scaler("rollout/reward_mean", tensordict[("next", "reward")][mask].mean())
+        logger.add_scaler("rollout/reward_std", tensordict[("next", "reward")][mask].std())
         logger.add_scaler("rollout/episode_reward_mean", mean_episode_reward)
-        logger.add_scaler(
-            "rollout/action_mean", tensordict["action"][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/action_std", tensordict["action"][mask].std()
-        )
+        logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
+        logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
         logger.dump_scaler(collected_frames)
 
         if collected_frames < cfg.init_frames_per_task:

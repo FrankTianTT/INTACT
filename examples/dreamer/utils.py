@@ -50,13 +50,9 @@ def train_model(
     reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
-    train_logits_by_reinforce = (
-        cfg.model_type == "causal" and cfg.using_reinforce
-    )
+    train_logits_by_reinforce = cfg.model_type == "causal" and cfg.mask_type == "reinforce"
     if train_logits_by_reinforce:
-        assert (
-            logits_opt is not None
-        ), "logits_opt should not be None when train logits by reinforce"
+        assert logits_opt is not None, "logits_opt should not be None when train logits by reinforce"
 
     if cfg.model_type == "causal":
         causal_mask = world_model.causal_mask
@@ -65,9 +61,7 @@ def train_model(
 
     for step in range(training_steps):
         world_model.zero_grad()
-        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(
-            device, non_blocking=True
-        )
+        sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
         if reward_normalizer:
             reward_normalizer.normalize_reward(sampled_tensordict)
 
@@ -76,20 +70,15 @@ def train_model(
 
         if (
             train_logits_by_reinforce
-            and iters % (cfg.train_mask_iters + cfg.train_model_iters)
-            >= cfg.train_model_iters
+            and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
         ):
-            grad, sampling_loss = world_model_loss.reinforce_forward(
-                sampled_tensordict
-            )
+            grad, sampling_loss = world_model_loss.reinforce_forward(sampled_tensordict)
             causal_mask = world_model.causal_mask
             logits = causal_mask.mask_logits
             logits.backward(grad)
             logits_opt.step()
         else:
-            model_loss_td, sampled_tensordict = world_model_loss(
-                sampled_tensordict
-            )
+            model_loss_td, sampled_tensordict = world_model_loss(sampled_tensordict)
             total_loss = sum([loss for loss in model_loss_td.values()])
 
             total_loss.backward()
@@ -97,15 +86,9 @@ def train_model(
             model_opt.step()
 
             logger.add_scaler("world_model/total_loss", total_loss)
-            logger.add_scaler(
-                "world_model/kl_loss", model_loss_td["loss_model_kl"]
-            )
-            logger.add_scaler(
-                "world_model/reco_loss", model_loss_td["loss_model_reco"]
-            )
-            logger.add_scaler(
-                "world_model/reward_loss", model_loss_td["loss_model_reward"]
-            )
+            logger.add_scaler("world_model/kl_loss", model_loss_td["loss_model_kl"])
+            logger.add_scaler("world_model/reco_loss", model_loss_td["loss_model_reco"])
+            logger.add_scaler("world_model/reward_loss", model_loss_td["loss_model_reward"])
             logger.add_scaler(
                 "world_model/continue_loss",
                 model_loss_td["loss_model_continue"],
@@ -113,9 +96,7 @@ def train_model(
 
         if cfg.model_type == "causal":
             mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
-            for out_dim, in_dim in product(
-                range(mask_value.shape[0]), range(mask_value.shape[1])
-            ):
+            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
                 out_name = f"o{out_dim}"
                 if in_dim < causal_mask.observed_input_dim:
                     in_name = f"i{in_dim}"
@@ -157,12 +138,8 @@ def train_agent(
 
         logger.add_scaler("policy/loss", actor_loss_td["loss_actor"])
         logger.add_scaler("policy/grad", grad_norm(actor_opt))
-        logger.add_scaler(
-            "policy/action_mean", sampled_tensordict["action"].mean()
-        )
-        logger.add_scaler(
-            "policy/action_std", sampled_tensordict["action"].std()
-        )
+        logger.add_scaler("policy/action_mean", sampled_tensordict["action"].mean())
+        logger.add_scaler("policy/action_std", sampled_tensordict["action"].std())
         actor_opt.zero_grad()
 
         # update value network
@@ -173,12 +150,8 @@ def train_agent(
 
         logger.add_scaler("value/loss", value_loss_td["loss_value"])
         logger.add_scaler("value/grad", grad_norm(value_opt))
-        logger.add_scaler(
-            "value/target_mean", sampled_tensordict["lambda_target"].mean()
-        )
-        logger.add_scaler(
-            "value/target_std", sampled_tensordict["lambda_target"].std()
-        )
+        logger.add_scaler("value/target_mean", sampled_tensordict["lambda_target"].mean())
+        logger.add_scaler("value/target_std", sampled_tensordict["lambda_target"].std())
         logger.add_scaler(
             "value/mean_continue",
             (sampled_tensordict[("next", "pred_continue")] > 0).float().mean(),
@@ -243,13 +216,9 @@ def meta_test(
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=cfg.buffer_size),
     )
-    world_model_opt = torch.optim.Adam(
-        world_model.get_parameter("context"), lr=cfg.context_lr
-    )
+    world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
 
-    pbar = tqdm(
-        total=cfg.meta_task_adjust_frames_per_task, desc="meta_test_adjust"
-    )
+    pbar = tqdm(total=cfg.meta_task_adjust_frames_per_task, desc="meta_test_adjust")
     train_model_iters = 0
     for frame, tensordict in enumerate(collector):
         current_frames = tensordict.get(("collector", "mask")).sum().item()

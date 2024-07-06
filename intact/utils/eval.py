@@ -4,7 +4,7 @@ from warnings import catch_warnings, filterwarnings
 
 import torch
 from omegaconf import DictConfig
-from tensordict.nn.probabilistic import set_interaction_mode
+from tensordict.nn.probabilistic import set_interaction_type, InteractionType
 from torchrl.envs import TransformedEnv, SerialEnv
 from torchrl.envs.utils import step_mdp
 from torchrl.record import VideoRecorder
@@ -49,19 +49,11 @@ def evaluate_policy(
     repeat_lengths = []
     for repeat in range(cfg.eval_repeat_nums):
         if disable_pixel_if_possible:
-            make_env_fn = partial(
-                make_env_fn, pixel=repeat < cfg.eval_record_nums
-            )
-        make_env_list = build_make_env_list(
-            cfg.env_name, make_env_fn, oracle_context
-        )
-        eval_env = SerialEnv(
-            len(make_env_list), make_env_list, shared_memory=False
-        )
+            make_env_fn = partial(make_env_fn, pixel=repeat < cfg.eval_record_nums)
+        make_env_list = build_make_env_list(cfg.env_name, make_env_fn, oracle_context)
+        eval_env = SerialEnv(len(make_env_list), make_env_list, shared_memory=False)
         if repeat < cfg.eval_record_nums:
-            eval_env = TransformedEnv(
-                eval_env, VideoRecorder(logger, log_prefix)
-            )
+            eval_env = TransformedEnv(eval_env, VideoRecorder(logger, log_prefix))
 
         rewards = torch.zeros(len(make_env_list))
         lengths = torch.zeros(len(make_env_list))
@@ -70,7 +62,7 @@ def evaluate_policy(
 
         for _ in range(cfg.env_max_steps):
             pbar.update()
-            with set_interaction_mode("mode"):
+            with set_interaction_type(InteractionType.MODE):
                 if disable_pixel_if_possible and "pixels" in tensordict.keys():
                     del tensordict["pixels"]
                 action = policy(tensordict.to(device)).cpu()

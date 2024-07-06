@@ -25,9 +25,9 @@ class CausalWorldModelLoss(LossModule):
 
         if self.model_type == "causal":
             self.causal_mask = world_model.causal_mask
-            self.using_reinforce = self.causal_mask.using_reinforce
+            self.mask_type = self.causal_mask.mask_type
         else:
-            self.causal_mask, self.using_reinforce = None, None
+            self.causal_mask, self.mask_type = None, None
         self.context_model = world_model.context_model
         self.learn_obs_var = world_model.learn_obs_var
 
@@ -96,9 +96,7 @@ class CausalWorldModelLoss(LossModule):
 
         return loss_td, loss_tensor
 
-    def rollout_forward(
-        self, tensordict: TensorDict, deterministic_mask=False
-    ):
+    def rollout_forward(self, tensordict: TensorDict, deterministic_mask=False):
         tensordict = tensordict.clone(recurse=False)
         assert len(tensordict.shape) == 2
 
@@ -108,25 +106,16 @@ class CausalWorldModelLoss(LossModule):
         for t in range(time_steps):
             _tensordict = tensordict[..., t]
             if t > 0:
-                _tensordict["observation"] = tensordict_out[-1][
-                    "obs_mean"
-                ].clone()
-
+                _tensordict["observation"] = tensordict_out[-1]["obs_mean"].clone()
             if self.model_type == "causal":
-                _tensordict = self.world_model(
-                    _tensordict, deterministic_mask=deterministic_mask
-                )
+                _tensordict = self.world_model(_tensordict, deterministic_mask=deterministic_mask)
             else:
                 _tensordict = self.world_model(_tensordict)
 
             tensordict_out.append(_tensordict)
-        return torch.stack(
-            tensordict_out, tensordict.ndimension() - 1
-        ).contiguous()
+        return torch.stack(tensordict_out, tensordict.ndimension() - 1).contiguous()
 
-    def forward(
-        self, tensordict: TensorDict, deterministic_mask=False, only_train=None
-    ):
+    def forward(self, tensordict: TensorDict, deterministic_mask=False, only_train=None):
         tensordict = self.rollout_forward(tensordict)
 
         loss_td, loss_tensor = self.loss(tensordict)
@@ -134,9 +123,7 @@ class CausalWorldModelLoss(LossModule):
             if self.model_type == "causal":
                 valid_context_idx = self.causal_mask.valid_context_idx
             else:
-                valid_context_idx = torch.arange(
-                    self.context_model.max_context_dim
-                )
+                valid_context_idx = torch.arange(self.context_model.max_context_dim)
             mutual_info_loss = self.context_model.get_mutual_info(
                 idx=tensordict["idx"],
                 valid_context_idx=valid_context_idx,
@@ -162,43 +149,27 @@ class CausalWorldModelLoss(LossModule):
             loss_tensor[..., not_train] = 0
 
         total_loss = loss_tensor.mean()
-        if self.model_type == "causal" and not self.using_reinforce:
-            total_loss += (
-                torch.sigmoid(self.causal_mask.observed_logits).sum()
-                * self.sparse_weight
-            )
+        if self.model_type == "causal" and self.mask_type != "reinforce":
+            total_loss += torch.sigmoid(self.causal_mask.observed_logits).sum() * self.sparse_weight
             if self.causal_mask.context_input_dim > 0:
+                total_loss += torch.sigmoid(self.causal_mask.context_logits).sum() * self.context_sparse_weight
                 total_loss += (
-                    torch.sigmoid(self.causal_mask.context_logits).sum()
-                    * self.context_sparse_weight
+                    torch.sigmoid(self.causal_mask.context_logits).max(dim=1)[0].sum() * self.context_max_weight
                 )
-                total_loss += (
-                    torch.sigmoid(self.causal_mask.context_logits)
-                    .max(dim=1)[0]
-                    .sum()
-                    * self.context_max_weight
-                )
-        return loss_td, total_loss
+
+                return loss_td, total_loss
 
     def reinforce_forward(self, tensordict: TensorDict, only_train=None):
-        assert (
-            self.model_type == "causal"
-        ), "reinforce is only available for CausalWorldModel"
-        assert (
-            self.causal_mask.using_reinforce
-        ), "causal_mask should be learned by reinforce"
+        assert self.model_type == "causal", "reinforce is only available for CausalWorldModel"
+        assert self.causal_mask.using_reinforce, "causal_mask should be learned by reinforce"
 
         tensordict = tensordict.clone()
         mask = tensordict.get(("collector", "mask")).clone()
         tensordict = tensordict[mask]
 
         with torch.no_grad():
-            tensordict = self.world_model.parallel_forward(
-                tensordict, self.sampling_times
-            )
-            _, loss_tensor = self.loss(
-                tensordict.reshape(-1), reduction="none"
-            )
+            tensordict = self.world_model.parallel_forward(tensordict, self.sampling_times)
+            _, loss_tensor = self.loss(tensordict.reshape(-1), reduction="none")
 
             sampling_loss = loss_tensor.reshape(*tensordict.batch_size, -1)
 

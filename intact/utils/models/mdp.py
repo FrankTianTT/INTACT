@@ -43,8 +43,10 @@ def make_mdp_model(
     if cfg.model_type == "causal":
         wm_class = partial(
             CausalWorldModel,
-            using_reinforce=cfg.using_reinforce,
+            mask_type=cfg.mask_type,
+            sigmoid_threshold=cfg.sigmoid_threshold,
             alpha=cfg.alpha,
+            logits_clip=10.0,
         )
     elif cfg.model_type == "plain":
         wm_class = PlainMDPWorldModel
@@ -77,7 +79,7 @@ class MDPConfig:
     """MDP model config struct."""
 
     model_type = "causal"
-    using_reinforce = True
+    mask_type = "direct"
     alpha = 1.0
     meta = False
     max_context_dim = 10
@@ -97,9 +99,7 @@ def make_mdp_dreamer(
     obs_dim = proof_env.observation_spec["observation"].shape[0]
     action_dim = proof_env.action_spec.shape[0]
 
-    world_model, model_based_env = make_mdp_model(
-        cfg, proof_env, device=device
-    )
+    world_model, model_based_env = make_mdp_model(cfg, proof_env, device=device)
 
     actor_module = Actor(
         action_dim=action_dim,

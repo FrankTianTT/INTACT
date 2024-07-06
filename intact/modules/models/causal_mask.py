@@ -31,17 +31,17 @@ class CausalMask(nn.Module):
         self,
         observed_input_dim,
         mask_output_dim,
-        using_reinforce=True,
-        sigmoid_threshold=0.001,
+        mask_type="direct",
+        sigmoid_threshold=0.1,
         latent=False,
         gumbel_softmax=False,
         meta=False,
         context_input_dim=10,
         logits_clip=3.0,
-        observed_logits_init_bias=0.3,
-        context_logits_init_bias=0.5,
-        observed_logits_init_scale=0.05,
-        context_logits_init_scale=0.5,
+        observed_logits_init_bias=0.0,
+        context_logits_init_bias=0.0,
+        observed_logits_init_scale=0.0,
+        context_logits_init_scale=0.0,
         alpha=10.0,
     ):
         """
@@ -50,7 +50,6 @@ class CausalMask(nn.Module):
         Args:
             observed_input_dim (int): The number of observed input dimensions.
             mask_output_dim (int): The number of mask output dimensions.
-            using_reinforce (bool, optional): Whether to use REINFORCE for gradient estimation. Defaults to True.
             latent (bool, optional): Whether to use latent variables. Defaults to False.
             gumbel_softmax (bool, optional): Whether to use Gumbel-Softmax for relaxation. Defaults to False.
             meta (bool, optional): Whether to use meta-learning. Defaults to False.
@@ -66,7 +65,7 @@ class CausalMask(nn.Module):
 
         self.observed_input_dim = observed_input_dim
         self.mask_output_dim = mask_output_dim
-        self.using_reinforce = using_reinforce
+        self.mask_type = mask_type
         self.sigmoid_threshold = sigmoid_threshold
         self.latent = latent
         self.gumbel_softmax = gumbel_softmax
@@ -79,22 +78,24 @@ class CausalMask(nn.Module):
         self.context_logits_init_scale = context_logits_init_scale
         self.alpha = alpha
 
-        self._observed_logits = nn.Parameter(
-            get_init(
-                shape=(self.mask_output_dim, self.observed_input_dim),
-                bias=observed_logits_init_bias,
-                scale=observed_logits_init_scale,
+        if self.mask_type == "direct":
+            self._observed_logits = nn.Parameter(torch.full((self.mask_output_dim, self.observed_input_dim), 0.5))
+            self._context_logits = nn.Parameter(torch.full((self.mask_output_dim, self.context_input_dim), 0.5))
+        else:
+            self._observed_logits = nn.Parameter(
+                get_init(
+                    shape=(self.mask_output_dim, self.observed_input_dim),
+                    bias=observed_logits_init_bias,
+                    scale=observed_logits_init_scale,
+                )
             )
-        )
-        # self._observed_logits = nn.Parameter(torch.ones((self.mask_output_dim, self.observed_input_dim)) * logits_clip)
-
-        self._context_logits = nn.Parameter(
-            get_init(
-                shape=(self.mask_output_dim, self.context_input_dim),
-                bias=context_logits_init_bias,
-                scale=context_logits_init_scale,
+            self._context_logits = nn.Parameter(
+                get_init(
+                    shape=(self.mask_output_dim, self.context_input_dim),
+                    bias=context_logits_init_bias,
+                    scale=context_logits_init_scale,
+                )
             )
-        )
 
     def extra_repr(self):
         """
@@ -141,13 +142,14 @@ class CausalMask(nn.Module):
 
     @property
     def mask(self):
-        if self.using_reinforce:
+        if self.mask_type == "reinforce":
+            return torch.gt(self.mask_logits, 0).int()
+        elif self.mask_type == "sigmoid" or self.mask_type == "gumbel":
+            return torch.gt(torch.sigmoid(self.alpha * self.mask_logits), self.sigmoid_threshold).int()
+        elif self.mask_type == "direct":
             return torch.gt(self.mask_logits, 0).int()
         else:
-            return torch.gt(
-                torch.sigmoid(self.alpha * self.mask_logits),
-                self.sigmoid_threshold,
-            ).int()
+            raise NotImplemented
 
     @property
     def mask_logits(self):
@@ -161,9 +163,10 @@ class CausalMask(nn.Module):
         Returns:
             Tensor: The observed logits.
         """
-        return torch.clamp(
-            self._observed_logits, -self.logits_clip, self.logits_clip
-        )
+        if self.mask_type == "direct":
+            return torch.clamp(self._observed_logits, 0, 1)
+        else:
+            return torch.clamp(self._observed_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def context_logits(self):
@@ -173,9 +176,10 @@ class CausalMask(nn.Module):
         Returns:
            Tensor: The context logits.
         """
-        return torch.clamp(
-            self._context_logits, -self.logits_clip, self.logits_clip
-        )
+        if self.mask_type == "direct":
+            return torch.clamp(self._context_logits, 0, 1)
+        else:
+            return torch.clamp(self._observed_logits, -self.logits_clip, self.logits_clip)
 
     @property
     def valid_context_idx(self):
@@ -198,26 +202,24 @@ class CausalMask(nn.Module):
         if line_idx is None:
             line_idx = list(range(self.mask_output_dim))
 
-        column_idx = list(
-            set(range(self.context_input_dim))
-            - set(self.valid_context_idx.tolist())
-        )
+        column_idx = list(set(range(self.context_input_dim)) - set(self.valid_context_idx.tolist()))
         line_matrix = torch.zeros_like(self._context_logits).to(bool)
         column_matrix = torch.zeros_like(self._context_logits).to(bool)
         line_matrix[line_idx] = 1
         column_matrix[:, column_idx] = 1
         reset_matrix = line_matrix * column_matrix
 
-        self._context_logits.data[reset_matrix] = get_init(
-            shape=(len(line_idx) * len(column_idx)),
-            bias=self.context_logits_init_bias,
-            scale=self.context_logits_init_scale,
-        ).to(self._context_logits.device)
+        if self.model_type == "direct":
+            self._context_logits.data[reset_matrix] = 0.5
+        else:
+            self._context_logits.data[reset_matrix] = get_init(
+                shape=(len(line_idx) * len(column_idx)),
+                bias=self.context_logits_init_bias,
+                scale=self.context_logits_init_scale,
+            ).to(self._context_logits.device)
 
     def forward(self, inputs, dim_map=None, deterministic=False):
-        assert (
-            len(inputs.shape) == 2
-        ), "inputs should be 2D tensor: batch_size x input_dim"
+        assert len(inputs.shape) == 2, "inputs should be 2D tensor: batch_size x input_dim"
         batch_size, input_dim = inputs.shape
         if dim_map is None:
             assert input_dim == self.mask_input_dim, (
@@ -226,34 +228,29 @@ class CausalMask(nn.Module):
             )
 
         # shape: mask_output_dim * batch_size * input_dim
-        repeated_inputs = inputs.unsqueeze(0).expand(
-            self.mask_output_dim, -1, -1
-        )
+        repeated_inputs = inputs.unsqueeze(0).expand(self.mask_output_dim, -1, -1)
 
-        if self.using_reinforce:
+        if self.mask_type == "reinforce":
             if deterministic:
                 original_mask = self.mask.float().expand(batch_size, -1, -1)
             else:
-                original_mask = Bernoulli(logits=self.mask_logits).sample(
-                    torch.Size([batch_size])
-                )
+                original_mask = Bernoulli(logits=self.mask_logits).sample(torch.Size([batch_size]))
         else:
-            if self.gumbel_softmax:
+            if self.mask_type == "gumbel":
                 original_mask = F.gumbel_softmax(
-                    logits=torch.stack(
-                        (self.mask_logits, 1 - self.mask_logits)
-                    ),
+                    logits=torch.stack((self.mask_logits, 1 - self.mask_logits)),
                     hard=True,
                     dim=0,
                 )[0]
-            else:
+            elif self.mask_type == "sigmoid":
                 original_mask = torch.sigmoid(self.alpha * self.mask_logits)
+            elif self.mask_type == "direct":
+                original_mask = self.mask_logits
+            else:
+                raise NotImplemented
             original_mask = original_mask.expand(batch_size, -1, -1)
-        mask = (
-            original_mask[:, :, dim_map]
-            if dim_map is not None
-            else original_mask
-        )
+
+        mask = original_mask[:, :, dim_map] if dim_map is not None else original_mask
         masked_inputs = torch.einsum("boi,obi->obi", mask, repeated_inputs)
         return masked_inputs, original_mask
 
@@ -272,12 +269,8 @@ class CausalMask(nn.Module):
         is_valid = ((num_pos > 0) * (num_neg > 0)).float()
 
         # calculate the gradient of the sampling loss w.r.t. the logits
-        pos_grads = torch.einsum(
-            "sbo,sboi->sboi", sampling_loss, sampling_mask
-        ).sum(dim=0) / (num_pos + 1e-6)
-        neg_grads = torch.einsum(
-            "sbo,sboi->sboi", sampling_loss, 1 - sampling_mask
-        ).sum(dim=0) / (num_neg + 1e-6)
+        pos_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, sampling_mask).sum(dim=0) / (num_pos + 1e-6)
+        neg_grads = torch.einsum("sbo,sboi->sboi", sampling_loss, 1 - sampling_mask).sum(dim=0) / (num_neg + 1e-6)
 
         g = self.mask_logits.sigmoid() * (1 - self.mask_logits.sigmoid())
 
@@ -288,9 +281,7 @@ class CausalMask(nn.Module):
         #     max_idx = self.mask_logits[:, :self.observed_input_dim].argmax(dim=1)
         #     reg_grad[torch.arange(self.mask_output_dim), max_idx] = 0
         reg_grad[:, self.observed_input_dim :] *= context_sparse_weight
-        reg_grad[
-            :, self.observed_input_dim :
-        ] += context_max_weight * max_sigmoid_grad(
+        reg_grad[:, self.observed_input_dim :] += context_max_weight * max_sigmoid_grad(
             self.mask_logits[:, self.observed_input_dim :]
         )
         grad = is_valid * (sampling_grad + reg_grad)
@@ -299,6 +290,7 @@ class CausalMask(nn.Module):
     @property
     def printing_mask(self):
         mask = self.mask
+        print(self.mask_logits)
         string = ""
         for i, out_dim in enumerate(range(mask.shape[0])):
             string += " ".join([str(ele.item()) for ele in mask[out_dim]])

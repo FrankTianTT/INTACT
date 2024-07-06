@@ -47,34 +47,24 @@ def main(cfg):
     logger = build_logger(cfg, name="dreamer_mdp")
 
     make_env = partial(make_mdp_env, max_steps=cfg.env_max_steps)
-    train_make_env_list, train_oracle_context = create_make_env_list(
-        cfg, make_env, mode="meta_train"
-    )
-    test_make_env_list, test_oracle_context = create_make_env_list(
-        cfg, make_env, mode="meta_test"
-    )
+    train_make_env_list, train_oracle_context = create_make_env_list(cfg, make_env, mode="meta_train")
+    test_make_env_list, test_oracle_context = create_make_env_list(cfg, make_env, mode="meta_test")
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    world_model, model_based_env, actor, critic = make_mdp_dreamer(
-        cfg, proof_env, device=device
-    )
+    world_model, model_based_env, actor, critic = make_mdp_dreamer(cfg, proof_env, device=device)
 
     if cfg.normalize_rewards_online:
         reward_normalizer = RewardNormalizer()
     else:
         reward_normalizer = None
 
-    world_model_loss, actor_loss, critic_loss = build_loss(
-        cfg, world_model, model_based_env, actor, critic
-    )
+    world_model_loss, actor_loss, critic_loss = build_loss(cfg, world_model, model_based_env, actor, critic)
 
-    explore_policy = AdditiveGaussianWrapper(
-        actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec
-    )
+    explore_policy = AdditiveGaussianWrapper(actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec)
     del proof_env
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
@@ -91,9 +81,7 @@ def main(cfg):
     )
 
     # replay buffer
-    buffer_size = (
-        cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
-    )
+    buffer_size = cfg.meta_train_frames if cfg.buffer_size == -1 else cfg.buffer_size
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyMemmapStorage(max_size=buffer_size),
     )
@@ -106,10 +94,8 @@ def main(cfg):
         lr=cfg.world_model_lr,
         weight_decay=cfg.world_model_weight_decay,
     )
-    world_model_opt.add_param_group(
-        dict(params=world_model.get_parameter("context"), lr=cfg.context_lr)
-    )
-    if cfg.model_type == "causal" and cfg.using_reinforce:
+    world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
+    if cfg.model_type == "causal" and cfg.mask_type == "reinforce":
         logits_opt = torch.optim.Adam(
             world_model.get_parameter("observed_logits"),
             lr=cfg.observed_logits_lr,
@@ -160,34 +146,18 @@ def main(cfg):
         episode_reward = tensordict.get(("next", "episode_reward"))[mask]
         episode_length = tensordict["next", "step_count"][mask].float()
         done = tensordict.get(("next", "done"))[mask]
-        logger.add_scaler(
-            "rollout/reward_mean", tensordict[("next", "reward")][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/reward_std", tensordict[("next", "reward")][mask].std()
-        )
+        logger.add_scaler("rollout/reward_mean", tensordict[("next", "reward")][mask].mean())
+        logger.add_scaler("rollout/reward_std", tensordict[("next", "reward")][mask].std())
         if done.any():
-            logger.add_scaler(
-                "rollout/episode_reward", episode_reward[done].mean()
-            )
-            logger.add_scaler(
-                "rollout/episode_length", episode_length[done].mean()
-            )
-        logger.add_scaler(
-            "rollout/action_mean", tensordict["action"][mask].mean()
-        )
-        logger.add_scaler(
-            "rollout/action_std", tensordict["action"][mask].std()
-        )
+            logger.add_scaler("rollout/episode_reward", episode_reward[done].mean())
+            logger.add_scaler("rollout/episode_length", episode_length[done].mean())
+        logger.add_scaler("rollout/action_mean", tensordict["action"][mask].mean())
+        logger.add_scaler("rollout/action_std", tensordict["action"][mask].std())
 
         if collected_frames < cfg.meta_train_init_frames:
             continue
 
-        l_opt = (
-            logits_opt
-            if collected_frames >= cfg.meta_train_logits_frames
-            else None
-        )
+        l_opt = logits_opt if collected_frames >= cfg.meta_train_logits_frames else None
         train_model_iters = train_model(
             cfg,
             replay_buffer,

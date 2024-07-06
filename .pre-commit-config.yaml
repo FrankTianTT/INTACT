@@ -11,5 +11,5 @@ repos:
     hooks:
       - id: black
         args: # arguments to configure black
-          - --line-length=79
+          - --line-length=119
         language_version: python3.11

@@ -39,9 +39,11 @@ def make_mdp_env(
     """
     if env_kwargs is None:
         env_kwargs = {}
+    env_kwargs["device"] = "cpu"
     if pixel:
         env_kwargs["from_pixels"] = True
         env_kwargs["pixels_only"] = False
+
     if env_library == "dm_control":
         # env = DMControlEnv(env_name, **env_kwargs)
         raise NotImplementedError
