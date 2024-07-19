@@ -1,3 +1,5 @@
+import pdb
+
 import torch
 from torch import nn
 from torch.distributions import Bernoulli
@@ -22,27 +24,23 @@ def max_sigmoid_grad(logits):
     return grad
 
 
-def get_init(shape, bias, scale):
-    return torch.randn(shape) * scale + bias
-
-
 class CausalMask(nn.Module):
     def __init__(
-        self,
-        observed_input_dim,
-        mask_output_dim,
-        mask_type="direct",
-        sigmoid_threshold=0.1,
-        latent=False,
-        gumbel_softmax=False,
-        meta=False,
-        context_input_dim=10,
-        logits_clip=3.0,
-        observed_logits_init_bias=0.0,
-        context_logits_init_bias=0.0,
-        observed_logits_init_scale=0.0,
-        context_logits_init_scale=0.0,
-        alpha=10.0,
+            self,
+            observed_input_dim,
+            mask_output_dim,
+            mask_type="direct",
+            sigmoid_threshold=0.1,
+            latent=False,
+            gumbel_softmax=False,
+            meta=False,
+            context_input_dim=10,
+            logits_clip=3.0,
+            observed_logits_init_bias=0.0,
+            context_logits_init_bias=0.0,
+            observed_logits_init_scale=0.0,
+            context_logits_init_scale=0.0,
+            alpha=10.0,
     ):
         """
         Initialize the CausalMask.
@@ -78,24 +76,17 @@ class CausalMask(nn.Module):
         self.context_logits_init_scale = context_logits_init_scale
         self.alpha = alpha
 
+        init_observed = (torch.randn(self.mask_output_dim, self.observed_input_dim) * observed_logits_init_scale
+                         + observed_logits_init_bias)
+        init_context = (torch.randn(self.mask_output_dim, self.context_input_dim) * context_logits_init_scale
+                        + context_logits_init_bias)
+
         if self.mask_type == "direct":
-            self._observed_logits = nn.Parameter(torch.full((self.mask_output_dim, self.observed_input_dim), 0.5))
-            self._context_logits = nn.Parameter(torch.full((self.mask_output_dim, self.context_input_dim), 0.5))
+            self._observed_logits = nn.Parameter(init_observed + 0.5)
+            self._context_logits = nn.Parameter(init_context + 0.5)
         else:
-            self._observed_logits = nn.Parameter(
-                get_init(
-                    shape=(self.mask_output_dim, self.observed_input_dim),
-                    bias=observed_logits_init_bias,
-                    scale=observed_logits_init_scale,
-                )
-            )
-            self._context_logits = nn.Parameter(
-                get_init(
-                    shape=(self.mask_output_dim, self.context_input_dim),
-                    bias=context_logits_init_bias,
-                    scale=context_logits_init_scale,
-                )
-            )
+            self._observed_logits = nn.Parameter(init_observed)
+            self._context_logits = nn.Parameter(init_context)
 
     def extra_repr(self):
         """
@@ -189,7 +180,7 @@ class CausalMask(nn.Module):
         Returns:
             Tensor: The valid context indices.
         """
-        non_zero = self.mask[:, self.observed_input_dim :].any(dim=0)
+        non_zero = self.mask[:, self.observed_input_dim:].any(dim=0)
         return torch.where(non_zero)[0]
 
     def reset(self, line_idx=None):
@@ -255,12 +246,12 @@ class CausalMask(nn.Module):
         return masked_inputs, original_mask
 
     def total_mask_grad(
-        self,
-        sampling_mask,
-        sampling_loss,
-        sparse_weight=0.05,
-        context_sparse_weight=0.05,
-        context_max_weight=0.2,
+            self,
+            sampling_mask,
+            sampling_loss,
+            sparse_weight=0.05,
+            context_sparse_weight=0.05,
+            context_max_weight=0.2,
     ):
         num_pos = sampling_mask.sum(dim=0)
         num_neg = sampling_mask.shape[0] - num_pos
@@ -280,9 +271,9 @@ class CausalMask(nn.Module):
         # if self.latent:
         #     max_idx = self.mask_logits[:, :self.observed_input_dim].argmax(dim=1)
         #     reg_grad[torch.arange(self.mask_output_dim), max_idx] = 0
-        reg_grad[:, self.observed_input_dim :] *= context_sparse_weight
-        reg_grad[:, self.observed_input_dim :] += context_max_weight * max_sigmoid_grad(
-            self.mask_logits[:, self.observed_input_dim :]
+        reg_grad[:, self.observed_input_dim:] *= context_sparse_weight
+        reg_grad[:, self.observed_input_dim:] += context_max_weight * max_sigmoid_grad(
+            self.mask_logits[:, self.observed_input_dim:]
         )
         grad = is_valid * (sampling_grad + reg_grad)
         return grad.mean(dim=0)

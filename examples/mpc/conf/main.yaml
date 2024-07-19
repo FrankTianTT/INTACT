@@ -54,8 +54,8 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-eval_interval: 20
-#eval_interval: 20000
+#eval_interval: 20
+eval_interval: 2000
 eval_repeat_nums: 1
 eval_record_nums: 0
 save_model_interval: 10
@@ -71,7 +71,7 @@ oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 
 # other
-model_device: cuda:1
+model_device: cuda:0
 collector_device: ${model_device}
 seed: 42
 

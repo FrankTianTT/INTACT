@@ -36,18 +36,18 @@ def reset_module(policy, task_num):
 
 
 def train_model(
-    cfg,
-    replay_buffer,
-    world_model,
-    world_model_loss,
-    training_steps,
-    model_opt,
-    logits_opt=None,
-    logger=None,
-    deterministic_mask=False,
-    log_prefix="model",
-    iters=0,
-    only_train=None,
+        cfg,
+        replay_buffer,
+        world_model,
+        world_model_loss,
+        training_steps,
+        model_opt,
+        logits_opt=None,
+        logger=None,
+        deterministic_mask=False,
+        log_prefix="model",
+        iters=0,
+        only_train=None,
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.mask_type == "reinforce" and logits_opt
@@ -63,8 +63,8 @@ def train_model(
         sampled_tensordict = replay_buffer.sample(cfg.batch_size).to(device, non_blocking=True)
 
         if (
-            train_logits_by_reinforce
-            and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
+                train_logits_by_reinforce
+                and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
         ):
             grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
@@ -117,13 +117,13 @@ def train_model(
 
 
 def meta_test(
-    cfg,
-    make_env_list,
-    oracle_context,
-    policy,
-    logger,
-    log_idx,
-    adapt_threshold=-3.5,
+        cfg,
+        make_env_list,
+        oracle_context,
+        policy,
+        logger,
+        log_idx,
+        adapt_threshold=-3.5,
 ):
     if torch.cuda.is_available():
         device = torch.device(cfg.model_device)
@@ -223,11 +223,11 @@ def meta_test(
 
         train_model_iters = 0
         for frame in tqdm(
-            range(
-                cfg.meta_test_frames,
-                3 * cfg.meta_test_frames,
-                cfg.frames_per_batch,
-            )
+                range(
+                    cfg.meta_test_frames,
+                    3 * cfg.meta_test_frames,
+                    cfg.frames_per_batch,
+                )
         ):
             train_model_iters = train_model(
                 cfg,
