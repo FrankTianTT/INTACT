@@ -16,9 +16,9 @@ frames_per_batch: ${overrides.frames_per_batch}
 
 # planning
 planning_horizon: ${overrides.planning_horizon}
-optim_steps: 5
-num_candidates: 350
-top_k: 35
+optim_steps: ${overrides.optim_steps}
+num_candidates: ${overrides.num_candidates}
+top_k: ${overrides.top_k}
 
 # model learning
 model_type: causal
@@ -34,7 +34,7 @@ batch_size: ${overrides.batch_size}
 batch_length: ${overrides.batch_length}
 
 world_model_lr: 0.001
-context_lr: 0.001
+context_lr: 0.005
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
 world_model_weight_decay: 0.0001
@@ -54,8 +54,7 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-#eval_interval: 20
-eval_interval: 2000
+eval_interval: ${overrides.eval_interval}
 eval_repeat_nums: 1
 eval_record_nums: 0
 save_model_interval: 10

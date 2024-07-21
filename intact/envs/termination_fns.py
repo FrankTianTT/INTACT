@@ -36,6 +36,18 @@ def cartpole(
     )
     return (~not_done).unsqueeze(dim=-1)
 
+def cartpole_swingup(
+    obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor
+) -> torch.Tensor:
+    x, theta = next_obs[..., 0], next_obs[..., 2]
+
+    x_threshold = 2.4
+    not_done: torch.Tensor = (
+        (x > -x_threshold)
+        * (x < x_threshold)
+    )
+    return (~not_done).unsqueeze(dim=-1)
+
 
 def inverted_pendulum(
     obs: torch.Tensor, act: torch.Tensor, next_obs: torch.Tensor
@@ -65,6 +77,7 @@ def walker2d(
 
 termination_fns_dict = {
     "cartpole": cartpole,
+    "cartpole_swingup": cartpole_swingup,
     "inverted_pendulum": inverted_pendulum,
     "hopper": hopper,
     "no_termination": no_termination,

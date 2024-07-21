@@ -141,6 +141,13 @@ class CausalMask(nn.Module):
             return torch.gt(self.mask_logits, 0).int()
         else:
             raise NotImplemented
+        
+    @property
+    def soft_mask(self):
+        if self.mask_type == "direct":
+            return self.mask_logits
+        else:
+            return torch.sigmoid(self.alpha * self.mask_logits)
 
     @property
     def mask_logits(self):

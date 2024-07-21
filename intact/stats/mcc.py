@@ -77,8 +77,8 @@ def mean_corr_coef(x, y, method="pearson", return_permutation=False):
     if len(permutation[0]) == 0:
         score = 0
     else:
-        # score = cc[permutation].sum() / max(x.shape[1], y.shape[1])
-        score = cc[permutation].mean()
+        score = cc[permutation].sum() / max(x.shape[1], y.shape[1])
+        # score = cc[permutation].mean()
 
     if return_permutation:
         return score, permutation

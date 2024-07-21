@@ -71,8 +71,6 @@ def train_model(
             logits_opt.step()
         else:
             loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
-            # context_penalty = (world_model.context_model.context_hat ** 2).sum()
-            # total_loss += context_penalty * 0.1
             total_loss.backward()
             model_opt.step()
 
@@ -100,8 +98,8 @@ def train_model(
                     logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
         if cfg.model_type == "causal":
-            mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
-            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
+            soft_mask_value = causal_mask.soft_mask
+            for out_dim, in_dim in product(range(soft_mask_value.shape[0]), range(soft_mask_value.shape[1])):
                 out_name = f"o{out_dim}"
                 if in_dim < causal_mask.observed_input_dim:
                     in_name = f"i{in_dim}"
@@ -109,7 +107,7 @@ def train_model(
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
                 logger.add_scaler(
                     f"{log_prefix}/mask_value({out_name},{in_name})",
-                    mask_value[out_dim, in_dim],
+                    soft_mask_value[out_dim, in_dim],
                 )
 
         iters += 1
@@ -213,11 +211,8 @@ def meta_test(
 
         new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
         new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr))
-        if world_model.model_type == "causal" and cfg.use_reinforce:
-            logits_opt = torch.optim.Adam(
-                world_model.get_parameter("context_logits"),
-                lr=cfg.context_logits_lr,
-            )
+        if world_model.model_type == "causal" and cfg.mask_type == "reinforce":
+            logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
         else:
             logits_opt = None
 

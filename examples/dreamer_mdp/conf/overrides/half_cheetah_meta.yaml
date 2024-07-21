@@ -1,0 +1,36 @@
+env_name: MyHalfCheetah-v0
+termination_fns: "no_termination"
+reward_fns: ""
+env_max_steps: 1000
+
+meta: True
+
+meta_train_frames: 1_000_000
+meta_train_init_frames: 10_000
+meta_train_logits_frames: 10_000
+meta_test_frames: 10_000
+frames_per_batch: 500
+eval_interval: 20
+
+normalize_rewards_online: False
+
+batch_size: 200
+batch_length: 1
+#optim_steps_per_batch: 500
+optim_steps_per_batch: 50
+
+imagination_horizon: 1
+
+#sparse_weight: 0.02
+#context_sparse_weight: 0.01
+#context_max_weight: 0.02
+sparse_weight: 0.0
+context_sparse_weight: 0.0
+context_max_weight: 0.0
+
+oracle_context:
+  torso_x_vel_bias: [ -0.5, 0.5 ]
+  torso_z_vel_bias: [ -2.0, 2.0 ]
+  torso_angle_vel_bias: [ -2.0, 2.0 ]
+new_oracle_context:
+#  goal_velocity: [ 0.5, 2.0 ]

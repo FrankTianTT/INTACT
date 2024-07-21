@@ -174,9 +174,6 @@ def main(cfg):
         if collected_frames < cfg.meta_train_init_frames:
             continue
 
-            import pdb;
-            pdb.set_trace()
-
         train_model_iters = train_model(
             cfg,
             replay_buffer,

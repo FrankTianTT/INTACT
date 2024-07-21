@@ -14,90 +14,23 @@ from gym.envs.classic_control import utils
 from gym.error import DependencyNotInstalled
 
 
-class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
-    """
-    ### Description
-
-    This environment corresponds to the version of the cart-pole problem described by Barto, Sutton, and Anderson in
-    ["Neuronlike Adaptive Elements That Can Solve Difficult Learning Control Problem"](https://ieeexplore.ieee.org/document/6313077).
-    A pole is attached by an un-actuated joint to a cart, which moves along a frictionless track.
-    The pendulum is placed upright on the cart and the goal is to balance the pole by applying forces
-     in the left and right direction on the cart.
-
-    ### Action Space
-
-    The action is a `ndarray` with shape `(1,)` which can take values `{0, 1}` indicating the direction
-     of the fixed force the cart is pushed with.
-
-    | Num | Action                 |
-    |-----|------------------------|
-    | 0   | Push cart to the left  |
-    | 1   | Push cart to the right |
-
-    **Note**: The velocity that is reduced or increased by the applied force is not fixed and it depends on the angle
-     the pole is pointing. The center of gravity of the pole varies the amount of energy needed to move the cart underneath it
-
-    ### Observation Space
-
-    The observation is a `ndarray` with shape `(4,)` with the values corresponding to the following positions and velocities:
-
-    | Num | Observation           | Min                 | Max               |
-    |-----|-----------------------|---------------------|-------------------|
-    | 0   | Cart Position         | -4.8                | 4.8               |
-    | 1   | Cart Velocity         | -Inf                | Inf               |
-    | 2   | Pole Angle            | ~ -0.418 rad (-24°) | ~ 0.418 rad (24°) |
-    | 3   | Pole Angular Velocity | -Inf                | Inf               |
-
-    **Note:** While the ranges above denote the possible values for observation space of each element,
-        it is not reflective of the allowed values of the state space in an unterminated episode. Particularly:
-    -  The cart x-position (index 0) can be take values between `(-4.8, 4.8)`, but the episode terminates
-       if the cart leaves the `(-2.4, 2.4)` range.
-    -  The pole angle can be observed between  `(-.418, .418)` radians (or **±24°**), but the episode terminates
-       if the pole angle is not in the range `(-.2095, .2095)` (or **±12°**)
-
-    ### Rewards
-
-    Since the goal is to keep the pole upright for as long as possible, a reward of `+1` for every step taken,
-    including the termination step, is allotted. The threshold for rewards is 475 for v1.
-
-    ### Starting State
-
-    All observations are assigned a uniformly random value in `(-0.05, 0.05)`
-
-    ### Episode End
-
-    The episode ends if any one of the following occurs:
-
-    1. Termination: Pole Angle is greater than ±12°
-    2. Termination: Cart Position is greater than ±2.4 (center of the cart reaches the edge of the display)
-    3. Truncation: Episode length is greater than 500 (200 for v0)
-
-    ### Arguments
-
-    ```
-    gym.make('CartPole-v1')
-    ```
-
-    No additional arguments are currently supported.
-    """
-
+class CartPoleSwingUpEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render_fps": 50,
     }
 
     def __init__(
-        self,
-        gravity: float = 9.8,
-        masscart: float = 1.0,
-        masspole: float = 0.1,
-        length: float = 0.5,
-        force_mag: float = 10.0,
-        tau: float = 0.02,
-        cart_vel_bias: float = 0.0,
-        pole_vel_bias: float = 0.0,
-        theta_threshold_degree: float = 12,
-        render_mode: Optional[str] = None,
+            self,
+            gravity: float = 9.8,
+            masscart: float = 1.0,
+            masspole: float = 0.1,
+            length: float = 0.3,
+            force_mag: float = 10.0,
+            tau: float = 0.02,
+            cart_vel_bias: float = 0.0,
+            pole_vel_bias: float = 0.0,
+            render_mode: Optional[str] = None,
     ):
         self.gravity = gravity
         self.masscart = masscart
@@ -112,10 +45,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.cart_vel_bias = cart_vel_bias
         self.pole_vel_bias = pole_vel_bias
 
-        # Angle at which to fail the episode
-        self.theta_threshold_radians = (
-            theta_threshold_degree * 2 * math.pi / 360
-        )
         self.x_threshold = 2.4
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -124,7 +53,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             [
                 self.x_threshold * 2,
                 np.finfo(np.float32).max,
-                self.theta_threshold_radians * 2,
+                np.finfo(np.float32).max,
                 np.finfo(np.float32).max,
             ],
             dtype=np.float32,
@@ -156,14 +85,14 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
         temp = (
-            force + self.polemass_length * theta_dot**2 * sintheta
-        ) / self.total_mass
+                       force + self.polemass_length * theta_dot ** 2 * sintheta
+               ) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
-            self.length
-            * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
+                self.length
+                * (4.0 / 3.0 - self.masspole * costheta ** 2 / self.total_mass)
         )
         xacc = (
-            temp - self.polemass_length * thetaacc * costheta / self.total_mass
+                temp - self.polemass_length * thetaacc * costheta / self.total_mass
         )
 
         if self.kinematics_integrator == "euler":
@@ -182,16 +111,14 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         terminated = bool(
             x < -self.x_threshold
             or x > self.x_threshold
-            or theta < -self.theta_threshold_radians
-            or theta > self.theta_threshold_radians
         )
 
         if not terminated:
-            reward = 1.0
+            reward = (math.cos(theta) + 1) / 2
         elif self.steps_beyond_terminated is None:
             # Pole just fell!
             self.steps_beyond_terminated = 0
-            reward = 1.0
+            reward = (math.cos(theta) + 1) / 2
         else:
             if self.steps_beyond_terminated == 0:
                 logger.warn(
@@ -214,10 +141,10 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         return obs
 
     def reset(
-        self,
-        *,
-        seed: Optional[int] = None,
-        options: Optional[dict] = None,
+            self,
+            *,
+            seed: Optional[int] = None,
+            options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
         # Note that if you use custom reset bounds, it may lead to out-of-bound
@@ -226,6 +153,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             options, -0.05, 0.05
         )  # default low  # default high
         self.state = self.np_random.uniform(low=low, high=high, size=(4,))
+        self.state[2] += math.pi
         self.steps_beyond_terminated = None
 
         if self.render_mode == "human":
@@ -344,3 +272,22 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             pygame.display.quit()
             pygame.quit()
             self.isopen = False
+
+
+if __name__ == '__main__':
+    import time
+    env = CartPoleSwingUpEnv(render_mode="human")
+    env.reset()
+
+    while True:
+        # time.sleep(0.1)
+        action = env.action_space.sample()
+        obs, reward, terminal, timeout, info = env.step(action)
+        env.render()
+
+        print(obs, reward)
+
+        if terminal or timeout:
+            env.reset()
+
+

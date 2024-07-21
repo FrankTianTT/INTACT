@@ -52,6 +52,7 @@ def main(cfg):
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
+    print("test_make_env_list", test_make_env_list)
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
@@ -69,7 +70,7 @@ def main(cfg):
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
     serial_env.set_seed(cfg.seed)
-    collector = aSyncDataCollector(
+    collector = SyncDataCollector(
         create_env_fn=serial_env,
         policy=explore_policy,
         total_frames=cfg.meta_train_frames,
@@ -95,20 +96,19 @@ def main(cfg):
         weight_decay=cfg.world_model_weight_decay,
     )
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal" and cfg.mask_type == "reinforce":
-        logits_opt = torch.optim.Adam(
-            world_model.get_parameter("observed_logits"),
-            lr=cfg.observed_logits_lr,
-        )
-        logits_opt.add_param_group(
-            dict(
-                params=world_model.get_parameter("context_logits"),
-                lr=cfg.context_logits_lr,
+    if cfg.model_type == "causal":
+        if cfg.mask_type == "reinforce":
+            logits_opt = torch.optim.Adam(
+                world_model.get_parameter("observed_logits"),
+                lr=cfg.observed_logits_lr,
             )
-        )
-    else:
-        logits_opt = None
-        if cfg.model_type == "causal":
+            logits_opt.add_param_group(
+                dict(
+                    params=world_model.get_parameter("context_logits"),
+                    lr=cfg.context_logits_lr,
+                )
+            )
+        else:
             world_model_opt.add_param_group(
                 dict(
                     params=world_model.get_parameter("observed_logits"),
@@ -121,6 +121,9 @@ def main(cfg):
                     lr=cfg.context_logits_lr,
                 )
             )
+            logits_opt = None
+    else:
+        logits_opt = None
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=cfg.actor_lr)
     critic_opt = torch.optim.Adam(critic.parameters(), lr=cfg.critic_lr)
@@ -213,8 +216,7 @@ def main(cfg):
                 collected_frames,
             )
         if cfg.model_type == "causal":
-            print()
-            print(world_model.causal_mask.printing_mask)
+            print("\n" + world_model.causal_mask.printing_mask)
 
         if (i + 1) % cfg.save_model_interval == 0:
             os.makedirs("world_model", exist_ok=True)
