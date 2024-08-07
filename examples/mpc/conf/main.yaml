@@ -64,7 +64,7 @@ meta: ${overrides.meta}
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
-meta_test_interval: 100
+meta_test_interval: 160
 meta_test_frames: ${overrides.meta_test_frames}
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}

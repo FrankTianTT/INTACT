@@ -74,6 +74,9 @@ def train_model(
             total_loss.backward()
             model_opt.step()
 
+            # if only_train is not None:
+            #     print(world_model.causal_mask.printing_mask)
+
             if logger is not None:
                 for dim in range(loss_td["transition_loss"].shape[-1]):
                     logger.add_scaler(
@@ -121,7 +124,7 @@ def meta_test(
         policy,
         logger,
         log_idx,
-        adapt_threshold=-3.5,
+        adapt_threshold=-4.8,
 ):
     if torch.cuda.is_available():
         device = torch.device(cfg.model_device)
@@ -206,14 +209,17 @@ def meta_test(
         print("mean transition loss after phase (1):", mean_transition_loss)
         print(adapt_idx)
         if world_model.model_type == "causal":
-            world_model.causal_mask.reset(adapt_idx)
             world_model.context_model.fix(world_model.causal_mask.valid_context_idx)
+            world_model.causal_mask.reset(adapt_idx)
 
         new_world_model_opt = torch.optim.Adam(world_model.get_parameter("context"), lr=cfg.context_lr)
         new_world_model_opt.add_param_group(dict(params=world_model.get_parameter("nets"), lr=cfg.world_model_lr))
         if world_model.model_type == "causal" and cfg.mask_type == "reinforce":
             logits_opt = torch.optim.Adam(world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
         else:
+            new_world_model_opt.add_param_group(
+                dict(params=world_model.get_parameter("context_logits"), lr=cfg.context_logits_lr)
+            )
             logits_opt = None
 
         train_model_iters = 0
@@ -250,6 +256,9 @@ def meta_test(
             if cfg.model_type == "causal":
                 print("meta test causal mask:")
                 print(world_model.causal_mask.printing_mask)
+
+            import pdb
+            pdb.set_trace()
 
         with torch.no_grad():
             loss_td, all_loss = world_model_loss(sampled_tensordict, deterministic_mask=True)

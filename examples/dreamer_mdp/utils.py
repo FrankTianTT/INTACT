@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from tqdm import tqdm
 import torch
+from torch.nn.utils import clip_grad_norm_
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torchrl.envs import SerialEnv
 from torchrl.trainers.helpers.collectors import SyncDataCollector
@@ -56,6 +57,8 @@ def train_policy(
             reward_normalizer.normalize_reward(sampled_tensordict)
 
         actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+        clip_grad_norm_(actor_loss.parameters(), cfg.actor_grad_clip)
+        clip_grad_norm_(critic_loss.parameters(), cfg.critic_grad_clip)
         actor_loss_td["loss_actor"].backward()
         actor_opt.step()
 
@@ -122,6 +125,7 @@ def train_model(
             loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
             # context_penalty = (world_model.context_model.context_hat**2).sum()
             # total_loss += context_penalty * 0.5
+            clip_grad_norm_(world_model_loss.parameters(), cfg.world_model_grad_clip)
             total_loss.backward()
             model_opt.step()
 
@@ -264,7 +268,7 @@ def meta_test(
             replay_buffer,
             world_model,
             world_model_loss,
-            training_steps=cfg.optim_steps_per_batch,
+            training_steps=cfg.model_optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{log_idx}",
@@ -317,7 +321,7 @@ def meta_test(
                 replay_buffer,
                 world_model,
                 world_model_loss,
-                training_steps=cfg.optim_steps_per_batch,
+                training_steps=cfg.model_optim_steps_per_batch,
                 model_opt=new_world_model_opt,
                 logits_opt=logits_opt,
                 logger=logger,
@@ -332,7 +336,7 @@ def meta_test(
                 replay_buffer,
                 actor_loss,
                 critic_loss,
-                cfg.optim_steps_per_batch,
+                cfg.policy_optim_steps_per_batch,
                 actor_opt,
                 critic_opt,
                 logger,

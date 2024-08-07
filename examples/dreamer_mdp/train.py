@@ -12,7 +12,7 @@ from torchrl.data.replay_buffers import (
     LazyMemmapStorage,
 )
 from torchrl.modules.tensordict_module.exploration import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianWrapper, ExplorationType
 )
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
@@ -56,7 +56,7 @@ def main(cfg):
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    world_model, model_based_env, actor, critic = make_mdp_dreamer(cfg, proof_env, device=device)
+    world_model, model_based_env, actor, critic, policy = make_mdp_dreamer(cfg, proof_env, device=device)
 
     if cfg.normalize_rewards_online:
         reward_normalizer = RewardNormalizer()
@@ -65,7 +65,12 @@ def main(cfg):
 
     world_model_loss, actor_loss, critic_loss = build_loss(cfg, world_model, model_based_env, actor, critic)
 
-    explore_policy = AdditiveGaussianWrapper(actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec)
+    explore_policy = AdditiveGaussianWrapper(
+        policy,
+        sigma_init=0.3, sigma_end=0.3,
+        spec=proof_env.action_spec,
+        annealing_num_steps=cfg.meta_train_frames
+    )
     del proof_env
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
@@ -166,7 +171,7 @@ def main(cfg):
             replay_buffer,
             world_model,
             world_model_loss,
-            cfg.optim_steps_per_batch,
+            cfg.model_optim_steps_per_batch,
             world_model_opt,
             l_opt,
             logger,
@@ -178,7 +183,7 @@ def main(cfg):
             replay_buffer,
             actor_loss,
             critic_loss,
-            cfg.optim_steps_per_batch,
+            cfg.policy_optim_steps_per_batch,
             actor_opt,
             critic_opt,
             logger,
@@ -236,6 +241,8 @@ def main(cfg):
             )
 
         logger.dump_scaler(collected_frames)
+
+        explore_policy.step(current_frames)
 
     collector.shutdown()
 

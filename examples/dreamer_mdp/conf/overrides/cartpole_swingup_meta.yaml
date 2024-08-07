@@ -1,6 +1,6 @@
-env_name: MyCartPole-v0
-termination_fns: "cartpole"
-reward_fns: "ones"
+env_name: MyCartPoleSwingUp-v0
+termination_fns: "cartpole_swingup"
+reward_fns: "cartpole_swingup"
 env_max_steps: 200
 
 meta: True

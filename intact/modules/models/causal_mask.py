@@ -207,7 +207,7 @@ class CausalMask(nn.Module):
         column_matrix[:, column_idx] = 1
         reset_matrix = line_matrix * column_matrix
 
-        if self.model_type == "direct":
+        if self.mask_type == "direct":
             self._context_logits.data[reset_matrix] = 0.5
         else:
             self._context_logits.data[reset_matrix] = get_init(

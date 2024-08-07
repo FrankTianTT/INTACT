@@ -9,7 +9,7 @@ meta_train_frames: 50_000
 meta_train_init_frames: 5_000
 meta_test_frames: 4_000
 frames_per_batch: 500
-eval_interval: 20
+eval_interval: 5
 
 batch_size: 200
 batch_length: 1

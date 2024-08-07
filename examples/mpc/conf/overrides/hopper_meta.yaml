@@ -10,7 +10,7 @@ meta_train_init_frames: 10_000
 meta_test_frames: 10_000
 frames_per_batch: 500
 #eval_interval: 20
-eval_interval: 20000
+eval_interval: 100
 
 batch_size: 200
 batch_length: 1
@@ -22,8 +22,11 @@ optim_steps: 5
 num_candidates: 350
 top_k: 35
 
-sparse_weight: 0.01
-context_sparse_weight: 0.005
+#sparse_weight: 0.01
+#context_sparse_weight: 0.005
+#context_max_weight: 0.0
+sparse_weight: 0.0
+context_sparse_weight: 0.0
 context_max_weight: 0.0
 
 oracle_context:
