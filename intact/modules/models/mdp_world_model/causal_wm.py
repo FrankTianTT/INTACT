@@ -115,9 +115,10 @@ class CausalWorldModel(PlainMDPWorldModel):
         inputs = torch.cat([observation, action, self.context_model(idx)], dim=-1)
         batch_shape, dim = inputs.shape[:-1], inputs.shape[-1]
 
-        masked_inputs, mask = self.causal_mask(inputs.reshape(-1, dim), deterministic=deterministic_mask)
+        masked_inputs, mask = self.causal_mask(inputs=inputs.reshape(-1, dim), deterministic=deterministic_mask)
 
-        mean, log_var = self.nets["para_mlp"](masked_inputs).permute(2, 1, 0)
+        output = self.nets["para_mlp"](masked_inputs)
+        mean, log_var = output.permute(2, 1, 0)
 
         mask = mask.reshape(
             *batch_shape,
