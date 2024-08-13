@@ -9,6 +9,11 @@ register(
     max_episode_steps=200,
 )
 register(
+    id="MyCartPoleSwingUp-v0",
+    entry_point="intact.envs.gym_like.cartpole_swingup:CartPoleSwingUpEnv",
+    max_episode_steps=200,
+)
+register(
     id="MyHalfCheetah-v0",
     entry_point="intact.envs.gym_like.half_cheetah:HalfCheetahEnv",
     max_episode_steps=1000,

@@ -12,7 +12,7 @@ from torchrl.data.replay_buffers import (
     LazyMemmapStorage,
 )
 from torchrl.modules.tensordict_module.exploration import (
-    AdditiveGaussianWrapper,
+    AdditiveGaussianWrapper, ExplorationType
 )
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
 
@@ -52,10 +52,11 @@ def main(cfg):
     torch.save(train_oracle_context, "train_oracle_context.pt")
     torch.save(test_oracle_context, "test_oracle_context.pt")
     print("train_make_env_list", train_make_env_list)
+    print("test_make_env_list", test_make_env_list)
 
     task_num = len(train_make_env_list)
     proof_env = train_make_env_list[0]()
-    world_model, model_based_env, actor, critic = make_mdp_dreamer(cfg, proof_env, device=device)
+    world_model, model_based_env, actor, critic, policy = make_mdp_dreamer(cfg, proof_env, device=device)
 
     if cfg.normalize_rewards_online:
         reward_normalizer = RewardNormalizer()
@@ -64,12 +65,17 @@ def main(cfg):
 
     world_model_loss, actor_loss, critic_loss = build_loss(cfg, world_model, model_based_env, actor, critic)
 
-    explore_policy = AdditiveGaussianWrapper(actor, sigma_init=0.3, sigma_end=0.3, spec=proof_env.action_spec)
+    explore_policy = AdditiveGaussianWrapper(
+        policy,
+        sigma_init=0.3, sigma_end=0.3,
+        spec=proof_env.action_spec,
+        annealing_num_steps=cfg.meta_train_frames
+    )
     del proof_env
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
     serial_env.set_seed(cfg.seed)
-    collector = aSyncDataCollector(
+    collector = SyncDataCollector(
         create_env_fn=serial_env,
         policy=explore_policy,
         total_frames=cfg.meta_train_frames,
@@ -95,20 +101,19 @@ def main(cfg):
         weight_decay=cfg.world_model_weight_decay,
     )
     world_model_opt.add_param_group(dict(params=world_model.get_parameter("context"), lr=cfg.context_lr))
-    if cfg.model_type == "causal" and cfg.mask_type == "reinforce":
-        logits_opt = torch.optim.Adam(
-            world_model.get_parameter("observed_logits"),
-            lr=cfg.observed_logits_lr,
-        )
-        logits_opt.add_param_group(
-            dict(
-                params=world_model.get_parameter("context_logits"),
-                lr=cfg.context_logits_lr,
+    if cfg.model_type == "causal":
+        if cfg.mask_type == "reinforce":
+            logits_opt = torch.optim.Adam(
+                world_model.get_parameter("observed_logits"),
+                lr=cfg.observed_logits_lr,
             )
-        )
-    else:
-        logits_opt = None
-        if cfg.model_type == "causal":
+            logits_opt.add_param_group(
+                dict(
+                    params=world_model.get_parameter("context_logits"),
+                    lr=cfg.context_logits_lr,
+                )
+            )
+        else:
             world_model_opt.add_param_group(
                 dict(
                     params=world_model.get_parameter("observed_logits"),
@@ -121,6 +126,9 @@ def main(cfg):
                     lr=cfg.context_logits_lr,
                 )
             )
+            logits_opt = None
+    else:
+        logits_opt = None
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=cfg.actor_lr)
     critic_opt = torch.optim.Adam(critic.parameters(), lr=cfg.critic_lr)
@@ -163,7 +171,7 @@ def main(cfg):
             replay_buffer,
             world_model,
             world_model_loss,
-            cfg.optim_steps_per_batch,
+            cfg.model_optim_steps_per_batch,
             world_model_opt,
             l_opt,
             logger,
@@ -175,7 +183,7 @@ def main(cfg):
             replay_buffer,
             actor_loss,
             critic_loss,
-            cfg.optim_steps_per_batch,
+            cfg.policy_optim_steps_per_batch,
             actor_opt,
             critic_opt,
             logger,
@@ -213,8 +221,7 @@ def main(cfg):
                 collected_frames,
             )
         if cfg.model_type == "causal":
-            print()
-            print(world_model.causal_mask.printing_mask)
+            print("\n" + world_model.causal_mask.printing_mask)
 
         if (i + 1) % cfg.save_model_interval == 0:
             os.makedirs("world_model", exist_ok=True)
@@ -234,6 +241,8 @@ def main(cfg):
             )
 
         logger.dump_scaler(collected_frames)
+
+        explore_policy.step(current_frames)
 
     collector.shutdown()
 

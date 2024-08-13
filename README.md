@@ -18,11 +18,10 @@ conda create -n intact python=3.11
 conda activate intact
 
 # install torch, torchvision, tensordict
-pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install tensordict-nightly -i https://pypi.org/simple # do not use mirror
+pip install torch torchvision torchaudio
 
 # install intact
-https://github.com/FrankTianTT/intact.git --depth 1
+git clone https://github.com/FrankTianTT/intact.git --depth 1
 cd intact
 pip install -e .
 ```

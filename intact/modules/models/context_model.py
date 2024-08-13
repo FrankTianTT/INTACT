@@ -12,7 +12,7 @@ class ContextModel(nn.Module):
         max_context_dim=0,
         task_num=0,
         init_scale=0.0,
-        context_clip=0.3,
+        context_clip=1.,
     ):
         super().__init__()
         self.meta = meta

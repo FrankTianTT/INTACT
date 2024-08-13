@@ -38,7 +38,7 @@ def plot_context(
         norm = mcolors.Normalize(
             vmin=min(color_values), vmax=max(color_values)
         )
-        cmap = cm.ScalarMappable(norm, plt.get_cmap("Blues")).cmap
+        # cmap = cm.ScalarMappable(norm, plt.get_cmap("Blues")).cmap
 
     if len(idxes_gt) == 0:
         pass
@@ -47,7 +47,7 @@ def plot_context(
             context_gt[:, idxes_gt[0]],
             context_hat[:, idxes_hat[0]],
             c=color_values,
-            cmap=cmap,
+            # cmap=cmap,
         )
     else:
         num_rows = math.ceil(math.sqrt(len(idxes_gt)))

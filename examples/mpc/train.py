@@ -89,7 +89,7 @@ def main(cfg):
 
     serial_env = SerialEnv(task_num, train_make_env_list, shared_memory=False)
     serial_env.set_seed(cfg.seed)
-    collector = aSyncDataCollector(
+    collector = SyncDataCollector(
         create_env_fn=serial_env,
         policy=explore_policy,
         total_frames=cfg.meta_train_frames,
@@ -148,6 +148,7 @@ def main(cfg):
     collected_frames = 0
     train_model_iters = 0
     pbar = tqdm(total=cfg.meta_train_frames)
+
     for i, tensordict in enumerate(collector):
         current_frames = tensordict.get(("collector", "mask")).sum().item()
         pbar.update(current_frames)

@@ -1,25 +1,25 @@
-env_name: MyCartPole-v0
-termination_fns: "cartpole"
-reward_fns: "ones"
+env_name: MyCartPoleSwingUp-v0
+termination_fns: "cartpole_swingup"
+reward_fns: "cartpole_swingup"
 env_max_steps: 200
 
 meta: True
 
-meta_train_frames: 100_000
+meta_train_frames: 50_000
 meta_train_init_frames: 5_000
-meta_test_frames: 5_000
+meta_test_frames: 4_000
 frames_per_batch: 500
-eval_interval: 20
+eval_interval: 5
 
 batch_size: 200
 batch_length: 1
 optim_steps_per_batch: 500
 
 # planning
-planning_horizon: 20
-optim_steps: 3
-num_candidates: 100
-top_k: 10
+planning_horizon: 50
+optim_steps: 5
+num_candidates: 350
+top_k: 35
 
 sparse_weight: 0.02
 context_sparse_weight: 0.02
@@ -30,4 +30,3 @@ oracle_context:
   pole_vel_bias: [ -1., 1. ]
   masscart: [ 0.8, 1.2 ]
 new_oracle_context:
-  gravity: [ 5.0, 15.0 ]

@@ -16,9 +16,9 @@ frames_per_batch: ${overrides.frames_per_batch}
 
 # planning
 planning_horizon: ${overrides.planning_horizon}
-optim_steps: 5
-num_candidates: 350
-top_k: 35
+optim_steps: ${overrides.optim_steps}
+num_candidates: ${overrides.num_candidates}
+top_k: ${overrides.top_k}
 
 # model learning
 model_type: causal
@@ -34,7 +34,7 @@ batch_size: ${overrides.batch_size}
 batch_length: ${overrides.batch_length}
 
 world_model_lr: 0.001
-context_lr: 0.001
+context_lr: 0.005
 observed_logits_lr: 0.002
 context_logits_lr: 0.002
 world_model_weight_decay: 0.0001
@@ -54,8 +54,7 @@ sampling_times: 30
 exp_name: default
 logger: tensorboard
 offline_logging: False
-eval_interval: 20
-#eval_interval: 20000
+eval_interval: ${overrides.eval_interval}
 eval_repeat_nums: 1
 eval_record_nums: 0
 save_model_interval: 10
@@ -65,13 +64,13 @@ meta: ${overrides.meta}
 max_context_dim: 10
 task_num: 50
 meta_test_task_num: 20
-meta_test_interval: 100
+meta_test_interval: 160
 meta_test_frames: ${overrides.meta_test_frames}
 oracle_context: ${overrides.oracle_context}
 new_oracle_context: ${overrides.new_oracle_context}
 
 # other
-model_device: cuda:1
+model_device: cuda:0
 collector_device: ${model_device}
 seed: 42
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import partial
 
-from tensordict.nn.probabilistic import InteractionType
+from tensordict.nn import InteractionType
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
@@ -101,16 +101,15 @@ def make_mdp_dreamer(
 
     world_model, model_based_env = make_mdp_model(cfg, proof_env, device=device)
 
-    actor_module = Actor(
+    actor_net = Actor(
         action_dim=action_dim,
         state_or_obs_dim=obs_dim,
         context_dim=world_model.context_model.context_dim,
         is_mdp=True,
     ).to(device)
-    actor_module.set_context_model(world_model.context_model)
-    actor = SafeProbabilisticTensorDictSequential(
-        SafeModule(
-            actor_module,
+    actor_net.set_context_model(world_model.context_model)
+    actor_module = SafeModule(
+            actor_net,
             in_keys=["observation", "idx"],
             out_keys=["loc", "scale"],
             spec=CompositeSpec(
@@ -123,7 +122,10 @@ def make_mdp_dreamer(
                     ),
                 }
             ),
-        ),
+        )
+
+    actor_sim = SafeProbabilisticTensorDictSequential(
+        actor_module,
         SafeProbabilisticModule(
             in_keys=["loc", "scale"],
             out_keys=["action"],
@@ -133,16 +135,27 @@ def make_mdp_dreamer(
             spec=CompositeSpec(**{"action": proof_env.action_spec.to("cpu")}),
         ),
     ).to(device)
-    critic_module = Critic(
+    actor_real = SafeProbabilisticTensorDictSequential(
+        actor_module,
+        SafeProbabilisticModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"tanh_loc": True},
+            default_interaction_type=InteractionType.MODE,
+            spec=CompositeSpec(**{"action": proof_env.action_spec.to("cpu")}),
+        ),
+    ).to(device)
+    critic_net = Critic(
         state_or_obs_dim=obs_dim,
         context_dim=world_model.context_model.context_dim,
         is_mdp=True,
     ).to(device)
-    critic_module.set_context_model(world_model.context_model)
+    critic_net.set_context_model(world_model.context_model)
     critic = SafeModule(
-        critic_module,
+        critic_net,
         in_keys=["observation", "idx"],
         out_keys=["value"],
     ).to(device)
 
-    return world_model, model_based_env, actor, critic
+    return world_model, model_based_env, actor_sim, critic, actor_real

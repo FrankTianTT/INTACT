@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from tqdm import tqdm
 import torch
+from torch.nn.utils import clip_grad_norm_
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from torchrl.envs import SerialEnv
 from torchrl.trainers.helpers.collectors import SyncDataCollector
@@ -37,16 +38,16 @@ def reset_module(world_model, actor, critic, new_domain_task_num):
 
 
 def train_policy(
-    cfg,
-    replay_buffer,
-    actor_loss,
-    critic_loss,
-    training_steps,
-    actor_opt,
-    critic_opt,
-    logger,
-    log_prefix="policy",
-    reward_normalizer=None,
+        cfg,
+        replay_buffer,
+        actor_loss,
+        critic_loss,
+        training_steps,
+        actor_opt,
+        critic_opt,
+        logger,
+        log_prefix="policy",
+        reward_normalizer=None,
 ):
     device = next(actor_loss.parameters()).device
 
@@ -56,6 +57,8 @@ def train_policy(
             reward_normalizer.normalize_reward(sampled_tensordict)
 
         actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+        clip_grad_norm_(actor_loss.parameters(), cfg.actor_grad_clip)
+        clip_grad_norm_(critic_loss.parameters(), cfg.critic_grad_clip)
         actor_loss_td["loss_actor"].backward()
         actor_opt.step()
 
@@ -82,19 +85,19 @@ def train_policy(
 
 
 def train_model(
-    cfg,
-    replay_buffer,
-    world_model,
-    world_model_loss,
-    training_steps,
-    model_opt,
-    logits_opt=None,
-    logger=None,
-    deterministic_mask=False,
-    log_prefix="model",
-    iters=0,
-    only_train=None,
-    reward_normalizer=None,
+        cfg,
+        replay_buffer,
+        world_model,
+        world_model_loss,
+        training_steps,
+        model_opt,
+        logits_opt=None,
+        logger=None,
+        deterministic_mask=False,
+        log_prefix="model",
+        iters=0,
+        only_train=None,
+        reward_normalizer=None,
 ):
     device = next(world_model.parameters()).device
     train_logits_by_reinforce = cfg.model_type == "causal" and cfg.mask_type == "reinforce" and logits_opt
@@ -112,16 +115,17 @@ def train_model(
             reward_normalizer.normalize_reward(sampled_tensordict)
 
         if (
-            train_logits_by_reinforce
-            and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
+                train_logits_by_reinforce
+                and iters % (cfg.train_mask_iters + cfg.train_model_iters) >= cfg.train_model_iters
         ):
             grad = world_model_loss.reinforce_forward(sampled_tensordict, only_train)
             causal_mask.mask_logits.backward(grad)
             logits_opt.step()
         else:
             loss_td, total_loss = world_model_loss(sampled_tensordict, deterministic_mask, only_train)
-            context_penalty = (world_model.context_model.context_hat**2).sum()
-            total_loss += context_penalty * 0.5
+            # context_penalty = (world_model.context_model.context_hat**2).sum()
+            # total_loss += context_penalty * 0.5
+            clip_grad_norm_(world_model_loss.parameters(), cfg.world_model_grad_clip)
             total_loss.backward()
             model_opt.step()
 
@@ -149,8 +153,8 @@ def train_model(
                     logger.add_scaler(f"{log_prefix}/context", loss_td["context_loss"].mean())
 
         if cfg.model_type == "causal":
-            mask_value = torch.sigmoid(cfg.alpha * causal_mask.mask_logits)
-            for out_dim, in_dim in product(range(mask_value.shape[0]), range(mask_value.shape[1])):
+            soft_mask_value = causal_mask.soft_mask
+            for out_dim, in_dim in product(range(soft_mask_value.shape[0]), range(soft_mask_value.shape[1])):
                 out_name = f"o{out_dim}"
                 if in_dim < causal_mask.observed_input_dim:
                     in_name = f"i{in_dim}"
@@ -158,7 +162,7 @@ def train_model(
                     in_name = f"c{in_dim - causal_mask.observed_input_dim}"
                 logger.add_scaler(
                     f"{log_prefix}/mask_value({out_name},{in_name})",
-                    mask_value[out_dim, in_dim],
+                    soft_mask_value[out_dim, in_dim],
                 )
 
         iters += 1
@@ -196,19 +200,26 @@ def build_loss(cfg, world_model, model_based_env, actor, critic):
 
 
 def meta_test(
-    cfg,
-    make_env_list,
-    oracle_context,
-    world_model,
-    actor,
-    critic,
-    logger,
-    log_idx,
-    reward_normalizer,
-    adapt_threshold=-4.0,
+        cfg,
+        make_env_list,
+        oracle_context,
+        world_model,
+        actor,
+        critic,
+        logger,
+        log_idx,
+        reward_normalizer,
+        adapt_threshold=-4.0,
 ):
-    device = next(world_model.parameters()).device
+    if torch.cuda.is_available():
+        device = torch.device(cfg.model_device)
+        collector_device = torch.device(cfg.collector_device)
+    else:
+        device = torch.device("cpu")
+        collector_device = torch.device("cpu")
+
     logger.dump_scaler(log_idx)
+
     task_num = len(make_env_list)
 
     world_model, actor, critic = reset_module(world_model, actor, critic, task_num)
@@ -230,6 +241,8 @@ def meta_test(
         frames_per_batch=cfg.frames_per_batch,
         init_random_frames=0,
         split_trajs=True,
+        device=collector_device,
+        storing_device=collector_device,
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -255,7 +268,7 @@ def meta_test(
             replay_buffer,
             world_model,
             world_model_loss,
-            training_steps=cfg.optim_steps_per_batch,
+            training_steps=cfg.model_optim_steps_per_batch,
             model_opt=world_model_opt,
             logger=logger,
             log_prefix=f"meta_test_model_{log_idx}",
@@ -297,18 +310,18 @@ def meta_test(
 
         train_model_iters = 0
         for frame in tqdm(
-            range(
-                cfg.meta_test_frames,
-                3 * cfg.meta_test_frames,
-                cfg.frames_per_batch,
-            )
+                range(
+                    cfg.meta_test_frames,
+                    3 * cfg.meta_test_frames,
+                    cfg.frames_per_batch,
+                )
         ):
             train_model_iters = train_model(
                 cfg,
                 replay_buffer,
                 world_model,
                 world_model_loss,
-                training_steps=cfg.optim_steps_per_batch,
+                training_steps=cfg.model_optim_steps_per_batch,
                 model_opt=new_world_model_opt,
                 logits_opt=logits_opt,
                 logger=logger,
@@ -323,7 +336,7 @@ def meta_test(
                 replay_buffer,
                 actor_loss,
                 critic_loss,
-                cfg.optim_steps_per_batch,
+                cfg.policy_optim_steps_per_batch,
                 actor_opt,
                 critic_opt,
                 logger,
